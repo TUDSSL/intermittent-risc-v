@@ -1,0 +1,13 @@
+#!/bin/bash
+
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+PROJECT_ROOT="$(dirname "$ROOT_DIR")"
+
+echo "$PROJECT_ROOT"
+
+DOCKER_IMG="irv-development"
+SRC_DIR="$PROJECT_ROOT"
+DST_DIR="/home/user/$(basename "$PROJECT_ROOT")"
+
+docker run -it --rm -v $SRC_DIR:$DST_DIR $DOCKER_IMG /bin/bash \
+    -c "source $DST_DIR/setup.sh && $SHELL"
