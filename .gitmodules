@@ -1,0 +1,3 @@
+[submodule "icemu/icemu"]
+	path = icemu/icemu
+	url = git@github.com:TUDSSL/ICEmu.git
