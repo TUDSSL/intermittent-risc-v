@@ -10,4 +10,4 @@ SRC_DIR="$PROJECT_ROOT"
 DST_DIR="/home/user/$(basename "$PROJECT_ROOT")"
 
 docker run -it --rm -v $SRC_DIR:$DST_DIR $DOCKER_IMG /bin/bash \
-    -c "source $DST_DIR/setup.sh && $SHELL"
+    -c "source $DST_DIR/setup.sh && /bin/bash"
