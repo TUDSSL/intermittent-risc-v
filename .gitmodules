@@ -1,6 +1,6 @@
 [submodule "icemu/icemu"]
 	path = icemu/icemu
-	url = git@github.com:TUDSSL/ICEmu.git
+	url = https://github.com/TUDSSL/ICEmu.git
 [submodule "noelle/noelle"]
 	path = noelle/noelle
-	url = git@github.com:scampanoni/noelle.git
+	url = https://github.com/scampanoni/noelle.git
