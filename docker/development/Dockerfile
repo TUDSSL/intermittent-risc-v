@@ -1,5 +1,3 @@
-# Container that holds all the source code needed to build and evaluate WARio
-
 FROM ubuntu:20.04
 
 ARG USER_ID=1000
@@ -30,7 +28,7 @@ USER user
 
 # Install gllvm (https://github.com/SRI-CSL/gllvm)
 RUN go get github.com/SRI-CSL/gllvm/cmd/...
-#
+
 ## Configure the environment
 RUN echo "export PATH=$HOME/go/bin:\$PATH" >> "$HOME/.env"
 RUN echo "source $HOME/.env" >> "$HOME/.bashrc"
