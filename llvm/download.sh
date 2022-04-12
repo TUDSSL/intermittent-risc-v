@@ -30,6 +30,8 @@ download_extract "polly"
 
 # Apply glibc patch for compiler-rt
 # https://bugs.gentoo.org/708430
+cp "$DIR/patch/compiler-rt-glibc.patch" ./
 patch -p0 -i compiler-rt-glibc.patch
+rm ./compiler-rt-glibc.patch
 
 popd
