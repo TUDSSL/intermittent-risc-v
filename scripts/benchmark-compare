@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Collect the benchmark results in a single place
+# Compare them
+# Generate some output
+
+#set -e
+
+benchmark_dir="benchmark-compare"
+results_file="results.csv"
+
+target="$1"
+if [ -z "$1" ]; then
+    target="all"
+fi
+
+# Clean the benchmark directory if it exists
+rm -rf "$benchmark_dir" && mkdir "$benchmark_dir"
+
+
+# Create the checkpoint frequency result directory
+mkdir "$benchmark_dir/checkpoint-frequency"
+
+# Create the directory for all the elf files
+mkdir "$benchmark_dir/elf"
+
+# Create the results file
+echo -n "" > $benchmark_dir/$results_file
+echo "Configuration,Cycles,Checkpoints,IR-checkpoints,Call-checkpoints,Pop-checkpoints,Spill-checkpoints,ELF-size" >> $benchmark_dir/$results_file
+
+# Analyze all the benchmarks we can find
+if [[ "$target" == "all" ]]; then
+    echo "Comparing all the benchmarks"
+    target="build-*"
+fi
+
+err=0
+
+for i in $(find . -type d \( -iname "$target" -or -iname "build-$target" \)); do
+    # Strip the benchmark name from the build-
+    benchmark_name=${i//"build-"/}
+    benchmark_name=${benchmark_name//"./"/}
+
+    echo "Target benchmark: $benchmark_name"
+
+    f="$benchmark_dir/$results_file"
+
+    # Collect the information and write the .csv
+    echo -n "$benchmark_name" >> "$f"
+
+    # Get the cycle count
+    cycle_count=""
+    echo -n "," >> "$f"
+    cycle_count_file=$(find "$i" -type f -name "*.cyclecount")
+    if [[ ! -z "$cycle_count_file" ]]; then
+        cycle_count="$(cat $cycle_count_file)"
+    fi
+    echo -n "$cycle_count" >> "$f"
+
+    # Get the checkpoint count
+    checkpoint_count=""
+    echo -n "," >> "$f"
+    checkpoint_count_file=$(find "$i" -type f -name "*.callsitecount.csv")
+    if [[ ! -z "$checkpoint_count_file" ]]; then
+        checkpoint_count=$(awk -F ',' 'BEGIN{sum=0} {sum +=$2} END {print sum}' "$checkpoint_count_file")
+    fi
+    echo -n "$checkpoint_count" >> "$f"
+
+    # Get the markers
+    # order: IR, CALL, POP, SPILL
+    IR=0
+    CALL=0
+    POP=0
+    SPILL=0
+
+    checkpoint_call_count_file=$(find "$i" -type f -name "*callcount.csv")
+    if [[ ! -z "$checkpoint_call_count_file" ]]; then
+        for marker_line in $(cat $checkpoint_call_count_file); do
+            marker_line=${marker_line//"__checkpoint_"/}
+            marker=$(echo "$marker_line" | awk -F ',' '{print $1'})
+            count=$(echo "$marker_line" | awk -F ',' '{print $2'})
+
+            [[ "$marker" == "ir" ]] && IR=$count
+            [[ "$marker" == "call" ]] && CALL=$count
+            [[ "$marker" == "pop" ]] && POP=$count
+            [[ "$marker" == "pop_nostack" ]] && POP_NOSTACK=$count
+            [[ "$marker" == "spill" ]] && SPILL=$count
+        done
+    fi
+
+    POP_SUM=`expr $POP + $POP_NOSTACK`
+    echo -n ",$IR" >> "$f"
+    echo -n ",$CALL" >> "$f"
+    echo -n ",$POP_SUM" >> "$f"
+    echo -n ",$SPILL" >> "$f"
+
+    # Copy the callfrequency csv file
+    callfreq_file=$(find "$i" -type f -name "*.elf.callfrequency.csv")
+    callfreq_outfile=${callfreq_file//".elf.callfrequency"/"-checkpointfreq-$benchmark_name"}
+    callfreq_outfile="$(basename $callfreq_outfile)"
+    cp "$callfreq_file" "$benchmark_dir/checkpoint-frequency/$callfreq_outfile"
+
+    # Copy all the final .elf files
+    elf_file=$(find "$i" -type f -name "*.elf" -not -name "*.uninstr*" -not -name "*.gclang*")
+    elf_outfile=${elf_file//".elf"/"-$benchmark_name.elf"}
+    elf_outfile="$(basename $elf_outfile)"
+    cp "$elf_file" "$benchmark_dir/elf/$elf_outfile"
+
+    # Get the size of each elf file
+    elf_size_file=${elf_outfile//".elf"/"-size.txt"}
+    size "$elf_file" > "$benchmark_dir/elf/$elf_size_file"
+
+    # Get the .elf size
+    elf_size="$(size -A $elf_file | grep .text | awk '{print $2}')"
+    echo -n ",$elf_size" >> "$f"
+
+    # New line
+    echo "" >> "$f"
+
+    # Check if the benchmark is valid (compare to uninstrumented)
+    if [ -d "build-uninstrumented" ]; then
+        benchmark-validate "build-$benchmark_name"
+        if [ $? -ne 0 ]; then
+            echo "  BENCHMARK $benchmark_name INVALID!"
+            touch "$benchmark_dir/$benchmark_name-INVALID"
+            #err=1
+            err=0
+        fi
+    fi
+done
+
+exit $err
+

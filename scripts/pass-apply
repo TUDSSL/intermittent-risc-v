@@ -1,0 +1,30 @@
+#!/bin/bash
+set -e
+
+passlib="$1"
+passargs="$2"
+input_ir="$3"
+output_ir="$4"
+
+NOELLE_NORM="noelle-norm"
+NOELLE_LOAD="noelle-load"
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ROOT="$DIR/.."
+
+echo "Using plugin: $passlib"
+echo "Using plugin options: $passargs"
+echo "Input IR: $input_ir"
+echo "Output IR: $output_ir"
+
+function run() {
+    cmd="${1//\"/\\\"}"
+    echo "pass-apply: $cmd"
+    eval "$cmd" || exit_on_error "An error occured running: $cmd"
+}
+
+# Normalize
+run "$NOELLE_NORM -S $input_ir -o norm-$input_ir"
+
+# Apply the pass
+run "$NOELLE_LOAD -load $passlib $passargs -S norm-$input_ir -o $output_ir"

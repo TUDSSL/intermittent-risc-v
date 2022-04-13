@@ -1,0 +1,62 @@
+#!/bin/bash
+
+in=$1
+
+# Get the input argument
+if [ "$#" -eq  "0" ]; then
+    echo "No arguments supplied"
+    echo "Usage: llvm-to-elf input.ll [output.elf]"
+    exit 1
+fi
+
+# Get the optional output elf file name
+if [ -z "$2" ]; then
+    out="$1.elf"
+    echo "Output file: $out"
+else
+    out="$2"
+fi
+
+
+set -e
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ROOT="$DIR/.."
+TOOLCHAIN_DIR="$ROOT/toolchains/arm"
+
+OPT="-O3"
+CFLAGS="-mthumb \
+    -mcpu=cortex-m4 \
+    -march=armv7e-m \
+    -mfloat-abi=soft \
+    --target=thumbv7em-unknown-none-gnu \
+    -I$TOOLCHAIN_DIR/lib/include"
+
+
+# Find libgcc from the gcc arm toolchain
+libgcc_loc=$(arm-none-eabi-gcc -print-libgcc-file-name)
+libgcc_loc=$(dirname "$libgcc_loc")
+
+LDFLAGS="-mcpu=cortex-m4 -march=armv7e-m -mfloat-abi=soft \
+ --target=thumbv7em-unknown-none-eabi -nodefaultlibs \
+ \
+ -Wl,--Bstatic -Wl,-lc_nano -Wl,-lnosys -Wl,--gc-sections,--entry,Reset_Handler\
+ -Wl,-lgcc"
+
+LIBLOCS="-L$TOOLCHAIN_DIR/lib/gcc -L$TOOLCHAIN_DIR/lib/libc -L$TOOLCHAIN_DIR"
+LINKERSCRIPT="$TOOLCHAIN_DIR/linkerscript.ld"
+
+# Compile the .ll file
+llc -filetype=obj $OPT -O=3 -o $in.obj $in
+
+# Compile checkpoint.c
+clang -c $CFLAGS $TOOLCHAIN_DIR/checkpoint/checkpoint.c -o checkpoint.obj
+
+# Link
+clang $LDFLAGS $LIBLOCS -T $LINKERSCRIPT -lc -lm $in.obj checkpoint.obj -o $out
+
+# Disassemble
+arm-none-eabi-objdump -d $out > $in.s
+
+# Cleanup
+rm -rf $in.obj checkpoint.obj

@@ -1,0 +1,283 @@
+#!/bin/bash
+
+# Build all the configured benchmarks for the provided project
+# Expects the first argument to be the path to a project th
+
+set -e
+
+# Get the desired optimization level if specified
+if [[ -z "${OPT_LEVEL}" ]]; then
+    OPT_LEVEL_ARG=""
+else
+    OPT_LEVEL_ARG="-DOPT_LEVEL=${OPT_LEVEL}"
+fi
+
+#
+# The base target configuration for intermittent computing
+#
+
+BASE_ICLANG_CODEGEN_FLAGS="\
+-mllvm --idemp-force-lr-spill \
+-mllvm --idemp-code-gen \
+-mllvm --idemp-pop \
+-mllvm --idemp-checkpoint-reason-markers \
+"
+
+STACK_SPILL_ICLANG_CODEGEN_FLAGS="-mllvm --idemp-stack-spill-hitting-set"
+REDUCED_POP_ICLANG_CODEGEN_FLAGS="-mllvm --idemp-disable-interrupt-during-pop"
+
+#
+# The different target configurations
+#
+
+# Uninstrumented
+# Does not perform any transformations but does go trough the pipeline
+function uninstrumented() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS=""
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS=""
+
+    export ICLANG_NO_PASSES="YES"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+function test() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS=""
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS=""
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+# Ratchet
+# Uses Ratchet middle-end analysis ported to this version of LLVM
+# The backend is different (our Thumb2) backend
+function opt-ratchet() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp -cp-ratchet"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+# Baseline
+# Uses the Ratched way of finding checkpoint locations but improved to use
+# Noelle information and to work with our other passes
+function opt-baseline() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+# Baseline+ Reduced pop
+# Uses the Ratched way of finding checkpoint locations but improved to use
+# Noelle information and to work with our other passes
+function opt-reducedpop() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $REDUCED_POP_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+# Loop
+# Uses the loop write clustering pass
+function opt-loop() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS="-loop-write-clusterer -lwc-loop-unroll -lwc-loop-unroll-count=8 -lwc-loop-unroll-threshold=400"
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS="-loop-write-clusterer -lwc-loop-schedule"
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $STACK_SPILL_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+function opt-writebuf() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS="-write-buffer"
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $STACK_SPILL_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+function opt-expander() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS="-expander"
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+#function opt-bigpath() {
+#    # Configure the benchmark
+#    export ICLANG_PASS_IDEMP_FLAGS="-idemp -cp-big-path"
+#    export ICLANG_PASS_LOOP_UNROLL_FLAGS=""
+#    export ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
+#    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+#    export ICLANG_PASS_EXPANDER_FLAGS=""
+#
+#    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS"
+#
+#    # Build the benchmark
+#    build_benchmark "${FUNCNAME[0]}"
+#}
+
+function opt-all() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS="-loop-write-clusterer -lwc-loop-unroll -lwc-loop-unroll-count=8 -lwc-loop-unroll-threshold=400"
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS="-loop-write-clusterer -lwc-loop-schedule"
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS="-write-buffer"
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $STACK_SPILL_ICLANG_CODEGEN_FLAGS $REDUCED_POP_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+function opt-all-expander() {
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS="-loop-write-clusterer -lwc-loop-unroll -lwc-loop-unroll-count=8 -lwc-loop-unroll-threshold=400"
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS="-loop-write-clusterer -lwc-loop-schedule"
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS="-write-buffer"
+    export ICLANG_PASS_EXPANDER_FLAGS="-expander"
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $STACK_SPILL_ICLANG_CODEGEN_FLAGS $REDUCED_POP_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+
+# All regular targets
+funcs=$(declare -F)
+targets="${funcs//declare -f /}"
+
+
+# Hidden targets
+function loop-unroll() {
+    local loop_unroll_count="$1"
+
+    # Configure the benchmark
+    export ICLANG_PASS_IDEMP_FLAGS="-idemp"
+    export ICLANG_PASS_LOOP_UNROLL_FLAGS="-loop-write-clusterer -lwc-loop-unroll -lwc-loop-unroll-count=$loop_unroll_count -lwc-loop-unroll-threshold=400"
+    export ICLANG_PASS_LOOP_CLUSTER_FLAGS="-loop-write-clusterer -lwc-loop-schedule -lwc-no-reschedule-ratio"
+    export ICLANG_PASS_WRITE_BUFFER_FLAGS=""
+    export ICLANG_PASS_EXPANDER_FLAGS=""
+
+    export ICLANG_CODEGEN_FLAGS="$BASE_ICLANG_CODEGEN_FLAGS $STACK_SPILL_ICLANG_CODEGEN_FLAGS"
+
+    # Build the benchmark
+    build_benchmark "loop-unroll-$loop_unroll_count"
+}
+
+function help() {
+    echo "Usage: benchmark-build [target]"
+    echo ""
+    echo "targets: (bash functions in this script)"
+    echo "${funcs//declare -f/ }"
+
+    # Other
+    echo ""
+    echo "other:"
+    echo "  help       print this help message"
+    echo "  targets    print all the available targets"
+}
+
+function targets() {
+    echo $targets
+}
+
+
+
+# Build the benchmark using the environment variables set in the targets
+CMAKE_TOOLCHAIN_FILE="$ICLANG_ROOT/toolchains/arm/toolchain.cmake"
+function build_benchmark() {
+    local benchmark_name="$1"
+    local build_dir="build-$benchmark_name"
+    echo "Building benchmark $benchmark_name in $build_dir"
+
+    rm -rf "$build_dir"
+    mkdir -p "$build_dir"
+    pushd "$build_dir"
+
+
+    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" ../
+    make
+
+    popd
+}
+
+target="$1"
+if [ -z "$1" ]; then
+    echo "Please provide a target (bash function)"
+    help
+    exit 1
+fi
+
+# Run the function that generates the target
+if [[ $(type -t $target) == function ]]; then
+    $target "$target"
+
+elif [[ $target =~ loop-unroll-.+ ]]; then
+    cnt="${target//loop-unroll-/}"
+    loop-unroll "$cnt"
+
+else
+    echo "Target '$target' does not exist"
+    help
+    exit
+fi
+
+
