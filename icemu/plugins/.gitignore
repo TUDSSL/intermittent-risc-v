@@ -1,0 +1,21 @@
+# CMake build directories
+build/
+build-*/
+
+# Editor related files
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+.syntastic_config
+.ycm_extra_conf.py
+.vimrc
+.tmp
+.bak
+
+# Object files
+*.o
+*.so
+*.so*
+*.a
+
