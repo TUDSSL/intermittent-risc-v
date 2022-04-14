@@ -1,0 +1,24 @@
+#!/bin/bash
+
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# Which docker image to use
+DOCKER_IMG="irv-development"
+
+if [ -z "$1" ]; then
+    # No argument, use any ID
+    # first one we find, if there are multiple you need to specify the ID
+    CONTAINER_ID=$(docker ps --format '{{.Image}}\t{{.ID}}' \
+        | awk -F'\t' '$1 ~ /'"$DOCKER_IMG"'./ {print $2; exit}')
+else
+    CONTAINER_ID="$1"
+fi
+
+PROJECT_ROOT="$(dirname "$ROOT_DIR")"
+SRC_DIR="$PROJECT_ROOT"
+DST_DIR="/home/user/$(basename "$PROJECT_ROOT")"
+
+echo "Attaching to container: $CONTAINER_ID"
+
+docker exec -it $CONTAINER_ID \
+    /bin/bash -c "source $DST_DIR/setup.sh && /bin/bash"
