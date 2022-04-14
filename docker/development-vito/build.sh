@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build -t irv-development:neovim .
+docker build -t irv-development:vito .
