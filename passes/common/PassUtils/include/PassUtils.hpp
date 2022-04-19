@@ -1,10 +1,18 @@
 #pragma once
 
-#include "Configurations.hpp"
+#include "llvm/Pass.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include <functional>
+
+#include "noelle/core/Noelle.hpp"
 
 namespace PassUtils {
 

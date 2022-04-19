@@ -74,7 +74,7 @@ bool PassUtils::Verify(Module &M) {
   bool Failed = false;
   for (auto &F : M) {
     if (verifyFunction(F, &(errs()))) {
-      dbgs() << "Failed verification: " << F.getName() << "\n" << F << "\n";
+      errs() << "Failed verification: " << F.getName() << "\n" << F << "\n";
 
       Failed |= true;
     }
@@ -128,8 +128,8 @@ bool PassUtils::ReverseIterateOverInstructions(
   const BasicBlock::iterator ToIt(To);
 
   if (DebugPrint) {
-    dbg() << "Checking Uncut Path from: " << *From << " to: " << *To << "\n";
-    dbg() << "From BB: " << *FBB << "TO BB: " << *TBB << "\n";
+    errs() << "Checking Uncut Path from: " << *From << " to: " << *To << "\n";
+    errs() << "From BB: " << *FBB << "TO BB: " << *TBB << "\n";
   }
 
   vector<BasicBlock *> WorkList;
@@ -144,7 +144,7 @@ bool PassUtils::ReverseIterateOverInstructions(
     WorkList.pop_back();
 
     if (DebugPrint)
-      dbg() << "\nVisiting BB: " << *BB << "\n";
+      errs() << "\nVisiting BB: " << *BB << "\n";
 
     auto E = BB->begin();
     auto Cursor = ((BB == TBB) && VisitedBB.find(TBB) == VisitedBB.end())
@@ -153,10 +153,10 @@ bool PassUtils::ReverseIterateOverInstructions(
 
     if (DebugPrint) {
       if (Cursor == BB->end())
-        dbg() << "Seach start: " << "Block END" << "\n";
+        errs() << "Seach start: " << "Block END" << "\n";
       else
-        dbg() << "Seach start: " << *Cursor << "\n";
-      dbg() << "Search end E: " << *E << "\n";
+        errs() << "Seach start: " << *Cursor << "\n";
+      errs() << "Search end E: " << *E << "\n";
     }
 
     bool StopPath = false;

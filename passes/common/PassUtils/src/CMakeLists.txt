@@ -1,10 +1,8 @@
-set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common")
-set(LIB_INSTALL_DIR "${PROJECT_SOURCE_DIR}/../install/lib")
+set(LIB_INSTALL_DIR "${PROJECT_SOURCE_DIR}/../../install/lib")
 
 # Sources
 set(PASS_SRC
-    TestPass.cpp
-    Configurations.cpp
+    PassUtils.cpp
 )
 
 # Compilation flags
@@ -27,7 +25,7 @@ include_directories(
     $ENV{NOELLE}/include
     $ENV{NOELLE}/include/svf
     ${CMAKE_SOURCE_DIR}/include
-    ${COMMON_DIR}/PassUtils/include
+    ${COMMON_DIR}/include
 )
 
 # Declare the LLVM pass to compile

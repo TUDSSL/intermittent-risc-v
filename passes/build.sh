@@ -9,4 +9,8 @@ function build_pass {
     popd
 }
 
+# Build the common libraries
+build_pass "common/PassUtils"
+
+# Build the transformations
 build_pass "TestPass"

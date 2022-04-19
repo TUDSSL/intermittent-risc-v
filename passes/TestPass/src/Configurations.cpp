@@ -5,13 +5,13 @@
  */
 
 cl::opt<bool> NoVerify(
-  "fno-verify",
+  "testpass-fno-verify",
   cl::init(false),
   cl::desc("No verification of runtime methods or transformations")
 );
 
 cl::opt<bool> Debug(
-  "debug",
+  "testpass-debug",
   cl::init(false),
   cl::desc("Turn on debugging outputs/prints")
 );
