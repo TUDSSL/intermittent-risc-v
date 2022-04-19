@@ -29,6 +29,8 @@ bool TestPass::run(Noelle &N, Module &M) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
 
+    if (F->isIntrinsic()) continue;
+
     dbg() << "\nFunction: " << F->getName() << "\n";
   }
 

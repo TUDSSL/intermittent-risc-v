@@ -1,0 +1,23 @@
+#!/bin/bash
+
+#!/bin/bash
+
+c_file="$1"
+out_file="$2"
+
+CFLAGS="-g -mthumb \
+    -mcpu=cortex-m4 \
+    -march=armv7e-m \
+    -mfloat-abi=soft \
+    --target=thumbv7em-unknown-none-gnu"
+
+clang $CFLAGS -O1 \
+    -Xclang -disable-llvm-passes \
+    -S -emit-llvm \
+    "$c_file" \
+    -o "$c_file.tmp.ll"
+
+noelle-norm -S "$c_file.tmp.ll" -o "$out_file"
+
+# Cleanup
+rm "$c_file.tmp.ll"
