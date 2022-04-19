@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
-
 c_file="$1"
 out_file="$2"
 

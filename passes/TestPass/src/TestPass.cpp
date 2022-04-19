@@ -28,10 +28,16 @@ bool TestPass::run(Noelle &N, Module &M) {
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
-
     if (F->isIntrinsic()) continue;
 
-    dbg() << "\nFunction: " << F->getName() << "\n";
+    dbg() << "Function: " << F->getName() << "\n";
+
+    for (auto &BB : *F) {
+        for (auto &I : BB) {
+            dbg() << "   " << I << "\n";
+        }
+    }
+    dbg() << "\n";
   }
 
   return modified;
