@@ -6,7 +6,7 @@
 #include "llvm/IR/Type.h"
 #include <functional>
 
-namespace Utils {
+namespace PassUtils {
 /*
  * Init
  */
@@ -58,6 +58,4 @@ bool ReverseIterateOverInstructions(
         FucntionToInvokePerInstruction,
     bool DebugPrint = false);
 
-bool IsViableFunction(Function &F);
-
-}  // namespace Utils
+}  // namespace PassUtils

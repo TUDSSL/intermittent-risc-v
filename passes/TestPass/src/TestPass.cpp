@@ -3,18 +3,18 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include <algorithm>
 
 #include "TestPass.hpp"
 #include "Configurations.hpp"
+#include "PassUtils.hpp"
 
 using namespace llvm::noelle ;
 
 namespace TestPassNS {
 
 TestPass::TestPass() :
-    ModulePass(ID)
-  , prefixString{"TestPass: "}
+  ModulePass(ID),
+  prefixString{"TestPass: "}
 {
   return ;
 }
@@ -50,18 +50,26 @@ bool TestPass::doInitialization (Module &M) {
   return false;
 }
 
-bool TestPass::runOnModule (Module &M) {
+bool TestPass::runOnModule(Module &M) {
 
   /*
    * Fetch NOELLE
    */
-  auto& noelle = getAnalysis<Noelle>();
-  errs() << prefixString << "The program has " << noelle.numberOfProgramInstructions() << " instructions\n";
+  auto &noelle = getAnalysis<Noelle>();
+  errs() << prefixString << "The program has "
+         << noelle.numberOfProgramInstructions() << " instructions\n";
 
   /*
    * Expand
    */
   auto modified = this->run(noelle, M);
+
+  /*
+   * Verify
+   */
+  if (NoVerify == false) {
+    PassUtils::Verify(M);
+  }
 
   return modified;
 }
@@ -85,4 +93,4 @@ static RegisterStandardPasses _RegPass2(PassManagerBuilder::EP_EnabledOnOptLevel
     [](const PassManagerBuilder&, legacy::PassManagerBase& PM) {
         if(!_PassMaker){ PM.add(_PassMaker = new TestPass()); }}); // ** for -O0
 
-}
+} // namespace TestPassNS

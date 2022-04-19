@@ -4,7 +4,7 @@
 #include <string>
 
 using namespace llvm;
-using namespace Utils;
+using namespace PassUtils;
 
 /*
  * ExitOnInit
@@ -13,7 +13,7 @@ using namespace Utils;
  * any analysis or transformation --- exit in runOnModule --- mostly
  * for testing scenarios
  */
-void Utils::ExitOnInit(void) {
+void PassUtils::ExitOnInit(void) {
   if (InitExit) {
     errs() << "Exiting KARAT Transforms ...\n";
     exit(0);
@@ -22,14 +22,14 @@ void Utils::ExitOnInit(void) {
   return;
 }
 
-Function *Utils::GetMethod(Module *M, const std::string Name) {
+Function *PassUtils::GetMethod(Module *M, const std::string Name) {
   /*
    * Fetch function with @Name from @M --- sanity
    * check that the function exists
    */
   Function *F = M->getFunction(Name);
   errs() << "Fetching " << Name << " ... \n";
-  assert(!!F && "Utils::GetMethod: Can't fetch!");
+  assert(!!F && "PassUtils::GetMethod: Can't fetch!");
   return F;
 }
 
@@ -40,7 +40,7 @@ Function *Utils::GetMethod(Module *M, const std::string Name) {
  * the correct debug location --- necessary for injections
  * into the Nautilus bitcode
  */
-llvm::IRBuilder<> Utils::GetBuilder(Function *F, Instruction *InsertionPoint) {
+llvm::IRBuilder<> PassUtils::GetBuilder(Function *F, Instruction *InsertionPoint) {
   llvm::IRBuilder<> Builder{InsertionPoint};
   Instruction *FirstInstWithDBG = nullptr;
 
@@ -57,7 +57,7 @@ llvm::IRBuilder<> Utils::GetBuilder(Function *F, Instruction *InsertionPoint) {
   return Builder;
 }
 
-llvm::IRBuilder<> Utils::GetBuilder(Function *F, BasicBlock *InsertionPoint) {
+llvm::IRBuilder<> PassUtils::GetBuilder(Function *F, BasicBlock *InsertionPoint) {
   llvm::IRBuilder<> Builder{InsertionPoint};
   Instruction *FirstInstWithDBG = nullptr;
 
@@ -74,7 +74,7 @@ llvm::IRBuilder<> Utils::GetBuilder(Function *F, BasicBlock *InsertionPoint) {
   return Builder;
 }
 
-bool Utils::IsInstrumentable(Function &F) {
+bool PassUtils::IsInstrumentable(Function &F) {
   /*
    * Perform check
    */
@@ -83,12 +83,7 @@ bool Utils::IsInstrumentable(Function &F) {
   return true;
 }
 
-bool Utils::Verify(Module &M) {
-  /*
-   * Check pass settings
-   */
-  if (NoVerify) return true;
-
+bool PassUtils::Verify(Module &M) {
   /*
    * Run LLVM verifier on each function of @M
    */
@@ -104,7 +99,7 @@ bool Utils::Verify(Module &M) {
   return !Failed;
 }
 
-void Utils::SetInstrumentationMetadata(Instruction *I,
+void PassUtils::SetInstrumentationMetadata(Instruction *I,
                                        const std::string MDTypeString,
                                        const std::string MDLiteral) {
   /*
@@ -121,7 +116,7 @@ void Utils::SetInstrumentationMetadata(Instruction *I,
   return;
 }
 
-GlobalVariable *Utils::GetOrInsertGlobalInteger(llvm::Module *M,
+GlobalVariable *PassUtils::GetOrInsertGlobalInteger(llvm::Module *M,
                                                llvm::IntegerType *Type,
                                                const std::string Name,
                                                uint64_t Initial,
@@ -137,7 +132,7 @@ GlobalVariable *Utils::GetOrInsertGlobalInteger(llvm::Module *M,
   return G;
 }
 
-bool Utils::ReverseIterateOverInstructions(
+bool PassUtils::ReverseIterateOverInstructions(
     Instruction *From, Instruction *To,
     std::function<std::pair<bool,bool>(Instruction *I)> FucntionToInvokePerInstruction,
     bool DebugPrint) {
@@ -200,16 +195,3 @@ bool Utils::ReverseIterateOverInstructions(
   return false;
 }
 
-/*
- * IsViableFunction
- *
- * Return true if the function actually exists with a body inside
- * the module
- */
-bool Utils::IsViableFunction(Function &F)
-{
-    if (false
-        || F.empty()) return false;
-
-    return true;
-}
