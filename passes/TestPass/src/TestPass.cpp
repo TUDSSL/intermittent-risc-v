@@ -19,23 +19,19 @@ TestPass::TestPass() :
   return ;
 }
 
-bool TestPass::run(Noelle &noelle, Module &M) {
+bool TestPass::run(Noelle &N, Module &M) {
   auto modified = false;
 
-  auto FM = noelle.getFunctionsManager();
+  auto FM = N.getFunctionsManager();
   auto PCF = FM->getProgramCallGraph();
-
-  set<Function *> Candidates;
-  set<Function *> NotCandidates;
 
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
 
-    errs() << "\nFunction: " << F->getName() << "\n";
+    dbg() << "\nFunction: " << F->getName() << "\n";
   }
 
-  modified = false;
   return modified;
 }
 
@@ -55,14 +51,14 @@ bool TestPass::runOnModule(Module &M) {
   /*
    * Fetch NOELLE
    */
-  auto &noelle = getAnalysis<Noelle>();
+  auto &N = getAnalysis<Noelle>();
   errs() << prefixString << "The program has "
-         << noelle.numberOfProgramInstructions() << " instructions\n";
+         << N.numberOfProgramInstructions() << " instructions\n";
 
   /*
-   * Expand
+   * Apply the transformation
    */
-  auto modified = this->run(noelle, M);
+  auto modified = this->run(N, M);
 
   /*
    * Verify

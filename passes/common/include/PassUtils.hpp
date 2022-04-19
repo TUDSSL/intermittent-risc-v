@@ -7,10 +7,6 @@
 #include <functional>
 
 namespace PassUtils {
-/*
- * Init
- */
-void ExitOnInit(void);
 
 llvm::Function *GetMethod(llvm::Module *M, const std::string Name);
 

@@ -9,4 +9,4 @@ function build_pass {
     popd
 }
 
-build_pass "test"
+build_pass "TestPass"

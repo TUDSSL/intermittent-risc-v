@@ -48,11 +48,7 @@ using namespace llvm;
  */
 extern cl::opt<bool> NoVerify;
 
-extern cl::opt<bool> InitExit;
-
 extern cl::opt<bool> Debug;
-
-extern cl::opt<int> InlineInstructionThreshold;
 
 #ifdef DEBUG_PRINT
 #define dbg() errs()

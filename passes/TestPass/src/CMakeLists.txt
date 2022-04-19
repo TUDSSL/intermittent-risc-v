@@ -2,17 +2,14 @@
 set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common")
 
 # Sources
-set(PassSrc
+set(PASS_SRC
     TestPass.cpp
     Configurations.cpp
     ${COMMON_DIR}/src/PassUtils.cpp
 )
 
 # Compilation flags
-set_source_files_properties(${PassSrc} PROPERTIES COMPILE_FLAGS " -std=c++17 -fPIC")
-
-# Name of the LLVM pass
-set(CATPassName "testpass")
+set_source_files_properties(${PASS_SRC} PROPERTIES COMPILE_FLAGS " -std=c++17 -fPIC")
 
 # configure LLVM
 find_package(LLVM REQUIRED CONFIG)
@@ -35,4 +32,4 @@ include_directories(
 )
 
 # Declare the LLVM pass to compile
-add_llvm_library(${CATPassName} MODULE ${PassSrc})
+add_llvm_library(${PROJECT_NAME} MODULE ${PASS_SRC})

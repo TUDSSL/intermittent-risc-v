@@ -6,22 +6,6 @@
 using namespace llvm;
 using namespace PassUtils;
 
-/*
- * ExitOnInit
- *
- * Register pass, execute doInitialization method but do not perform
- * any analysis or transformation --- exit in runOnModule --- mostly
- * for testing scenarios
- */
-void PassUtils::ExitOnInit(void) {
-  if (InitExit) {
-    errs() << "Exiting KARAT Transforms ...\n";
-    exit(0);
-  }
-
-  return;
-}
-
 Function *PassUtils::GetMethod(Module *M, const std::string Name) {
   /*
    * Fetch function with @Name from @M --- sanity
