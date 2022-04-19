@@ -4,7 +4,6 @@ set(COMMON_DIR "${PROJECT_SOURCE_DIR}/../common")
 # Sources
 set(PassSrc
     TestPass.cpp
-    Pass.cpp
     Configurations.cpp
     ${COMMON_DIR}/src/PassUtils.cpp
 )

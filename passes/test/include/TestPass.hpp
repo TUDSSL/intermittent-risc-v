@@ -2,10 +2,10 @@
 
 #include "noelle/core/Noelle.hpp"
 
-namespace timesqueezer {
+namespace TestPassNS {
 
 class TestPass : public ModulePass {
- public:
+public:
   static char ID;
 
   TestPass();
@@ -16,13 +16,10 @@ class TestPass : public ModulePass {
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 
- private:
+private:
   std::string prefixString;
-  std::uint64_t maxLoopSize;
-  std::uint64_t maxFunctionSize;
-  std::uint64_t maxUnrollFactor;
 
   bool run(Noelle &noelle, Module &M);
 };
 
-}  // namespace timesqueezer
+} // namespace TestPassNS
