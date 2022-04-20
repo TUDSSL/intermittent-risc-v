@@ -16,4 +16,4 @@ fi
 SRC_DIR="$PROJECT_ROOT"
 DST_DIR="/home/user/$(basename "$PROJECT_ROOT")"
 
-docker run -it -d --rm -v $SRC_DIR:$DST_DIR $DOCKER_IMG:$DOCKER_IMG_TAG
+docker run -it -d --rm -v $SRC_DIR:$DST_DIR --name irv_docker $DOCKER_IMG:$DOCKER_IMG_TAG
