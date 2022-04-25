@@ -7,7 +7,7 @@ RUN sudo apt-get update && \
 # Install a never neovim
 RUN sudo add-apt-repository ppa:neovim-ppa/stable && \
     sudo apt-get update && \
-    sudo apt-get install -y neovim clangd
+    sudo apt-get install -y neovim clangd ranger
 
 # Download my dotfiles
 RUN git clone https://github.com/iiKoe/dotfiles.git
@@ -19,3 +19,6 @@ RUN mkdir ~/.config && ln -s ~/dotfiles/nvim ~/.config/nvim
 RUN nvim --headless -c ':q' > /dev/null 2>&1; exit 0 # first run is to load Packer
 RUN nvim --headless -c 'autocmd User PackerComplete quitall' -c 'PackerSync' \
     > /dev/null 2>&1; exit 0
+
+# Ranger navigation
+RUN echo "alias r=\"source ranger\"" >> ~/.bashrc
