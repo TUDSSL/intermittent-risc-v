@@ -12,7 +12,6 @@ Function *PassUtils::GetMethod(Module *M, const std::string Name) {
    * check that the function exists
    */
   Function *F = M->getFunction(Name);
-  errs() << "Fetching " << Name << " ... \n";
   assert(!!F && "PassUtils::GetMethod: Can't fetch!");
   return F;
 }
