@@ -51,9 +51,17 @@ void CacheNoWritebackHint::analyzeFunction(
     return;
   }
 
-  // Get the first non-phy instruction
-  auto *InsertInstruction = F.getEntryBlock().getFirstNonPHIOrDbg();
-  Candidates.push_back(InsertInstruction);
+  // Find all the read instructions
+  for (auto &BB : F) {
+    for (auto &I : BB) {
+      errs() << I << "\n";
+      if (isa<LoadInst>(&I)) {
+        // Load instruction
+        dbgs() << " found candidate instruction: " << I << "\n";
+        Candidates.push_back(&I);
+      }
+    }
+  }
 }
 
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
