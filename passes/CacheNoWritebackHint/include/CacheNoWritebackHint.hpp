@@ -28,6 +28,8 @@ private:
   void analyzeFunction(Noelle &N, Function &F, CandidatesTy &Candidates);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
+
+  void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I);
 };
 
 } // namespace CacheNoWritebackHintNS

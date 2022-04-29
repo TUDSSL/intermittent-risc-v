@@ -56,27 +56,39 @@ void CacheNoWritebackHint::analyzeFunction(
   Candidates.push_back(InsertInstruction);
 }
 
+void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
+                                                  std::string FunctionName,
+                                                  Instruction *I) {
+  // Get the function
+  Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
+  assert(!!InsertFunction &&
+         "CacheNoWritebackHint::addHintFunctionCall: Can't find function");
+  FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
+  FunctionCallee InsertFunctionCallee =
+      M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
+  Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
+
+  // Greate the builder
+  auto *BB = I->getParent();
+  auto *F = BB->getParent();
+  auto Builder = PassUtils::GetBuilder(F, BB);
+  Builder.SetInsertPoint(I);
+
+  // Insert the function call
+  CallInst *CI =
+      Builder.CreateCall(InsertFunctionValue); // Create the function call
+  CI->setCallingConv(InsertFunction->getCallingConv());
+}
+
 void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
   // Get the function declaration we want to insertcwinsert_function
-  std::string InsertFunctionName = "__cache_hint";
-  Function *InsertFunction = PassUtils::GetMethod(&M, InsertFunctionName);
-  FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
-  FunctionCallee InsertFunctionCallee = M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
-  Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
 
   // Iterate over all the candidates
   for (auto &C : Candidates) {
     dbg() << "Instrumenting candidate: " << *C << "\n";
 
-    // Get a builder to insert the function
-    auto *BB = C->getParent(); 
-    auto *F = BB->getParent();
-    auto Builder = PassUtils::GetBuilder(F, BB);
-    Builder.SetInsertPoint(C);
-
     // Insert the call
-    CallInst *CI = Builder.CreateCall(InsertFunctionValue); // Create the function call
-    CI->setCallingConv(InsertFunction->getCallingConv());
+    insertHintFunctionCall(N, M, "__cache_hint", C);
   }
 }
 
