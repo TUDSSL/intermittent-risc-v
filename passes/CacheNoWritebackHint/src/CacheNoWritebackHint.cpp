@@ -81,8 +81,6 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
 }
 
 void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
-  // Get the function declaration we want to insertcwinsert_function
-
   // Iterate over all the candidates
   for (auto &C : Candidates) {
     dbg() << "Instrumenting candidate: " << *C << "\n";
