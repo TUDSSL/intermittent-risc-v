@@ -67,10 +67,11 @@ void CacheNoWritebackHint::analyzeFunction(
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
                                                   std::string FunctionName,
                                                   Instruction *I) {
+
   // Get the function
   Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
   assert(!!InsertFunction &&
-         "CacheNoWritebackHint::addHintFunctionCall: Can't find function");
+         "CacheNoWritebackHint: Can't find function");
   FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
   FunctionCallee InsertFunctionCallee =
       M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
@@ -82,9 +83,21 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   auto Builder = PassUtils::GetBuilder(F, BB);
   Builder.SetInsertPoint(I);
 
+  // Get the context
+  LLVMContext &Ctx = F->getContext();
+
+  // Get the Load source address
+  LoadInst *Load = dyn_cast<LoadInst>(I);
+  assert(Load != nullptr && "CacheNoWritebackHint: Expected LoadInst");
+  Value *LoadPtr =  Load->getPointerOperand(); // Get the pointer (src address)
+
+  // Configure the function arguments
+  Value *LoadSrcCast = Builder.CreateBitOrPointerCast(LoadPtr, Type::getInt8PtrTy(Ctx));
+  Value *InsertFunctionArgs[] = {LoadSrcCast};
+
   // Insert the function call
   CallInst *CI =
-      Builder.CreateCall(InsertFunctionValue); // Create the function call
+      Builder.CreateCall(InsertFunctionValue, InsertFunctionArgs); // Create the function call
   CI->setCallingConv(InsertFunction->getCallingConv());
 }
 
