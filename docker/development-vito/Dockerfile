@@ -9,7 +9,8 @@ RUN sudo add-apt-repository ppa:neovim-ppa/stable && \
     sudo apt-get update && \
     sudo apt-get install -y neovim clangd ranger
 
-# Download my dotfiles
+# Download my dotfiles (add is used to force rebuild after a new commit)
+ADD "https://api.github.com/repos/iiKoe/dotfiles/commits?per_page=1" .latest_dotfile_commit
 RUN git clone https://github.com/iiKoe/dotfiles.git
 
 # Configure neovim
