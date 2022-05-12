@@ -4,7 +4,7 @@
 /*
  * Can be compiled with debug information
  */
-#define DEBUG_PRINT
+//#define DEBUG_PRINT
 #ifdef DEBUG_PRINT
 #define dbg() errs()
 #else

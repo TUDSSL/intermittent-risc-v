@@ -20,7 +20,9 @@ public:
     Instruction *Instruction;
     bool IsMust;
 
-    bool operator==(const Dependence &rhs) const { return Instruction == rhs.Instruction; }
+    bool operator==(const Dependence &rhs) const {
+      return Instruction == rhs.Instruction;
+    }
     bool operator==(const class Value *rhs) const { return Instruction == rhs; }
   };
 
@@ -32,11 +34,7 @@ public:
     InstructionDependencyMapTy WAWs;
   };
 
-  enum DependencyType {
-   DEPTYPE_WAR,
-   DEPTYPE_RAW,
-   DEPTYPE_WAW
-  };
+  enum DependencyType { DEPTYPE_WAR, DEPTYPE_RAW, DEPTYPE_WAW };
 
 private:
   // Analysis works on *either* a function or a module
@@ -52,29 +50,28 @@ private:
   void analyzeModule();
   void analyzeFunction(Function *F);
 
-  inline InstructionDependencyMapTy& getMap(DependencyType T) {
+  inline InstructionDependencyMapTy &getMap(InstructionDependencies &ID,
+                                            DependencyType T) {
     switch (T) {
-      case DEPTYPE_WAR:
-        return _InstructionDependenciesTo.WARs;
-      case DEPTYPE_RAW:
-        return _InstructionDependenciesTo.RAWs;
-      case DEPTYPE_WAW:
-        return _InstructionDependenciesTo.WAWs;
+    case DEPTYPE_WAR:
+      return ID.WARs;
+    case DEPTYPE_RAW:
+      return ID.RAWs;
+    case DEPTYPE_WAW:
+      return ID.WAWs;
     }
     assert(false && "Unknown dependency type");
   }
 
 public:
-  DependencyAnalysis(Noelle &N) : N(N) { 
-    analyzeModule();
-  }
+  DependencyAnalysis(Noelle &N) : N(N) { analyzeModule(); }
 
   DependencyAnalysis(Noelle &N, Function *F) : N(N), F(F) {
     analyzeFunction(F);
   }
 
   bool isModuleAnalysis() { return F == nullptr; }
-  bool isFunctionAnalysis() {return !isModuleAnalysis(); }
+  bool isFunctionAnalysis() { return !isModuleAnalysis(); }
 
   InstructionDependencies &getInstructionDependenciesFrom() {
     return _InstructionDependenciesFrom;
@@ -84,17 +81,21 @@ public:
     return _InstructionDependenciesTo;
   }
 
-  list<Dependence> *getInstructionDependenciesTo(DependencyType T, Instruction *I) {
-    auto &map = getMap(T);
-    if (map.find(I) != map.end()) return &map[I];
-    else return nullptr;
+  list<Dependence> *getInstructionDependenciesTo(DependencyType T,
+                                                 Instruction *I) {
+    auto &map = getMap(_InstructionDependenciesTo, T);
+    if (map.find(I) != map.end())
+      return &map[I];
+    else
+      return nullptr;
   }
 
-  list<Dependence> *getInstructionDependenciesFrom(DependencyType T, Instruction *I) {
-    auto &map = getMap(T);
-    if (map.find(I) != map.end()) return &map[I];
-    else return nullptr;
+  list<Dependence> *getInstructionDependenciesFrom(DependencyType T,
+                                                   Instruction *I) {
+    auto &map = getMap(_InstructionDependenciesFrom, T);
+    if (map.find(I) != map.end())
+      return &map[I];
+    else
+      return nullptr;
   }
-
 };
-
