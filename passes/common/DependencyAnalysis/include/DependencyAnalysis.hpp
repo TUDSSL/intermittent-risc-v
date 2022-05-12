@@ -52,6 +52,18 @@ private:
   void analyzeModule();
   void analyzeFunction(Function *F);
 
+  inline InstructionDependencyMapTy& getMap(DependencyType T) {
+    switch (T) {
+      case DEPTYPE_WAR:
+        return _InstructionDependenciesTo.WARs;
+      case DEPTYPE_RAW:
+        return _InstructionDependenciesTo.RAWs;
+      case DEPTYPE_WAW:
+        return _InstructionDependenciesTo.WAWs;
+    }
+    assert(false && "Unknown dependency type");
+  }
+
 public:
   DependencyAnalysis(Noelle &N) : N(N) { 
     analyzeModule();
@@ -73,13 +85,13 @@ public:
   }
 
   list<Dependence> *getInstructionDependenciesTo(DependencyType T, Instruction *I) {
-    auto &map = _InstructionDependenciesTo.WARs;
+    auto &map = getMap(T);
     if (map.find(I) != map.end()) return &map[I];
     else return nullptr;
   }
 
   list<Dependence> *getInstructionDependenciesFrom(DependencyType T, Instruction *I) {
-    auto &map = _InstructionDependenciesFrom.WARs;
+    auto &map = getMap(T);
     if (map.find(I) != map.end()) return &map[I];
     else return nullptr;
   }
