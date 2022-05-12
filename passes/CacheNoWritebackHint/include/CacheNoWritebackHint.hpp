@@ -1,6 +1,7 @@
 #pragma once
 
 #include "noelle/core/Noelle.hpp"
+#include "DependencyAnalysis.hpp"
 
 namespace CacheNoWritebackHintNS {
 
@@ -24,8 +25,9 @@ private:
 
   bool run(Noelle &N, Module &M);
 
-  CandidatesTy analyze(Noelle &N, Module &M);
-  void analyzeFunction(Noelle &N, Function &F, CandidatesTy &Candidates);
+  CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
+  void analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F, CandidatesTy &Candidates);
+  void analyzeInstruction(Noelle &N, DependencyAnalysis &DA, Instruction &I, CandidatesTy &Candidates);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
 

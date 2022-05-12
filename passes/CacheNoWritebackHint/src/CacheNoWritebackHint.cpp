@@ -20,8 +20,8 @@ CacheNoWritebackHint::CacheNoWritebackHint() :
 }
 
 // Collect instructions that need to be instrumented
-CacheNoWritebackHint::CandidatesTy CacheNoWritebackHint::analyze(Noelle &N,
-                                                                   Module &M) {
+CacheNoWritebackHint::CandidatesTy
+CacheNoWritebackHint::analyze(Noelle &N, DependencyAnalysis &DA, Module &M) {
   CandidatesTy InstructionsToInstrument;
 
   auto FM = N.getFunctionsManager();
@@ -35,14 +35,15 @@ CacheNoWritebackHint::CandidatesTy CacheNoWritebackHint::analyze(Noelle &N,
       continue;
 
     // Analyze the function
-    analyzeFunction(N, *F, InstructionsToInstrument);
+    analyzeFunction(N, DA, *F, InstructionsToInstrument);
   }
 
   return InstructionsToInstrument;
 }
 
-void CacheNoWritebackHint::analyzeFunction(
-    Noelle &N, Function &F, CandidatesTy &Candidates) {
+void CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA,
+                                           Function &F,
+                                           CandidatesTy &Candidates) {
   auto FunctionName = F.getName();
   dbg() << "Analyzing function: " << FunctionName << "\n";
 
@@ -54,12 +55,29 @@ void CacheNoWritebackHint::analyzeFunction(
   // Find all the read instructions
   for (auto &BB : F) {
     for (auto &I : BB) {
-      errs() << I << "\n";
-      if (isa<LoadInst>(&I)) {
-        // Load instruction
-        dbgs() << " found candidate instruction: " << I << "\n";
-        Candidates.push_back(&I);
+      analyzeInstruction(N, DA, I, Candidates);
+    }
+  }
+}
+
+void CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
+                                              Instruction &I,
+                                              CandidatesTy &Candidates) {
+  errs() << "Analyzing instruction: " << I << "\n";
+  if (isa<LoadInst>(&I)) {
+    // Load instruction
+    dbgs() << " found candidate instruction: " << I << "\n";
+    Candidates.push_back(&I);
+
+    // Get the candidate dependencies
+    auto war_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
+    if (war_deps != nullptr) {
+      dbgs() << "  candidate WAR dependencies:\n";
+      for (auto dep : *war_deps) {
+        dbgs() << " Dep instr: " << dep.Instruction << "\n";
       }
+    } else {
+      dbgs() << "  candidate has no dependencies\n";
     }
   }
 }
@@ -112,8 +130,11 @@ void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candid
 }
 
 bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
+  // Analyze all the instruction dependencies
+  DependencyAnalysis DA = DependencyAnalysis(N);
+  
   // Get the candidates
-  CandidatesTy Candidates = analyze(N, M);
+  CandidatesTy Candidates = analyze(N, DA, M);
 
   // Instrument the candidates
   Instrument(N, M, Candidates);
