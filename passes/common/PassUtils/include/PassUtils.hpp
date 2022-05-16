@@ -62,4 +62,18 @@ bool ReverseIterateOverInstructions(
         FucntionToInvokePerInstruction,
     bool DebugPrint = false);
 
+/*
+ * Iteration Helper
+ *
+ * FunctionToInvokePerInstruction returns [bool, bool]
+ * Stop, StopPath
+ *
+ * Function returns true if the iteration ends earlier.
+ * It returns false otherwise.
+ */
+bool ForwardIterateOverNInstructions(
+    Instruction *From, int N,
+    std::function<std::pair<bool,bool>(Instruction *I)> FucntionToInvokePerInstruction,
+    bool DebugPrint);
+
 }  // namespace PassUtils

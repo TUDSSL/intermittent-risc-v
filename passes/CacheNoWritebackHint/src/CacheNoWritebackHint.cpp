@@ -52,12 +52,37 @@ void CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA,
     return;
   }
 
+#if 0
   // Find all the read instructions
   for (auto &BB : F) {
     for (auto &I : BB) {
       analyzeInstruction(N, DA, I, Candidates);
     }
   }
+#endif
+  if (FunctionName != "main") {
+    dbg() << "Skipping function\n";
+    return;
+  }
+
+#if 0
+  auto FirstBB = F.begin();
+  auto FirstI = FirstBB->getSingleSuccessor()->getFirstNonPHIOrDbg();
+  auto SearchI = FirstI->getNextNonDebugInstruction();
+
+  auto IterInst = [&](Instruction *I) -> pair<bool, bool> {
+    bool Stop = false;
+    bool StopPath = false;
+
+    errs() << " # iter instr: " << *I << "\n";
+
+    return pair<bool, bool>(Stop, StopPath);
+  };
+
+  errs() << "Search Instr: " << SearchI << "\n";
+  PassUtils::ForwardIterateOverNInstructions(SearchI, 20, IterInst, true);
+#endif
+
 }
 
 void CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
@@ -70,11 +95,24 @@ void CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
     Candidates.push_back(&I);
 
     // Get the candidate dependencies
+    auto rar_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, &I);
+    if (rar_deps != nullptr) {
+      dbgs() << "  candidate RAR dependencies:\n";
+      for (auto dep : *rar_deps) {
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
+      }
+    } else {
+      dbgs() << "  candidate has no dependencies\n";
+    }
+
+    // Get the candidate dependencies
     auto war_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
     if (war_deps != nullptr) {
       dbgs() << "  candidate WAR dependencies:\n";
       for (auto dep : *war_deps) {
-        dbgs() << " Dep instr: " << dep.Instruction << "\n";
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
       }
     } else {
       dbgs() << "  candidate has no dependencies\n";

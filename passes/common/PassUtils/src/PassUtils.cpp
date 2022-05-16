@@ -178,3 +178,70 @@ bool PassUtils::ReverseIterateOverInstructions(
   return false;
 }
 
+bool PassUtils::ForwardIterateOverNInstructions(
+    Instruction *From, int N,
+    std::function<std::pair<bool,bool>(Instruction *I)> FucntionToInvokePerInstruction,
+    bool DebugPrint) {
+
+  auto FBB = From->getParent();
+
+  const BasicBlock::iterator FromIt(From);
+
+  if (DebugPrint) {
+    errs() << "Checking N=" << N <<  " instructions from: " << *From << "\n";
+    errs() << "From BB: " << *FBB << "\n";
+  }
+
+  vector<BasicBlock *> WorkList;
+  unordered_set<BasicBlock *> VisitedBB;
+
+  WorkList.push_back(FBB);
+  while (WorkList.size()) {
+    /*
+     * Get the last BasicBlock from the WorkList
+     */
+    auto BB = WorkList.back();
+    WorkList.pop_back();
+
+    if (DebugPrint)
+      errs() << "\nVisiting BB: " << *BB << "\n";
+
+    // If this is the start BB AND we DID visit it, we end at the From instruction
+    // Otherwise, this is the first time we visit the block, so end at the block end
+    auto E = ((BB == FBB) && VisitedBB.find(FBB) != VisitedBB.end())
+                      ? FromIt
+                      : BB->end();
+
+    // If this is the start BB AND we did NOT visit it, we start from the From instruction
+    // Otherwise, we start from the top
+    auto Cursor = ((BB == FBB) && VisitedBB.find(FBB) == VisitedBB.end())
+                      ? FromIt
+                      : BB->begin();
+
+    if (DebugPrint) {
+      if (Cursor == BB->begin())
+        errs() << "Seach start: " << "Block Begin: " << *Cursor << "\n";
+      else
+        errs() << "Seach start: " << *Cursor << "\n";
+    }
+
+    bool StopPath = false;
+    bool Stop = false;
+    do {
+      auto CursorInst = cast<Instruction>(Cursor);
+      tie(Stop, StopPath) = FucntionToInvokePerInstruction(CursorInst);
+
+      if (Stop) return true;
+      if (StopPath) break;
+    } while (++Cursor != E);
+
+    if (!StopPath) {
+      // Search in the successor BasicBlocks if we did not already visit them.
+      for (auto P : successors(BB)) {
+        if (VisitedBB.insert(P).second) WorkList.push_back(P);
+      }
+    }
+  }
+
+  return false;
+}
