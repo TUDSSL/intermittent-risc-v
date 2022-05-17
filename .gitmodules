@@ -4,3 +4,6 @@
 [submodule "noelle/noelle"]
 	path = noelle/noelle
 	url = https://github.com/iiKoe/noelle.git
+[submodule "customriscv"]
+	path = customriscv
+	url = git@github.com:TUDSSL/customriscv.git
