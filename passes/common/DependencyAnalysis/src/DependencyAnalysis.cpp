@@ -4,7 +4,7 @@
 /*
  * Can be compiled with debug information
  */
-//#define DEBUG_PRINT
+#define DEBUG_PRINT
 #ifdef DEBUG_PRINT
 #define dbg() errs()
 #else
@@ -36,6 +36,7 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
   list<Dependence> war_deps;
   list<Dependence> raw_deps;
   list<Dependence> waw_deps;
+  list<Dependence> rar_deps;
 
   Instruction *I;
 
@@ -62,6 +63,11 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
         dbg() << "  " << *src << "\n";
         waw_deps.push_back(Dependence{src_instr, dependence->isMustDependence()});
         break;
+      case DG_DATA_RAR:
+        dbg() << "             needs [RAR]";
+        dbg() << "  " << *src << "\n";
+        rar_deps.push_back(Dependence{src_instr, dependence->isMustDependence()});
+        break;
       case DG_DATA_NONE:
         break;
       default:
@@ -72,7 +78,7 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
 
   // Iterate over all the instructions in the function
   for (auto &I : instructions(F)) {
-    if (isa<StoreInst>(I) || isa<LoadInst>(I)) {
+    if (isa<StoreInst>(I) || isa<LoadInst>(I) || isRealCallInst(I)) {
       dbg() << "Instruction" << I << " *to* dependencies:\n";
 
       // Collect the dependencies *to* the instruction
@@ -82,11 +88,13 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
       if (war_deps.size() > 0) _InstructionDependenciesTo.WARs[&I] = war_deps;
       if (raw_deps.size() > 0) _InstructionDependenciesTo.RAWs[&I] = raw_deps;
       if (waw_deps.size() > 0) _InstructionDependenciesTo.WAWs[&I] = waw_deps;
+      if (rar_deps.size() > 0) _InstructionDependenciesTo.RARs[&I] = rar_deps;
  
       // Clear for the next instruction
       war_deps.clear();
       raw_deps.clear();
       waw_deps.clear();
+      rar_deps.clear();
 
       dbg() << "Instruction" << I << " *from* dependencies:\n";
 
@@ -97,11 +105,13 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
       if (war_deps.size() > 0) _InstructionDependenciesFrom.WARs[&I] = war_deps;
       if (raw_deps.size() > 0) _InstructionDependenciesFrom.RAWs[&I] = raw_deps;
       if (waw_deps.size() > 0) _InstructionDependenciesFrom.WAWs[&I] = waw_deps;
+      if (rar_deps.size() > 0) _InstructionDependenciesFrom.RARs[&I] = rar_deps;
 
       // Clear for the next instruction
       war_deps.clear();
       raw_deps.clear();
       waw_deps.clear();
+      rar_deps.clear();
     }
   }
 }

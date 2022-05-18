@@ -19,10 +19,11 @@ CacheNoWritebackHint::CacheNoWritebackHint() :
   return ;
 }
 
+#if 0
 // Collect instructions that need to be instrumented
 CacheNoWritebackHint::CandidatesTy
 CacheNoWritebackHint::analyze(Noelle &N, DependencyAnalysis &DA, Module &M) {
-  CandidatesTy InstructionsToInstrument;
+  CandidatesTy Candidates;
 
   auto FM = N.getFunctionsManager();
   auto PCF = FM->getProgramCallGraph();
@@ -35,51 +36,273 @@ CacheNoWritebackHint::analyze(Noelle &N, DependencyAnalysis &DA, Module &M) {
       continue;
 
     // Analyze the function
-    analyzeFunction(N, DA, *F, InstructionsToInstrument);
+    analyzeFunction(N, DA, *F, Candidates);
   }
 
-  return InstructionsToInstrument;
+  return Candidates;
 }
+#endif
 
-void CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA,
-                                           Function &F,
-                                           CandidatesTy &Candidates) {
+CacheNoWritebackHint::CandidatesTy
+CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F) {
+  CandidatesTy Candidates;
+
   auto FunctionName = F.getName();
   dbg() << "Analyzing function: " << FunctionName << "\n";
 
   if (FunctionName == "__cache_hint") {
     dbg() << "Skipping function\n";
-    return;
+    return Candidates;
   }
+
+  if (FunctionName != "main") {
+    dbg() << "Skipping function\n";
+    return Candidates;
+  }
+
+  // Get the Reach analysis for the function
+  auto DFA = N.getDataFlowAnalyses();
+  auto DFR = DFA.runReachableAnalysis(&F);
 
   // Find all the read instructions
   for (auto &BB : F) {
     for (auto &I : BB) {
-      analyzeInstruction(N, DA, I, Candidates);
+      analyzeInstruction(N, DA, *DFR, I, Candidates);
     }
   }
+
+  return Candidates;
 }
 
-void CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
+void CacheNoWritebackHint::analyzeInstruction(Noelle &N,
+                                              DependencyAnalysis &DA,
+                                              DataFlowResult &DFReach,
                                               Instruction &I,
                                               CandidatesTy &Candidates) {
   errs() << "Analyzing instruction: " << I << "\n";
   if (isa<LoadInst>(&I)) {
+
+    CandidateTy C;
+    C.I = &I;
+
     // Load instruction
     dbgs() << " found candidate instruction: " << I << "\n";
-    Candidates.push_back(&I);
+ 
+    // Get the candidate RAR dependencies
+    auto rar_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, &I);
+    if (rar_deps != nullptr) {
+      dbgs() << "  candidate RAR dependencies:\n";
+      for (auto dep : *rar_deps) {
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
+
+        // If MAY or MUST we add it to the candidate
+        C.RARs.insert(dep.Instruction);
+      }
+    } else {
+      dbgs() << "  candidate has no RAR dependencies\n";
+    }
+ 
+    // Get the candidate WAR dependencies
+    auto war_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
+    if (war_deps != nullptr) {
+      dbgs() << "  candidate WAR dependencies:\n";
+      for (auto dep : *war_deps) {
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
+
+        // If MUST we add it to the candidate
+        if (dep.IsMust)
+          C.WARs.insert(dep.Instruction);
+      }
+    } else {
+      dbgs() << "  candidate has no WAR dependencies\n";
+    }
+
+    // Instructions reachable by the WAR writes
+    set<Value *> WARWriteReach;
+    for (auto &Store : C.WARs) {
+      auto &ReachedByWarWrite = DFReach.OUT(Store);
+      for (auto R : ReachedByWarWrite) {
+        WARWriteReach.insert(R); // Add the set
+      }
+    }
+
+    // Instructions reachable by the RAR reads
+    set<Value *> RARReadReach;
+    for (auto &Load : C.RARs) {
+      auto &ReachedByRarRead = DFReach.OUT(Load);
+      for (auto R : ReachedByRarRead) {
+        RARReadReach.insert(R); // Add the set
+      }
+    }
+
+    // Instructions reachable by the Candidate instruction (Load)
+    auto &CandidateReach = DFReach.OUT(&I);
+    
+    // Instructions that are candidates (a subset of CandidateReach)
+    set<Instruction *> CandidateInstructions;
+
+    // Contains helper
+    auto contains = [](set<Value *> ValueSet, Value *Instr) {
+      if (ValueSet.find(Instr) != ValueSet.end()) {
+        return true;
+      } else {
+        return false;
+      }
+    };
+
+    // Go through the candidates
+    dbgs() << "  candidate Reachable instructions:\n";
+    for (auto CandidateInstr : CandidateReach) {
+      dbgs() << "    analyzing hint location for candidate: " << *CandidateInstr << "\n";
+
+      // If it is in the RARReadReach, then it's not a candidate (it's after a RAR read)
+      if (contains(RARReadReach, CandidateInstr)) {
+        dbgs() << "      NO_HINT_LOC: Candidate is in the RARReachReads\n";
+        continue;
+      }
+
+      // If it is in the WARWriteReach, then it's not a candidate (it's after a WAR write)
+      if (contains(WARWriteReach, CandidateInstr)) {
+        dbgs() << "      NO_HINT_LOC: Candidate is in the WARWriteReach\n";
+        continue;
+      }
+
+      // If any reachable instructions FROM THIS CANDIDATE can reach any RAR read, 
+      // then it's not a candidate (it can lead to the RAR read)
+      auto &ReachableByCandidate = DFReach.OUT(dyn_cast<Instruction>(CandidateInstr));
+      bool CanReachRARRead = false;
+      for (auto &RARRead : C.RARs) {
+        if (contains(ReachableByCandidate, RARRead)) {
+          CanReachRARRead = true;
+          break;
+        }
+      }
+      if (CanReachRARRead) {
+        dbgs() << "      NO_HINT_LOC: Candidate can reach a RAR read\n";
+        continue;
+      }
+
+      // Otherwise, it's a candidate
+      dbgs() << "      HINT_LOC: Valid hint location!\n";
+    }
+
+#if 0
+    dbgs() << "  candidate Reachable instructions:\n";
+    auto &ReachedByCandidate = DFReach.OUT(&I);
+    for (auto CandidateInstr : ReachedByCandidate) {
+      if (isa<IntrinsicInst>(CandidateInstr)) continue;
+
+      dbgs() << "   -> Reaches: " << *CandidateInstr << "\n";
+
+
+      bool IsC = true;
+      auto &CandidateReaches = DFReach.OUT(dyn_cast<Instruction>(CandidateInstr));
+
+      // If a RAR read is reachable, it is not a candidate
+      if (RARReadReach.find(CandidateInstr) != RARReadReach.end()) {
+        dbgs() << "   candidate can reach an instruction reached by a RAR read\n";
+        IsC = false;
+      }
+
+      // If any of the instructions reachable by the WAR write can be reached,
+      // it is not a candidate
+      if (WARWriteReach.find(CandidateInstr) != WARWriteReach.end()) {
+        dbgs() << "   candidate can reach an instruction reached by a WAR write\n";
+        IsC = false;
+      }
+
+      for (auto ReachInstr : CandidateReaches) {
+        Instruction *ri = dyn_cast<Instruction>(ReachInstr);
+        if (isa<ReturnInst>(ri)) continue;
+
+        dbgs() << "     -> Reaches: " << *ri << "\n";
+
+        // If a RAR read is reachable, it is not a candidate
+        if (RARReadReach.find(ri) != RARReadReach.end()) {
+          dbgs() << "   candidate can reach an instruction reached by a RAR read\n";
+          IsC = false;
+          break;
+        }
+
+        // If any of the instructions reachable by the WAR write can be reached,
+        // it is not a candidate
+        if (WARWriteReach.find(ri) != WARWriteReach.end()) {
+          dbgs() << "   candidate can reach an instruction reached by a WAR write\n";
+          IsC = false;
+          break;
+        }
+      }
+      if (IsC)
+        CandidateInstructions.insert(dyn_cast<Instruction>(CandidateInstr));
+    }
+
+    for (auto &CI : CandidateInstructions) {
+        dbgs() << "$ CANDIDATE: insertion point" << *CI << "\n" ;
+    }
+
+    // Add the candidate
+    Candidates.push_back(C);
+
+    dbgs() << "\n";
+#endif
+
+#if 0
+    // Get the candidate dependencies
+    auto rar_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, &I);
+    if (rar_deps != nullptr) {
+      dbgs() << "  candidate RAR dependencies:\n";
+      for (auto dep : *rar_deps) {
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
+      }
+    } else {
+      dbgs() << "  candidate has no dependencies\n";
+    }
 
     // Get the candidate dependencies
     auto war_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
     if (war_deps != nullptr) {
       dbgs() << "  candidate WAR dependencies:\n";
       for (auto dep : *war_deps) {
-        dbgs() << " Dep instr: " << dep.Instruction << "\n";
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
       }
     } else {
       dbgs() << "  candidate has no dependencies\n";
     }
+#endif
   }
+}
+
+CacheNoWritebackHint::CandidatesTy
+CacheNoWritebackHint::analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
+  CandidatesTy AnalyzedCandidates;
+
+  // Get reachable instructions
+
+
+  for (auto &C : Candidates) {
+    Instruction *I = C.I;
+    // Get reachable instructions from candidate
+    dbgs() << "Analyzing candidate: " << *I << "\n";
+
+    // Get the candidate RARs
+    auto rar_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, I);
+    if (rar_deps != nullptr) {
+      dbgs() << "  candidate RAR dependencies:\n";
+      for (auto dep : *rar_deps) {
+        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
+               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
+      }
+    } else {
+      dbgs() << "  candidate has no dependencies\n";
+    }
+    
+  }
+
+  return AnalyzedCandidates;
 }
 
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
@@ -122,22 +345,34 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
 void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
   // Iterate over all the candidates
   for (auto &C : Candidates) {
-    dbg() << "Instrumenting candidate: " << *C << "\n";
+    dbg() << "Instrumenting candidate: " << *C.I << "\n";
 
     // Insert the call
-    insertHintFunctionCall(N, M, "__cache_hint", C);
+    insertHintFunctionCall(N, M, "__cache_hint", C.I);
   }
 }
 
 bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
+  auto FM = N.getFunctionsManager();
+  auto PCF = FM->getProgramCallGraph();
+
   // Analyze all the instruction dependencies
   DependencyAnalysis DA = DependencyAnalysis(N);
-  
-  // Get the candidates
-  CandidatesTy Candidates = analyze(N, DA, M);
 
-  // Instrument the candidates
-  Instrument(N, M, Candidates);
+  // Go through all the functions
+  for (auto Node : PCF->getFunctionNodes()) {
+    Function *F = Node->getFunction();
+    assert(F != nullptr);
+    if (F->isIntrinsic())
+      continue;
+
+    // Analyze the function
+    CandidatesTy Candidates = analyzeFunction(N, DA, *F);
+    CandidatesTy AnalyzedCandidates = analyzeCandidates(N, DA, Candidates);
+
+    // Instrument the candidates
+    Instrument(N, M, Candidates);
+  }
 
   return true;
 }

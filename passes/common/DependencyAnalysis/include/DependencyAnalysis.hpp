@@ -32,9 +32,10 @@ public:
     InstructionDependencyMapTy WARs;
     InstructionDependencyMapTy RAWs;
     InstructionDependencyMapTy WAWs;
+    InstructionDependencyMapTy RARs;
   };
 
-  enum DependencyType { DEPTYPE_WAR, DEPTYPE_RAW, DEPTYPE_WAW };
+  enum DependencyType { DEPTYPE_WAR, DEPTYPE_RAW, DEPTYPE_WAW, DEPTYPE_RAR };
 
 private:
   // Analysis works on *either* a function or a module
@@ -59,8 +60,14 @@ private:
       return ID.RAWs;
     case DEPTYPE_WAW:
       return ID.WAWs;
+    case DEPTYPE_RAR:
+      return ID.RARs;
     }
     assert(false && "Unknown dependency type");
+  }
+
+  inline bool isRealCallInst(Instruction &I) {
+      return isa<CallInst>(I) && (!isa<IntrinsicInst>(I));
   }
 
 public:

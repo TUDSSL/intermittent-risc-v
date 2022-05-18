@@ -8,7 +8,15 @@ namespace CacheNoWritebackHintNS {
 class CacheNoWritebackHint : public ModulePass {
 public:
 
-  typedef std::vector<Instruction *> CandidatesTy;
+  struct CandidateTy {
+    Instruction *I;
+    set<Instruction *> Reachable;
+    set<Instruction *> RARs;
+    set<Instruction *> WARs;
+  };
+
+  //typedef std::vector<Instruction *> CandidatesTy;
+  typedef std::vector<CandidateTy> CandidatesTy;
 
   static char ID;
 
@@ -25,13 +33,17 @@ private:
 
   bool run(Noelle &N, Module &M);
 
-  CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
-  void analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F, CandidatesTy &Candidates);
-  void analyzeInstruction(Noelle &N, DependencyAnalysis &DA, Instruction &I, CandidatesTy &Candidates);
+  //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
+  CandidatesTy analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F);
+  void analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, Instruction &I, CandidatesTy &Candidates);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
 
   void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I);
+
+  CandidatesTy analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+  //void analyzeCandidate(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+
 };
 
 } // namespace CacheNoWritebackHintNS
