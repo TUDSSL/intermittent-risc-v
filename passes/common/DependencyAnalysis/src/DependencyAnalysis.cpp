@@ -19,8 +19,13 @@ void DependencyAnalysis::analyzeModule() {
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
+
     if (F->isIntrinsic())
       continue;
+
+    if (F->hasExternalLinkage()) {
+      continue;
+    }
 
     // Analyze the function
     analyzeFunction(F);
