@@ -116,3 +116,9 @@ void DependencyAnalysis::analyzeFunction(Function *F) {
   }
 }
 
+// Overload print
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const DependencyAnalysis::Dependence &D) {
+    os << ((D.IsMust) ? "[Must]" : "[May]") << " Instruction: " << *D.Instruction;
+    return os;
+}
+

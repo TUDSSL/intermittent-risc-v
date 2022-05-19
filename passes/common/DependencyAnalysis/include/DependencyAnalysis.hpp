@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <list>
 
+
 class DependencyAnalysis {
 public:
   struct Dependence {
@@ -106,3 +107,5 @@ public:
       return nullptr;
   }
 };
+
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const DependencyAnalysis::Dependence &D);
