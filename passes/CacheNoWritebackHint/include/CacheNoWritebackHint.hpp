@@ -8,14 +8,13 @@ namespace CacheNoWritebackHintNS {
 class CacheNoWritebackHint : public ModulePass {
 public:
 
+  typedef std::set<Instruction *> HintLocationsTy;
+
   struct CandidateTy {
-    Instruction *I;
-    set<Instruction *> Reachable;
-    set<Instruction *> RARs;
-    set<Instruction *> WARs;
+    Instruction *I = nullptr;
+    HintLocationsTy PossibleHintLocations;
   };
 
-  //typedef std::vector<Instruction *> CandidatesTy;
   typedef std::vector<CandidateTy> CandidatesTy;
 
   static char ID;
@@ -35,7 +34,7 @@ private:
 
   //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
   CandidatesTy analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F);
-  void analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, Instruction &I, CandidatesTy &Candidates);
+  std::tuple<bool, CandidateTy> analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, Instruction &I);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
 
