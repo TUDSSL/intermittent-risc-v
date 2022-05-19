@@ -31,10 +31,12 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
     return Candidates;
   }
 
+#if 0
   if (FunctionName != "main") {
     dbg() << "Skipping function\n";
     return Candidates;
   }
+#endif
 
   // Get the Reach analysis for the function
   auto DFA = N.getDataFlowAnalyses();
@@ -136,7 +138,12 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
 
   // Go through the possible hint locations for the candidate
   dbgs() << "  Finding hint locations for candidate\n";
-  for (auto PossibleHintLocation : CandidateReach) {
+  for (auto &PossibleHintLocation : CandidateReach) {
+
+    // Skip debug insructions
+    if (isa<IntrinsicInst>(PossibleHintLocation))
+      continue;
+
     dbgs() << "    Analyzing possible hint location: " << *PossibleHintLocation
            << "\n";
 
@@ -185,7 +192,7 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
 
     // Otherwise, it's a candidate
     dbgs() << "      VALID - Valid hint location!\n";
-    PossibleHintLocations.insert(&I);
+    PossibleHintLocations.insert(dyn_cast<Instruction>(PossibleHintLocation));
   }
 
   // If the candidate instruction has NO possible hint locations, it's not a candidate
