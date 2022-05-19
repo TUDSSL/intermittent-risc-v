@@ -13,6 +13,7 @@ public:
   struct CandidateTy {
     Instruction *I = nullptr;
     HintLocationsTy PossibleHintLocations;
+    HintLocationsTy SelectedHintLocations;
   };
 
   typedef std::vector<CandidateTy> CandidatesTy;
@@ -38,9 +39,11 @@ private:
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
 
-  void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I);
+  void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I, Instruction *HintLocation);
 
-  CandidatesTy analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+  void selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+
+  //CandidatesTy analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
   //void analyzeCandidate(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
 
 };

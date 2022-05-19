@@ -206,6 +206,7 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
           CandidateTy{.I = &I, .PossibleHintLocations = PossibleHintLocations}};
 }
 
+#if 0
 CacheNoWritebackHint::CandidatesTy
 CacheNoWritebackHint::analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
   CandidatesTy AnalyzedCandidates;
@@ -234,10 +235,27 @@ CacheNoWritebackHint::analyzeCandidates(Noelle &N, DependencyAnalysis &DA, Candi
 
   return AnalyzedCandidates;
 }
+#endif
+
+void CacheNoWritebackHint::selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
+  CandidatesTy HintLocations;
+
+  for (auto &C : Candidates) {
+    Instruction *I = C.I;
+    // Get reachable instructions from candidate
+    dbgs() << "Analyzing candidate: " << *I << "\n";
+
+    // TODO: Select the best candidate
+    Instruction *HI = *C.PossibleHintLocations.begin();
+    dbgs() << "Selected instruction: " << *HI << "\n";
+
+    C.SelectedHintLocations.insert(HI);
+  }
+}
 
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
                                                   std::string FunctionName,
-                                                  Instruction *I) {
+                                                  Instruction *I, Instruction *HintLocation) {
 
   // Get the function
   Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
@@ -252,7 +270,7 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   auto *BB = I->getParent();
   auto *F = BB->getParent();
   auto Builder = PassUtils::GetBuilder(F, BB);
-  Builder.SetInsertPoint(I);
+  Builder.SetInsertPoint(HintLocation);
 
   // Get the context
   LLVMContext &Ctx = F->getContext();
@@ -277,8 +295,11 @@ void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candid
   for (auto &C : Candidates) {
     dbg() << "Instrumenting candidate: " << *C.I << "\n";
 
-    // Insert the call
-    insertHintFunctionCall(N, M, "__cache_hint", C.I);
+    for (auto &H : C.SelectedHintLocations) {
+      dbg() << "  Inserting hint before: " << *H << "\n";
+      // Insert the call
+      insertHintFunctionCall(N, M, "__cache_hint", C.I, H);
+    }
   }
 }
 
@@ -309,12 +330,10 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
       }
     }
 
-#if 0
-    CandidatesTy AnalyzedCandidates = analyzeCandidates(N, DA, Candidates);
+    // Find the ideal instructions to place hints
+    selectHintLocations(N, DA, Candidates);
 
-    // Instrument the candidates
-    Instrument(N, M, Candidates);
-#endif
+    //Instrument(N, M, Candidates);
   }
 
   return true;
