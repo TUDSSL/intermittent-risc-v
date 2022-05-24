@@ -433,6 +433,33 @@ class Cache {
     }
     logger << endl;
   }
+
+  void applyCompilerHints(uint32_t address) {
+        // Process only valid memory
+        if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
+            return;
+
+        // Offset the main memory start
+        auto addr = address - main_memory_start;
+
+        // Fetch the tag, set and offset from the mem address
+        auto offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
+        auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
+        index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
+        auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+
+        for (int i = 0; i < no_of_lines; i++) {
+            CacheLine *line = &sets[index].lines[i];
+
+            if (line->valid) {
+                if (line->blocks.tag_bits == tag) {
+                    line->dirty = false;
+                    line->possible_war = false;
+                    line->was_read = false;
+                }
+            }
+        }
+  }
 };
 
 #endif /* _CACHE_HPP_ */
