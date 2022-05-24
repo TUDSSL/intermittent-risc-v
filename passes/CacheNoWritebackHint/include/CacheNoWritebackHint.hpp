@@ -35,7 +35,7 @@ private:
 
   //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
   CandidatesTy analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F);
-  std::tuple<bool, CandidateTy> analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, Instruction &I);
+  std::tuple<bool, CandidateTy> analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, DomTreeSummary &DT, Instruction &I);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
 

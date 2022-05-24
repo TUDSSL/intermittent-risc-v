@@ -42,10 +42,13 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
   auto DFA = N.getDataFlowAnalyses();
   auto DFR = DFA.runReachableAnalysis(&F);
 
+  // Get the Dominator Tree analysis
+  auto DT = N.getDominators(&F)->DT;
+
   // Find all the read instructions
   for (auto &BB : F) {
     for (auto &I : BB) {
-      auto [IsCandidate, Candidate] = analyzeInstruction(N, DA, *DFR, I);
+      auto [IsCandidate, Candidate] = analyzeInstruction(N, DA, *DFR, DT, I);
       if (IsCandidate) {
         Candidates.push_back(Candidate);
       }
@@ -57,7 +60,7 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
 
 std::tuple<bool, CacheNoWritebackHint::CandidateTy>
 CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
-                                         DataFlowResult &DFReach,
+                                         DataFlowResult &DFReach, DomTreeSummary &DT,
                                          Instruction &I) {
 
   // Only Load instructions can be a candidate
@@ -147,6 +150,12 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
     dbgs() << "    Analyzing possible hint location: " << *PossibleHintLocation
            << "\n";
 
+    // The read MUST dominate the candidate (otherwise the read might not have happened)
+    if (!DT.dominates(&I, dyn_cast<Instruction>(PossibleHintLocation))) {
+      dbgs() << "      INVALID - Candidate does not Dominate possible hint location\n";
+      continue;
+    }
+
     // If it is a RAR read, then it's not a candidate
     bool IsRARRead = false;
     for (auto &Load : RARs) {
@@ -190,6 +199,8 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
       continue;
     }
 
+    // TODO: Candidate must not be used outside of the function for this to work
+
     // Otherwise, it's a candidate
     dbgs() << "      VALID - Valid hint location!\n";
     PossibleHintLocations.insert(dyn_cast<Instruction>(PossibleHintLocation));
@@ -205,37 +216,6 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
   return {true,
           CandidateTy{.I = &I, .PossibleHintLocations = PossibleHintLocations}};
 }
-
-#if 0
-CacheNoWritebackHint::CandidatesTy
-CacheNoWritebackHint::analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
-  CandidatesTy AnalyzedCandidates;
-
-  // Get reachable instructions
-
-
-  for (auto &C : Candidates) {
-    Instruction *I = C.I;
-    // Get reachable instructions from candidate
-    dbgs() << "Analyzing candidate: " << *I << "\n";
-
-    // Get the candidate RARs
-    auto rar_deps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, I);
-    if (rar_deps != nullptr) {
-      dbgs() << "  candidate RAR dependencies:\n";
-      for (auto dep : *rar_deps) {
-        dbgs() << "   -> Dependent Instruction: " << *dep.Instruction 
-               << " type: " << ((dep.IsMust) ? "Must" : "May") << "\n";
-      }
-    } else {
-      dbgs() << "  candidate has no dependencies\n";
-    }
-    
-  }
-
-  return AnalyzedCandidates;
-}
-#endif
 
 void CacheNoWritebackHint::selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
   CandidatesTy HintLocations;
@@ -320,6 +300,9 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
     // Analyze the function
     CandidatesTy Candidates = analyzeFunction(N, DA, *F);
 
+    // Find the ideal instructions to place hints
+    selectHintLocations(N, DA, Candidates);
+
     // Print the candidates and possible locations
     dbgs() << "CacheNoWritebackHint candidates for function: " << F->getName() << "\n";
     for (auto &C : Candidates) {
@@ -328,12 +311,14 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
       for (auto &PHL : C.PossibleHintLocations) {
         dbgs() << "    " << *PHL << "\n";
       }
+      dbgs() << "    Selected hint locations: \n";
+      for (auto &SHL : C.SelectedHintLocations) {
+        dbgs() << "    " << *SHL << "\n";
+      }
     }
 
-    // Find the ideal instructions to place hints
-    selectHintLocations(N, DA, Candidates);
-
-    //Instrument(N, M, Candidates);
+    // Instrument the 
+    Instrument(N, M, Candidates);
   }
 
   return true;
