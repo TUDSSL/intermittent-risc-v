@@ -23,6 +23,13 @@ CacheNoWritebackHint::CandidatesTy
 CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F) {
   CandidatesTy Candidates;
 
+  if (F.isIntrinsic())
+    return Candidates;
+
+  if (F.hasExternalLinkage()) {
+    return Candidates;
+  }
+
   auto FunctionName = F.getName();
   dbg() << "Analyzing function: " << FunctionName << "\n";
 
@@ -147,6 +154,10 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
     if (isa<IntrinsicInst>(PossibleHintLocation))
       continue;
 
+    // Skip PHI nodes
+    if (isa<PHINode>(PossibleHintLocation))
+      continue;
+
     dbgs() << "    Analyzing possible hint location: " << *PossibleHintLocation
            << "\n";
 
@@ -199,7 +210,8 @@ CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
       continue;
     }
 
-    // TODO: Candidate must not be used outside of the function for this to work
+    // If ALL reachable instructions FROM THIS CANDIDATE MUST reach any WAR write,
+    // then it's a candidate
 
     // Otherwise, it's a candidate
     dbgs() << "      VALID - Valid hint location!\n";
@@ -237,15 +249,6 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
                                                   std::string FunctionName,
                                                   Instruction *I, Instruction *HintLocation) {
 
-  // Get the function
-  Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
-  assert(!!InsertFunction &&
-         "CacheNoWritebackHint: Can't find function");
-  FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
-  FunctionCallee InsertFunctionCallee =
-      M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
-  Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
-
   // Greate the builder
   auto *BB = I->getParent();
   auto *F = BB->getParent();
@@ -254,6 +257,20 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
 
   // Get the context
   LLVMContext &Ctx = F->getContext();
+
+  FunctionCallee InsertFunctionCallee =
+    M.getOrInsertFunction("__cache_hint", Type::getVoidTy(Ctx), Type::getInt8PtrTy(Ctx));
+
+  // Get the function
+  //Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
+  //assert(!!InsertFunction &&
+  //       "CacheNoWritebackHint: Can't find function");
+  //FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
+
+  //FunctionCallee InsertFunctionCallee =
+  //    M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
+  Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
+
 
   // Get the Load source address
   LoadInst *Load = dyn_cast<LoadInst>(I);
@@ -267,7 +284,7 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   // Insert the function call
   CallInst *CI =
       Builder.CreateCall(InsertFunctionValue, InsertFunctionArgs); // Create the function call
-  CI->setCallingConv(InsertFunction->getCallingConv());
+  CI->setCallingConv(F->getCallingConv());
 }
 
 void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
