@@ -65,170 +65,150 @@ ofstream logger;
 // TODO: Need a way to get information from other hooks
 class HookInstructionCount : public HookCode {
   private:
-   // Config
-   bool use_cycle_count = true;
-   uint64_t instruction_count = 0;
-   const char func_type = 2; // magic ELF function type
-   Cache *obj;
-   CycleCounter cycleCounter;
-
+    // Config
+    bool use_cycle_count = true;
+    uint64_t instruction_count = 0;
+    const char func_type = 2; // magic ELF function type
+    Cache *obj; // pointer to cache object, comes from HookMemory
+    CycleCounter cycleCounter;
 
   public:
     uint64_t pc = 0;
     uint64_t count = 0;
 
-const string unknown_function_str = "UNKNOWN_FUNCTION";
-    struct FunctionFrame {
-      const string *function_name = nullptr;
-      armaddr_t function_address = 0;
-      uint64_t function_entry_icount = 0;
-      armaddr_t sp_function_entry = 0;
-      armaddr_t LR = 0;
-    };
-    list<FunctionFrame> callstack;
+  const string unknown_function_str = "UNKNOWN_FUNCTION";
+  struct FunctionFrame {
+    const string *function_name = nullptr;
+    armaddr_t function_address = 0;
+    uint64_t function_entry_icount = 0;
+    armaddr_t sp_function_entry = 0;
+    armaddr_t LR = 0;
+  };
+  list<FunctionFrame> callstack;
 
-    armaddr_t estack;
+  armaddr_t estack;
 
-    // A boolean that is true on the first instruction of a new function
-    // NB. This is hacky, but new_function acts like an ISR flag
-    // it needs to be manually reset after reading
-    bool new_function = true;
-    list<FunctionFrame> function_entries; // is cleared by the HookIdempotencyStatistics class
+  // A boolean that is true on the first instruction of a new function
+  // NB. This is hacky, but new_function acts like an ISR flag
+  // it needs to be manually reset after reading
+  bool new_function = true;
+  list<FunctionFrame> function_entries; // is cleared by the HookIdempotencyStatistics class
 
-    void clearNewFunction() {
-      new_function = false;
-      function_entries.clear();
-    }
+  void clearNewFunction() {
+    new_function = false;
+    function_entries.clear();
+  }
 
-    // Stores addresses found in a function
-    map<armaddr_t, const string *> function_map;
-    // Stores the function and the starting address
-    map<armaddr_t, const string *> function_entry_map;
+  // Stores addresses found in a function
+  map<armaddr_t, const string *> function_map;
+  // Stores the function and the starting address
+  map<armaddr_t, const string *> function_entry_map;
 
-    // A map holding ALL executed instructions and the number of times they have
-    // been executed
-    const bool track_instruction_execution = true;
-    map<armaddr_t, uint64_t> instruction_execution_map;
+  // A map holding ALL executed instructions and the number of times they have
+  // been executed
+  const bool track_instruction_execution = true;
+  map<armaddr_t, uint64_t> instruction_execution_map;
 
-    explicit HookInstructionCount(Emulator &emu) : HookCode(emu, "stack-war"),
-                                                   cycleCounter(emu)
-    {
-      auto &symbols = getEmulator().getMemory().getSymbols();
-      for (const auto &sym : symbols.symbols) {
-        if (sym.type == func_type) {
-          // cout << "Func addr: " << sym.address << " - " << sym.getFuncAddr() << endl;
-          // cout << "Func name: " << sym.name << endl;
-          // cout << "Func size: " << sym.size << endl;
+  explicit HookInstructionCount(Emulator &emu) : HookCode(emu, "stack-war"),
+                                                  cycleCounter(emu)
+  {
+    auto &symbols = getEmulator().getMemory().getSymbols();
+    for (const auto &sym : symbols.symbols) {
+      if (sym.type == func_type) {
+        // To check for function entries only
+        function_entry_map[sym.getFuncAddr()] = &sym.name;
 
-          // To check for function entries only
-          function_entry_map[sym.getFuncAddr()] = &sym.name;
-
-
-          // Add ALL the possible addresses in the function to the map
-          // Return the function name if it's in any of the addresses in the
-          // function.
-          // Assmumtions:
-          //  * All opcodes are 16-bit (2 bytes) or more in multiple
-          //  * Functions are continious (we use the size for functions)
-          for (armaddr_t faddr = sym.getFuncAddr();
-               faddr < sym.getFuncAddr() + sym.size;
-               faddr += 2) {
-            function_map[faddr] = &sym.name;
-          }
+        // Add ALL the possible addresses in the function to the map
+        // Return the function name if it's in any of the addresses in the
+        // function.
+        // Assmumtions:
+        //  * All opcodes are 16-bit (2 bytes) or more in multiple
+        //  * Functions are continious (we use the size for functions)
+        for (armaddr_t faddr = sym.getFuncAddr();
+              faddr < sym.getFuncAddr() + sym.size;
+              faddr += 2) {
+          function_map[faddr] = &sym.name;
         }
       }
-
-      auto estack_sym = symbols.get("_estack");
-      estack = estack_sym->address;
-      cout << "Estack at: " << estack << endl;
     }
 
-    ~HookInstructionCount() override
-    {
+    auto estack_sym = symbols.get("_estack");
+    estack = estack_sym->address;
+    cout << "Estack at: " << estack << endl;
+  }
 
-    }
+  ~HookInstructionCount() override
+  {
 
-    // Return the current instruction count
-    uint64_t getInstructionCount()
-    {
-      if (use_cycle_count == true)
-        return cycleCounter.cycleCount();
+  }
 
-      return instruction_count;
-    }
+  // Return the current instruction count
+  uint64_t getInstructionCount()
+  {
+    if (use_cycle_count == true)
+      return cycleCounter.cycleCount();
 
-    void register_cache(Cache *ext_obj)
-    {
-      obj = ext_obj;
-    }
+    return instruction_count;
+  }
 
-    void log_cache_content()
-    {
-      cout << "calling log all" << endl;
-      obj->log_all_cache_contents(logger);
-    }
+  void register_cache(Cache *ext_obj)
+  {
+    obj = ext_obj;
+  }
 
-// Return the name of the function that the addr is the start of
-    const string *isFunctionEntry(armaddr_t addr)
-    {
-      auto f = function_entry_map.find(addr);
-      if (f != function_entry_map.end())
-        return f->second;
+  void log_cache_content()
+  {
+    cout << "calling log all" << endl;
+    obj->log_all_cache_contents(logger);
+  }
 
-      return nullptr;
-    }
-
-    // Is the instruction at the address a function?
-    const string *inFunction(armaddr_t addr)
-    {
-      auto f = function_map.find(addr);
-      if (f == function_map.end())
-        return nullptr;
-
+  // Return the name of the function that the addr is the start of
+  const string *isFunctionEntry(armaddr_t addr)
+  {
+    auto f = function_entry_map.find(addr);
+    if (f != function_entry_map.end())
       return f->second;
+
+    return nullptr;
+  }
+
+  // Is the instruction at the address a function?
+  const string *inFunction(armaddr_t addr)
+  {
+    auto f = function_map.find(addr);
+    if (f == function_map.end())
+      return nullptr;
+
+    return f->second;
+  }
+
+  void run(hook_arg_t *arg)
+  {
+    instruction_count += 1;
+    global_count++;
+
+    // See if the current instruction is a function call or not.
+    auto fname = isFunctionEntry(arg->address);
+    if (fname != nullptr) {
+      // If the function is the cache hint, then parse the args.
+      if (strcmp(fname->c_str(), HINT_FUNCTION_NAME) == 0) {
+        auto regs = getEmulator().getRegisters();
+
+        // Arg1 will have the address of the cache entry that needs to be marked.
+        Function::Argument<uint32_t> farg1;
+        Function::Arguments::parse(regs, farg1);
+
+        obj->applyCompilerHints(farg1.arg);
+      }
     }
 
-    void run(hook_arg_t *arg)
-    {
-      (void)arg;  // Don't care
-      instruction_count += 1;
-      global_count++;
-      // log_cache_content();
-
-      // See if the current instruction is a function call or not.
-      auto fname = isFunctionEntry(arg->address);
-      if (fname != nullptr) {
-        // If the function is the cache hint, then parse the args.
-        if (strcmp(fname->c_str(), HINT_FUNCTION_NAME) == 0) {
-          // cout << "Received hint: ";
-          auto regs = getEmulator().getRegisters();
-
-          // Arg1 will have the address of the cache entry that needs to be marked.
-          Function::Argument<uint32_t> farg1;
-          Function::Arguments::parse(regs, farg1);
-
-          // obj->applyCompilerHints(farg1.arg);
-
-          // cout << "  Argument: 0x" << hex << farg1.arg << dec << endl;
-        }
-      }
-
-      // Ignore executing the instructions the function is still executing.
-      fname = inFunction(arg->address);
-      if (fname != nullptr && strcmp(fname->c_str(), HINT_FUNCTION_NAME) == 0) {
-        
-      }
-
+    // Ignore executing the instructions the function is still executing.
+    fname = inFunction(arg->address);
+    if (fname != nullptr && strcmp(fname->c_str(), HINT_FUNCTION_NAME) == 0) {
+      // How to tell the emulator to skip the instruction?
     }
+  }
 
-};
-
-// Struct to store the current instruction state
-struct InstructionState {
-  uint64_t pc;
-  uint64_t icount;
-  armaddr_t mem_address;
-  armaddr_t mem_size;
 };
 
 // TODO: Need a way to get information from other hooks
@@ -240,17 +220,23 @@ class MemoryAccess : public HookMemory {
     string filename = "log/default_log";
 
   MemoryAccess(Emulator &emu) : HookMemory(emu, "cache-lru") {
-      hook_instr_cnt = new HookInstructionCount(emu);
-      hook_instr_cnt->register_cache(&CacheObj);
-      parseLogArguements();
-      parseCacheArguements();
-      CacheObj.register_instr_count_fn(&return_instr_count);
-      logger.open(filename.c_str(), ios::out | ios::trunc);
-      cout << "Start of the cache" << endl;
+    hook_instr_cnt = new HookInstructionCount(emu);
+
+    // Register the cache object - could be done with OOPs but I like C style :(
+    hook_instr_cnt->register_cache(&CacheObj);
+
+    // Parse optional args
+    parseLogArguements();
+    parseCacheArguements();
+
+    // Means to provide the instruction count to the cache
+    CacheObj.register_instr_count_fn(&return_instr_count);
+    logger.open(filename.c_str(), ios::out | ios::trunc);
+    cout << "Start of the cache" << endl;
   }
 
   ~MemoryAccess() {
-      cout << "End of the cache" << endl;
+    cout << "End of the cache" << endl;
   }
 
   void run(hook_arg_t *arg) {

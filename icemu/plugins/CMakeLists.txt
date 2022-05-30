@@ -46,4 +46,5 @@ add_subdirectory(cache_utilization_plugin)
 add_subdirectory(cache_dead_block_plugin)
 add_subdirectory(cache_temp_dead_block_plugin)
 add_subdirectory(cache_with_hints)
+add_subdirectory(cache_example)
 

@@ -208,12 +208,6 @@ class Cache {
     cout << "Hints given\t: " << stats.hint_given << endl;
   }
 
-  void get_offset_index(armaddr_t address, uint32_t &addr,
-                        uint32_t &offset, uint32_t &index, uint32_t &tag)
-  {
-
-  }
-
   // Function to be called on eviction of the cache on checkpoint
   void checkpointEviction()
   {
@@ -364,6 +358,7 @@ class Cache {
               // would be executed.
               stats.misses++;
 
+              // Since the cache is empty, store the value.
               line->valid = true;
               line->blocks.offset_bits = offset;
               line->blocks.set_bits = index;
@@ -387,6 +382,7 @@ class Cache {
                   stats.dead_block_nvm_writes++;
               }
 
+              // No need to keep looking now
               break;
           }
       }
