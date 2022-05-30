@@ -168,8 +168,8 @@ class Cache {
 
     // Initialize the cache
     sets.resize(no_of_sets);
-    cout << "SETS: " << no_of_sets << endl;
-    cout << "Lines: " << no_of_lines << endl;
+    // cout << "SETS: " << no_of_sets << endl;
+    // cout << "Lines: " << no_of_lines << endl;
 
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
@@ -501,6 +501,11 @@ class Cache {
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
+      if (hint_reads.count(addr) == 0)
+        hint_reads.insert(addr);
+      else
+        return;
+
       // Search for the cache line where the hint has to be given. If found
       // then reset the possibleWAR and the was_read flag. This will ensure that
       // eviction of the given memory causes no checkpoint.
@@ -516,7 +521,6 @@ class Cache {
           }
       }
 
-      hint_reads.insert(addr);
       stats.hint_given++;
   }
 };

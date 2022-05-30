@@ -200,16 +200,16 @@ const string unknown_function_str = "UNKNOWN_FUNCTION";
       if (fname != nullptr) {
         // If the function is the cache hint, then parse the args.
         if (strcmp(fname->c_str(), HINT_FUNCTION_NAME) == 0) {
-          cout << "Received hint: ";
+          // cout << "Received hint: ";
           auto regs = getEmulator().getRegisters();
 
           // Arg1 will have the address of the cache entry that needs to be marked.
           Function::Argument<uint32_t> farg1;
           Function::Arguments::parse(regs, farg1);
 
-          obj->applyCompilerHints(farg1.arg);
+          // obj->applyCompilerHints(farg1.arg);
 
-          cout << "  Argument: 0x" << hex << farg1.arg << dec << endl;
+          // cout << "  Argument: 0x" << hex << farg1.arg << dec << endl;
         }
       }
 
