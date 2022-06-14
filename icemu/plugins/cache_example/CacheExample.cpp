@@ -28,7 +28,8 @@
 
 // Local includes
 #include "../includes/DetectWAR.h"
-#include "../includes/Cache.hpp"
+#include "../includes/CacheSkewAssociative.hpp"
+// #include "../includes/Cache.hpp"
 #include "../includes/CycleCounter.h"
 
 using namespace std;
