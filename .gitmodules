@@ -10,3 +10,6 @@
 [submodule "chipyard/verilator"]
 	path = chipyard/verilator
 	url = http://git.veripool.org/git/verilator
+[submodule "chipyard/chipyard"]
+	path = chipyard/chipyard
+	url = git@github.com:ucb-bar/chipyard.git
