@@ -7,6 +7,7 @@ export PATH="$ROOT_DIR/host-bin/:$PATH"
 export PATH="$ROOT_DIR/llvm/llvm-9.0.1/install/bin:$PATH"
 export PATH="$ROOT_DIR/noelle/noelle/install/bin:$PATH"
 export PATH="$ROOT_DIR/icemu/icemu/bin:$PATH"
+export PATH="$ROOT_DIR/chipyard/verilator/bin:$PATH"
 
 export LLVM_ROOT="$ROOT_DIR/llvm/llvm-9.0.1/install/"
 export NOELLE="$ROOT_DIR/noelle/noelle/install"
