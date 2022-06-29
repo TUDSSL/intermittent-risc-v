@@ -7,3 +7,6 @@
 [submodule "customriscv"]
 	path = chipyard/customriscv
 	url = git@github.com:TUDSSL/customriscv.git
+[submodule "chipyard/verilator"]
+	path = chipyard/verilator
+	url = http://git.veripool.org/git/verilator
