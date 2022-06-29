@@ -12,4 +12,4 @@
 	url = http://git.veripool.org/git/verilator
 [submodule "chipyard/chipyard"]
 	path = chipyard/chipyard
-	url = git@github.com:ucb-bar/chipyard.git
+	url = git@github.com:TUDSSL/chipyard.git
