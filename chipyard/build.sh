@@ -14,7 +14,7 @@ pushd chipyard
 # A submodule of QEMU has a branch named HEAD, which causes a lot of warnings in
 # 'git status' (warning: refname 'HEAD' is ambiguous.)
 # So we rename the branch to renamed-HEAD to get rid of them
-pushd chipyard/toolchains/qemu/roms/edk2
+pushd toolchains/qemu/roms/edk2
 git branch -m HEAD renamed-HEAD 2> /dev/null
 popd
 
@@ -24,10 +24,10 @@ popd
 #   warning: unable to access 'synth/BramDwc/.gitignore': Too many levels of symbolic links
 # Resolve it by copying the .gitignore files
 pushd generators/cva6/src/main/resources/vsrc/cva6/src/fpga-support/behav/BramDwc
-mv ../common/gitignore .gitignore
+cp ../common/gitignore .gitignore
 popd
 pushd generators/cva6/src/main/resources/vsrc/cva6/src/fpga-support/synth/BramDwc
-mv ../common/gitignore .gitignore
+cp ../common/gitignore .gitignore
 popd
 
 # Done
