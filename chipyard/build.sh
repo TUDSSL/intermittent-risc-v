@@ -24,10 +24,10 @@ popd
 #   warning: unable to access 'synth/BramDwc/.gitignore': Too many levels of symbolic links
 # Resolve it by copying the .gitignore files
 pushd generators/cva6/src/main/resources/vsrc/cva6/src/fpga-support/behav/BramDwc
-cp ../common/gitignore .gitignore
+cp ../common/gitignore .gitignore --remove-destination
 popd
 pushd generators/cva6/src/main/resources/vsrc/cva6/src/fpga-support/synth/BramDwc
-cp ../common/gitignore .gitignore
+cp ../common/gitignore .gitignore --remove-destination
 popd
 
 # Done
