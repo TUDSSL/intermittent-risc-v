@@ -7,7 +7,6 @@ popd
 
 # Initialize and build the chipyard submodule
 pushd chipyard
-./scripts/init-submodules-no-riscv-tools.sh && \
 ./scripts/build-toolchains.sh riscv-tools
 
 
