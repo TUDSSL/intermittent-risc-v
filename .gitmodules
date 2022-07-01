@@ -10,3 +10,4 @@
 [submodule "chipyard/chipyard"]
 	path = chipyard/chipyard
 	url = git@github.com:TUDSSL/chipyard.git
+    branch = intermittent
