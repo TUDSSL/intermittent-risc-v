@@ -7,9 +7,7 @@ add_executable(${PROJECT_NAME}
     aes/test.c
 
     # Other
-    portme/printf.c
-    portme/printfmap.c
-    ${STARTUP_CODE}
+    ${ALL_TOOLCHAIN_CODE}
     )
 
 target_compile_definitions(${PROJECT_NAME}
@@ -24,13 +22,10 @@ target_compile_definitions(${PROJECT_NAME}
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ${OUTPUT_SUFFIX})
 
 target_include_directories(${PROJECT_NAME}
-       PUBLIC
-       aes
-       portme
-     )
+    PUBLIC
+    aes
+    )
 
 target_link_libraries(${PROJECT_NAME}
-    gcc
-    c
-    m
+    #m
     )

@@ -62,22 +62,6 @@ NOTE:   String length must be evenly divisible by 16byte (str_len % 16 == 0)
   #define MULTIPLY_AS_A_FUNCTION 0
 #endif
 
-
-
-// For testing if we don't compile libc
-#include <stddef.h>
-__attribute__((noinline))
-void *__memcpy(void *dst, const void *src,  size_t n) {
-  char *d = dst;
-  const char *s = src;
-  for (size_t i=0; i<n; i++) {
-    d[i] = s[i];
-  }
-  return dst;
-}
-#define memcpy __memcpy
-
-
 /*****************************************************************************/
 /* Private variables:                                                        */
 /*****************************************************************************/
@@ -582,4 +566,3 @@ void AES_CTR_xcrypt_buffer(struct AES_ctx* ctx, uint8_t* buf, size_t length)
 }
 
 #endif // #if defined(CTR) && (CTR == 1)
-

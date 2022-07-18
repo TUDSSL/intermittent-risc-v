@@ -1,5 +1,4 @@
-//#include <stdio.h>
-#include "printf.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -319,5 +318,4 @@ static int test_decrypt_ecb(void)
 	return(1);
     }
 }
-
 

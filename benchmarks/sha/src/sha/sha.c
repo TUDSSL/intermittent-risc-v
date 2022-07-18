@@ -6,7 +6,6 @@
 /* NIST's proposed modification to SHA of 7/11/94 may be */
 /* activated by defining USE_MODIFIED_SHA */
 
-#include "printf.h"
 #include "fread.h"
 #include <stdlib.h>
 #include <stdio.h>

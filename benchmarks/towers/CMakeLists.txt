@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.15)
 
 message("Using toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
 
-project(picojpeg LANGUAGES C ASM)
+project(towers LANGUAGES C ASM)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Optionally overwrite the default optmization level
 if (NOT DEFINED OPT_LEVEL)
-    message(STATUS "Using default opt-level -O3")
-    set(OPT_LEVEL "-O3")
+    message(STATUS "Using default opt-level -O2")
+    set(OPT_LEVEL "-O2")
 else()
     message(STATUS "Using opt-level ${OPT_LEVEL}")
 endif()
@@ -26,6 +26,5 @@ add_compile_options(
 add_link_options(
     -Wl,-Map=${PROJECT_NAME}.map
     )
-
 
 add_subdirectory(src)
