@@ -120,6 +120,12 @@ class MemoryAccess : public HookMemory {
     char *read_value = getEmulator().getMemory().at(arg->address);
     memcpy(&arg->value, read_value, arg->size);
 
+    address_t main_memory_start = getEmulator().getMemory().entrypoint;
+
+    // Process only valid memory
+    if (!((address >= main_memory_start)))
+        return;
+
     // cout << "Memory type: " << arg->mem_type << "\t size: " << arg->size << "\t address: " << arg->address << "\tData: " << arg->value << endl;
     // return;
 

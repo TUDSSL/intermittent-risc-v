@@ -149,9 +149,9 @@ class Cache {
     // Function pointer to be registered back to plugin class
     uint64_t (*get_instr_count)();
 
+    char *main_mem;
+
   public:
-    address_t main_memory_start = 0x10000000;
-    address_t main_memory_size = 0x60000;
     CacheStats stats;
     address_t instr_count = 0;
 
@@ -193,15 +193,34 @@ class Cache {
     // Initialize the stats
     memset(&stats, 0, sizeof(struct CacheStats));
 
+    // Initialize the fake memory
+    main_mem = (char *) malloc(512 * 1024);
+
     // Set to a dummy function. It will be replaced later if the instruction count
     // function is registerd using the appropriate call
     get_instr_count = dummy;
+    memcpy(main_mem, mem->at(mem->entrypoint), 512*1024);
+    cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
   }
 
   ~Cache()
   {
     // Put stuffs to print here
     cout << "NVM Reads: " << stats.nvm_reads << "\tNVM Writes: " << stats.nvm_writes << "\tCheckpoints: " << stats.checkpoints << endl;
+
+    // for (uint64_t i = 0; i < 512 * 1024; i+=4)
+    // {
+    //   if (memcmp(main_mem + i, mem->at(mem->entrypoint + i), 4) != 0)
+    //     cout << "Comparing memory: " << memcmp(main_mem + i, mem->at(mem->entrypoint + i), 4) << "at addr: " << mem->entrypoint + i << endl;
+    // }
+
+    cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
+
+  }
+
+  char *map_mem(address_t addr)
+  {
+    return (main_mem + addr - mem->entrypoint);
   }
 
   // Function to be called on eviction of the cache on checkpoint
@@ -234,10 +253,6 @@ class Cache {
 
   uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
   {
-      // Process only valid memory
-      if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
-          return 0;
-
       // Offset the main memory start
       address_t addr = address;// - main_memory_start;
 
@@ -247,7 +262,10 @@ class Cache {
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
-      cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl; return NULL;
+      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
+
+      memcpy(map_mem(addr), value, sizeof(value));
+      cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
@@ -258,7 +276,6 @@ class Cache {
       // Look for any entry in the Cache line marked by "index"
       for (int i = 0; i < no_of_lines; i++) {
           CacheLine *line = &sets[index].lines[i];
-
           // In case the cache location has something already, check
           // if it is a hit or a miss. In case it is a miss, increment the
           // collisions. This will enable the eviction to be handled.
@@ -306,7 +323,6 @@ class Cache {
               // only the first time. From the next time onwards, only the hits
               // would be executed.
               stats.misses++;
-
               // Since the cache is empty, store the value.
               line->valid = true;
               line->blocks.offset_bits = offset;
@@ -429,12 +445,8 @@ class Cache {
 
   void applyCompilerHints(uint32_t address)
   {
-      // Process only valid memory
-      if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
-          return;
-
       // Offset the main memory start
-      auto addr = address - main_memory_start;
+      auto addr = address;
 
       // Fetch the tag, set and offset from the mem address
       auto offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
