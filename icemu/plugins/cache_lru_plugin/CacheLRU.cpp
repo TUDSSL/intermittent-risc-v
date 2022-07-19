@@ -39,7 +39,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 #include "../includes/DetectWAR.h"
 
 using namespace std;
@@ -129,8 +129,8 @@ class Cache {
     
     std::vector<CacheSet> sets;
 
-    armaddr_t main_memory_start = 0x10000000;
-    armaddr_t main_memory_size = 0x60000;
+    address_t main_memory_start = 0x10000000;
+    address_t main_memory_size = 0x60000;
 
     CacheStats stats;
     uint32_t instr_count = 0;
@@ -189,7 +189,7 @@ class Cache {
 
   }
 
-  uint32_t* LRU2WaySetAssociativeCache(armaddr_t address, enum HookMemory::memory_type type, armaddr_t *value)
+  uint32_t* LRU2WaySetAssociativeCache(address_t address, enum HookMemory::memory_type type, address_t *value)
   {
       // Process only valid memory
       if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
@@ -342,14 +342,14 @@ class HookInstructionCount : public HookCode {
     const string unknown_function_str = "UNKNOWN_FUNCTION";
     struct FunctionFrame {
       const string *function_name = nullptr;
-      armaddr_t function_address = 0;
+      address_t function_address = 0;
       uint64_t function_entry_icount = 0;
-      armaddr_t sp_function_entry = 0;
-      armaddr_t LR = 0;
+      address_t sp_function_entry = 0;
+      address_t LR = 0;
     };
     list<FunctionFrame> callstack;
 
-    armaddr_t estack;
+    address_t estack;
 
     // A boolean that is true on the first instruction of a new function
     // NB. This is hacky, but new_function acts like an ISR flag
@@ -363,19 +363,20 @@ class HookInstructionCount : public HookCode {
     }
 
     // Stores addresses found in a function
-    map<armaddr_t, const string *> function_map;
+    map<address_t, const string *> function_map;
     // Stores the function and the starting address
-    map<armaddr_t, const string *> function_entry_map;
+    map<address_t, const string *> function_entry_map;
 
     // A map holding ALL executed instructions and the number of times they have
     // been executed
     const bool track_instruction_execution = true;
-    map<armaddr_t, uint64_t> instruction_execution_map;
+    map<address_t, uint64_t> instruction_execution_map;
 
     explicit HookInstructionCount(Emulator &emu) : HookCode(emu, "stack-war"),
                                           cycleCounter(emu)
     {
       auto &symbols = getEmulator().getMemory().getSymbols();
+      auto &arch = getEmulator().getArchitecture();
       for (const auto &sym : symbols.symbols) {
         if (sym.type == func_type) {
           // cout << "Func addr: " << sym.address << " - " << sym.getFuncAddr() << endl;
@@ -392,7 +393,7 @@ class HookInstructionCount : public HookCode {
           // Assmumtions:
           //  * All opcodes are 16-bit (2 bytes) or more in multiple
           //  * Functions are continious (we use the size for functions)
-          for (armaddr_t faddr = sym.getFuncAddr();
+          for (address_t faddr = sym.getFuncAddr();
                faddr < sym.getFuncAddr() + sym.size;
                faddr += 2) {
             function_map[faddr] = &sym.name;
@@ -421,7 +422,7 @@ class HookInstructionCount : public HookCode {
     }
 
     // Return the name of the function that the addr is the start of
-    const string *isFunctionEntry(armaddr_t addr)
+    const string *isFunctionEntry(address_t addr)
     {
       auto f = function_entry_map.find(addr);
       if (f != function_entry_map.end())
@@ -431,7 +432,7 @@ class HookInstructionCount : public HookCode {
     }
 
     // Is the instruction at the address a function?
-    const string *inFunction(armaddr_t addr)
+    const string *inFunction(address_t addr)
     {
       auto f = function_map.find(addr);
       if (f == function_map.end())
@@ -440,7 +441,7 @@ class HookInstructionCount : public HookCode {
       return f->second;
     }
 
-    void trackFunctions(armaddr_t addr)
+    void trackFunctions(address_t addr)
     {
       // Check if this is a function entry
       // If so, we mark it as such
@@ -507,8 +508,8 @@ class HookInstructionCount : public HookCode {
 struct InstructionState {
   uint64_t pc;
   uint64_t icount;
-  armaddr_t mem_address;
-  armaddr_t mem_size;
+  address_t mem_address;
+  address_t mem_size;
 };
 
 // TODO: Need a way to get information from other hooks
@@ -562,9 +563,9 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    armaddr_t value = arg->value;
+    address_t value = arg->value;
 
     InstructionState istate = {hook_instr_cnt->pc,
                               hook_instr_cnt->getInstructionCount(),

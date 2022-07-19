@@ -18,7 +18,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 #include "CycleCounter.h"
 
 using namespace std;
@@ -26,7 +26,7 @@ using namespace icemu;
 
 class DetectWAR{
   private:
-    unordered_set<armaddr_t> reads, writes;
+    unordered_set<address_t> reads, writes;
 
   public:
     uint32_t checkpoints;
@@ -40,7 +40,7 @@ class DetectWAR{
 
     ~DetectWAR() = default;
 
-    bool isWAR(armaddr_t addr, HookMemory::memory_type type)
+    bool isWAR(address_t addr, HookMemory::memory_type type)
     {
       bool possibleWAR = false;
       auto readLoc = reads.find(addr);

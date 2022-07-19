@@ -40,7 +40,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 #include "../includes/DetectWAR.h"
 #include "../includes/Cache.hpp"
 
@@ -87,8 +87,8 @@ class HookInstructionCount : public HookCode {
 struct InstructionState {
   uint64_t pc;
   uint64_t icount;
-  armaddr_t mem_address;
-  armaddr_t mem_size;
+  address_t mem_address;
+  address_t mem_size;
 };
 
 // TODO: Need a way to get information from other hooks
@@ -114,9 +114,9 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    armaddr_t value = arg->value;
+    address_t value = arg->value;
 
     // Call the cache
     CacheObj.run(address, mem_type, &value);

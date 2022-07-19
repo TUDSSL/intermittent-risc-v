@@ -40,7 +40,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 #include "../includes/DetectWAR.h"
 
 using namespace std;
@@ -152,8 +152,8 @@ class Cache {
     std::unordered_map<CacheBlock, bool, hash_fn> evicted_blocks;
     std::vector<CacheSet> sets;
 
-    armaddr_t main_memory_start = 0x10000000;
-    armaddr_t main_memory_size = 0x60000;
+    address_t main_memory_start = 0x10000000;
+    address_t main_memory_size = 0x60000;
 
     CacheStats stats;
     uint32_t instr_count = 0;
@@ -223,7 +223,7 @@ class Cache {
 
   }
 
-  uint32_t* LRU2WaySetAssociativeCache(armaddr_t address, enum HookMemory::memory_type type, armaddr_t *value)
+  uint32_t* LRU2WaySetAssociativeCache(address_t address, enum HookMemory::memory_type type, address_t *value)
   {
       // Process only valid memory
       if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
@@ -413,8 +413,8 @@ class HookInstructionCount : public HookCode {
 struct InstructionState {
   uint64_t pc;
   uint64_t icount;
-  armaddr_t mem_address;
-  armaddr_t mem_size;
+  address_t mem_address;
+  address_t mem_size;
 };
 
 // TODO: Need a way to get information from other hooks
@@ -438,9 +438,9 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    armaddr_t value = arg->value;
+    address_t value = arg->value;
 
     // Call the cache
     CacheObj.LRU2WaySetAssociativeCache(address, mem_type, &value);

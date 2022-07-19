@@ -13,7 +13,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 
 using namespace std;
 using namespace icemu;
@@ -50,7 +50,7 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
   }
 };
 

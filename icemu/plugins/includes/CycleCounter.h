@@ -14,7 +14,7 @@ class Pipeline {
   uint64_t expected_next_instruction_addr = 0;
 
   // Store the IMM operands of the last instruction
-  std::vector<icemu::armaddr_t> last_instr_immediates;
+  std::vector<address_t> last_instr_immediates;
 
   int cost(arm_insn instruction, int operand_count) {
     int instruction_cost = 1;
@@ -201,7 +201,7 @@ class Pipeline {
       for (int i=0; i<operand_count; i++) {
         auto *op = &operands[i];
         if (op->type == ARM_OP_IMM) {
-          last_instr_immediates.push_back((icemu::armaddr_t)op->imm);
+          last_instr_immediates.push_back((address_t)op->imm);
         }
       }
     }
@@ -220,7 +220,7 @@ class CycleCounter {
     return pipeline.cycle_count;
   }
 
-  uint16_t add(icemu::armaddr_t address, icemu::armaddr_t size) {
+  uint16_t add(address_t address, address_t size) {
     bool ok;
     uint8_t instruction[size];
 

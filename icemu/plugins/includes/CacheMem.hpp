@@ -1,5 +1,5 @@
-#ifndef _CACHE_HPP_
-#define _CACHE_HPP_
+#ifndef _CACHE_MEM_HPP_
+#define _CACHE_MEM_HPP_
 
 #include <map>
 #include <unordered_map>
@@ -23,7 +23,8 @@ using namespace std;
 using namespace icemu;
 
 // The cache block size in number of bytes
-#define CACHE_BLOCK_SIZE 4
+#define NO_OF_CACHE_BLOCKS 8 // Equates to the cache block size of 8 bytes
+#define CACHE_BLOCK_SIZE NO_OF_CACHE_BLOCKS
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
 
@@ -62,12 +63,12 @@ enum replacement_policy {
  * SUM_OF_BITS(tag_bits, set_bits, offset_bits) = Memory address lines. (32 bit in this case)
  */
 struct CacheBlock {
-  uint32_t tag_bits;
-  uint32_t set_bits;
-  uint32_t offset_bits;
-  uint32_t data[CACHE_BLOCK_SIZE / 4]; // divided by 4 as it is uint32_t
-  uint64_t last_used;
-  uint32_t addr;
+  address_t tag_bits;
+  address_t set_bits;
+  address_t offset_bits;
+  address_t data; // actually store the data in blocks of bytes
+  address_t last_used;
+  address_t addr;
 
   // Overload the = operator to compare evicted blocks
   bool operator==(const CacheBlock &other) const {
@@ -93,7 +94,7 @@ struct hash_fn
 
 /* 
  * A cache line that consists of blocks. A 2-way set associative cache will have
- * 2 blocks 
+ * 2 blocks. Each block will be then CACHE_BLOCK_SIZE big
  */
 struct CacheLine {
   CacheBlock blocks;
@@ -132,6 +133,8 @@ struct CacheStats {
   uint32_t hint_given;
 };
 
+class icemu::Memory;
+
 class Cache {
   private:
     // For initializing
@@ -143,10 +146,6 @@ class Cache {
     // Where actual stuffs are stored
     std::vector<CacheSet> sets;
     
-    // An unordered map of addr:instr map for reads and writes
-    std::unordered_map<uint32_t, uint64_t> last_reads, evicted_mem;
-    unordered_set<address_t> hint_reads;
-
     // Function pointer to be registered back to plugin class
     uint64_t (*get_instr_count)();
 
@@ -154,17 +153,24 @@ class Cache {
     address_t main_memory_start = 0x10000000;
     address_t main_memory_size = 0x60000;
     CacheStats stats;
-    uint32_t instr_count = 0;
+    address_t instr_count = 0;
+
+    icemu::Memory *mem;
 
   // size in bytes and ways as a number
-  void init(uint32_t size, uint32_t ways, enum replacement_policy p)
+  // Most of the times will be 512 Bytes, 2 ways. This will make
+  // no of sets = 512 / (2 * 8) = 32 sets
+  // So set bits = log2(32) = 5
+  // |-------56 or 24-------|---5---|--3--| -> tag, set, offset
+  void init(uint32_t size, uint32_t ways, enum replacement_policy p, icemu::Memory &emu_mem)
   {
+    mem = &emu_mem;
     capacity = size;
     no_of_lines = ways;
     policy = p;
   
     // Number of cache sets = capacity / (ways * block size)
-    no_of_sets = capacity / (no_of_lines * CACHE_BLOCK_SIZE);
+    no_of_sets = capacity / (no_of_lines * NO_OF_CACHE_BLOCKS);
 
     // Initialize the cache
     sets.resize(no_of_sets);
@@ -194,28 +200,14 @@ class Cache {
 
   ~Cache()
   {
-    // Printout any stats if there
-    cout << "\n\n== STATS ==" << endl;
-    cout << "Misses\t\t: " << stats.misses << endl;
-    cout << "Hits\t\t: " << stats.hits << endl;
-    cout << "NVM reads\t: " << stats.nvm_reads << endl;
-    cout << "NVM writes\t: " << stats.nvm_writes << endl;
-    cout << "Opt NVM writes\t:" << stats.dead_block_nvm_writes << endl;
-    cout << "Cache reads\t: " << stats.cache_reads << endl;
-    cout << "Cache writes\t: " << stats.cache_writes << endl;
-    cout << "Checkpoints\t: " << stats.checkpoints << endl;
-    cout << "Hint violations\t: " << stats.hint_violations << endl;
-    cout << "Hints given\t: " << stats.hint_given << endl;
+    // Put stuffs to print here
+    cout << "NVM Reads: " << stats.nvm_reads << "\tNVM Writes: " << stats.nvm_writes << "\tCheckpoints: " << stats.checkpoints << endl;
   }
 
   // Function to be called on eviction of the cache on checkpoint
   void checkpointEviction()
   {
     stats.checkpoints++;
-
-    // Clear the hint sets as the hint does not matter if the
-    // checkpoint is between the R and the next R or W.
-    hint_reads.clear();
 
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
@@ -233,84 +225,35 @@ class Cache {
                 stats.nvm_writes++;
                 stats.dead_block_nvm_writes++;
 
-                // Store the memory that has been evicted. This shall be then checked
-                // later to check if a memory that is being written to was previously read
-                // and evicted - which can be then reduced the count from the eviction count
-                evicted_mem[l.blocks.addr] = get_instr_count();
+                // // Perform the actual write to the memory
+                // memcpy(mem->at(l.blocks.addr), &l.blocks.data, sizeof(l.blocks.data));
             }
         }
     }
   }
 
-  // Function to perform the mock cache hint thingy.
-  void performMockHintCalculation(address_t addr, enum HookMemory::memory_type type)
-  {
-      // If there is a read, then put in the last read set
-      // if there is a write then check if the read was present in the last read
-      // set and if yes then remove it from the last read set
-      if (type == HookMemory::MEM_READ) {
-          last_reads[addr] = get_instr_count();
-      } else {
-          bool is_in_reads = !!last_reads.count(addr);
-          bool is_in_evicted = !!evicted_mem.count(addr);
-
-          if (is_in_reads && !is_in_evicted)
-              last_reads.erase(addr);
-
-          else if (!is_in_reads && is_in_evicted)
-              evicted_mem.erase(addr);
-
-          else if (is_in_reads && is_in_evicted) {
-              if (last_reads[addr] > evicted_mem[addr])
-                  evicted_mem.erase(addr);
-              else if (evicted_mem[addr] - last_reads[addr] >= DEAD_BLOCK_INSTR_WINDOW) {
-                  last_reads.erase(addr);
-                  evicted_mem.erase(addr);
-                  stats.dead_block_nvm_writes--;
-              }
-          }
-      }
-  }
-
-  uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value)
+  uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
   {
       // Process only valid memory
       if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))
           return 0;
 
       // Offset the main memory start
-      auto addr = address - main_memory_start;
+      address_t addr = address;// - main_memory_start;
 
       // Fetch the tag, set and offset from the mem address
-      auto offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
-      auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
+      address_t offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
+      address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
-      auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+      address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
-      // To get an accurate statistic of the number of write evictions
-      // without a read before, have to simulate some form of checkpoint.
-      // At a checkpoint previous history is cleared.
-      instr_count++;
-      if (instr_count >= ESTIMATED_CHECKPOINT_INSTR) {
-          checkpointEviction();
-          instr_count = 0;
-      }
+      cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl; return NULL;
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
       uint8_t collisions = 0;
-
-      // Special check to see if the hints are actually working or not. The logic
-      // is that if we saw a READ and the next access to that is a READ - that
-      // should be a faulty prediction. In case it is a write then the pattern
-      // matches - so correct logic.
-      if (type == HookMemory::MEM_READ) {
-          if (hint_reads.count(addr) != 0)
-            stats.hint_violations++;
-      } else {
-          if (hint_reads.count(addr) != 0)
-            hint_reads.erase(addr);
-      }
+      
+      address_t cache_data;
 
       // Look for any entry in the Cache line marked by "index"
       for (int i = 0; i < no_of_lines; i++) {
@@ -333,13 +276,19 @@ class Cache {
                   if (type == HookMemory::MEM_READ) {
                       stats.cache_reads++;
                       line->was_read = true;
+
+                      // Read the data from the cache
+                      memcpy(&cache_data, &line->blocks.data, size);
                   } 
                   // Otherwise, mark the cache as dirty. This means that this line
                   // was written to after getting a hit.
                   else {
                       line->dirty = true;
                       stats.cache_writes++;
-
+                      
+                      // Perform the write.
+                      memcpy(&line->blocks.data, value, size);
+                      
                       // If this line was previously stored a READ and now it is
                       // storing a WRITE, that means there is a case of possible WAR
                       // Set the bit to indicate that.
@@ -373,13 +322,18 @@ class Cache {
               if (type == HookMemory::MEM_READ) {
                   line->was_read = true;
                   stats.nvm_reads++;
+
+                  // Store the value for the first time.
+                  memcpy(&line->blocks.data, value, size);
               } else {
                   line->dirty = true;
+
+                  // Perform the write.
+                  memcpy(&line->blocks.data, value, size);
 
                   // A cache write has taken place as the value is written to
                   // the cache and not the nvm.
                   stats.cache_writes++;
-                  stats.dead_block_nvm_writes++;
               }
 
               // No need to keep looking now
@@ -389,16 +343,17 @@ class Cache {
 
       // Handle the collisions if any
       if (collisions == no_of_lines)
-          evict(addr, offset, tag, index, type);
+          evict(addr, offset, tag, index, value, type, size, &cache_data);
 
-      performMockHintCalculation(addr, type);
+      // Actual data being requested is cache_data[offset]
 
       // Return NULL as of now; can be extended to return the data when needed.
       return NULL;
   }
 
   // Handle collisions.
-  void evict(uint32_t addr, uint32_t offset, uint32_t tag, uint32_t index, enum HookMemory::memory_type type)
+  void evict(address_t addr, address_t offset, address_t tag, address_t index,
+             address_t *value, enum HookMemory::memory_type type, address_t size, address_t *cache_data)
   {
     // If needs to evict, then the misses needs to be incremented.
     stats.misses++;
@@ -425,9 +380,6 @@ class Cache {
             checkpointEviction();
     }
 
-    // Add the entry to the evicted memory map here also
-    evicted_mem[evicted_line->blocks.addr] = get_instr_count();
-
     // Now that the eviction has been done, perform the replacement.
     evicted_line->blocks.offset_bits = offset;
     evicted_line->blocks.tag_bits = tag;
@@ -435,6 +387,9 @@ class Cache {
     evicted_line->blocks.last_used = CurrentTime_nanoseconds();
     evicted_line->blocks.addr = addr;
     evicted_line->type = type;
+
+    // Replace the data in the memory
+    memcpy(&evicted_line->blocks.data, value, size);
 
     // Again the same logic. If the memory access is a READ then set the was_read
     // flag to true. Otherwise, check if the access is a write, check if there was
@@ -458,17 +413,7 @@ class Cache {
 
   void print_stats(ofstream &logger)
   {
-    stats.dead_block_nvm_writes -= evicted_mem.size();
-    logger << "Misses\t\t: " << stats.misses << endl;
-    logger << "Hits\t\t: " << stats.hits << endl;
-    logger << "NVM reads\t: " << stats.nvm_reads << endl;
-    logger << "NVM writes\t: " << stats.nvm_writes << endl;
-    logger << "Cache reads\t: " << stats.cache_reads << endl;
-    logger << "Cache writes\t: " << stats.cache_writes << endl;
-    logger << "Checkpoints\t: " << stats.checkpoints << endl;
-    logger << "Opt NVM Writes\t: " << stats.dead_block_nvm_writes << endl;
-    logger << "Hint violations\t: " << stats.hint_violations << endl;
-    logger << "------------------------------------------------" << endl;
+      logger << "Print to log here";
   }
 
   void log_all_cache_contents(ofstream &logger)
@@ -497,11 +442,6 @@ class Cache {
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
-      if (hint_reads.count(addr) == 0)
-        hint_reads.insert(addr);
-      else
-        return;
-
       // Search for the cache line where the hint has to be given. If found
       // then reset the possibleWAR and the was_read flag. This will ensure that
       // eviction of the given memory causes no checkpoint.
@@ -521,4 +461,4 @@ class Cache {
   }
 };
 
-#endif /* _CACHE_HPP_ */
+#endif /* _CACHE_MEM_HPP_ */

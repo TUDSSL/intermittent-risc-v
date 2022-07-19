@@ -37,14 +37,14 @@ set(PLUGIN_LINK_OPTIONS
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/plugins)
 
-add_subdirectory(external_test_plugin)
-add_subdirectory(cache_lru_plugin)
-add_subdirectory(wrw_detection_plugin)
-add_subdirectory(stack_war_detection_plugin)
-add_subdirectory(simple_war_detect_plugin)
-add_subdirectory(cache_utilization_plugin)
-add_subdirectory(cache_dead_block_plugin)
-add_subdirectory(cache_temp_dead_block_plugin)
-add_subdirectory(cache_with_hints)
+# add_subdirectory(external_test_plugin)
+# add_subdirectory(cache_lru_plugin)
+# add_subdirectory(wrw_detection_plugin)
+# add_subdirectory(stack_war_detection_plugin)
+# add_subdirectory(simple_war_detect_plugin)
+# add_subdirectory(cache_utilization_plugin)
+# add_subdirectory(cache_dead_block_plugin)
+# add_subdirectory(cache_temp_dead_block_plugin)
+# add_subdirectory(cache_with_hints)
 add_subdirectory(cache_example)
 

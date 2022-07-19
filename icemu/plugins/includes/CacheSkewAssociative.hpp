@@ -16,7 +16,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 #include "../includes/DetectWAR.h"
 
 using namespace std;
@@ -147,14 +147,14 @@ class Cache {
     
     // An unordered map of addr:instr map for reads and writes
     std::unordered_map<uint32_t, uint64_t> last_reads, evicted_mem;
-    unordered_set<armaddr_t> hint_reads;
+    unordered_set<address_t> hint_reads;
 
     // Function pointer to be registered back to plugin class
     uint64_t (*get_instr_count)();
 
   public:
-    armaddr_t main_memory_start = 0x10000000;
-    armaddr_t main_memory_size = 0x60000;
+    address_t main_memory_start = 0x10000000;
+    address_t main_memory_size = 0x60000;
     CacheStats stats;
     uint32_t instr_count = 0;
 
@@ -245,7 +245,7 @@ class Cache {
   }
 
   // Function to perform the mock cache hint thingy.
-  void performMockHintCalculation(armaddr_t addr, enum HookMemory::memory_type type)
+  void performMockHintCalculation(address_t addr, enum HookMemory::memory_type type)
   {
       // If there is a read, then put in the last read set
       // if there is a write then check if the read was present in the last read
@@ -274,7 +274,7 @@ class Cache {
       }
   }
 
-  uint32_t* run(armaddr_t address, enum HookMemory::memory_type type, armaddr_t *value)
+  uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value)
   {
       // Process only valid memory
       if (!((address >= main_memory_start) && (address <= (main_memory_start + main_memory_size))))

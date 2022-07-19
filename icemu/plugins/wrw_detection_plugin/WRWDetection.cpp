@@ -33,7 +33,7 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 
 using namespace std;
 using namespace icemu;
@@ -51,7 +51,7 @@ map<uint32_t, pair<enum mem_state, uint32_t>> m_state;
 list<pair<HookMemory::memory_type, uint32_t>> mem;
 ofstream file;
 
-void detectWRWmemoryAccess(armaddr_t address, HookMemory::memory_type type, armaddr_t value)
+void detectWRWmemoryAccess(address_t address, HookMemory::memory_type type, address_t value)
 {
   if (m_state.count(address) == 0)
     m_state.insert(pair<uint32_t, pair<enum mem_state, uint32_t>>(address, pair<enum mem_state, uint32_t>(STATE_NEW, 0)));
@@ -144,9 +144,9 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    armaddr_t value = arg->value;
+    address_t value = arg->value;
 
     detectWRWmemoryAccess(address, mem_type, value);
   }
