@@ -199,6 +199,8 @@ class Cache {
     // Set to a dummy function. It will be replaced later if the instruction count
     // function is registerd using the appropriate call
     get_instr_count = dummy;
+
+    // Initialize the local memory copy
     memcpy(main_mem, mem->at(mem->entrypoint), 512*1024);
     cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
   }
@@ -216,6 +218,8 @@ class Cache {
 
     cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
 
+    free(main_mem);
+
   }
 
   char *map_mem(address_t addr)
@@ -224,7 +228,7 @@ class Cache {
   }
 
   // Function to be called on eviction of the cache on checkpoint
-  void checkpointEviction()
+  void checkpointEviction(address_t addr, address_t *value)
   {
     stats.checkpoints++;
 
@@ -241,14 +245,21 @@ class Cache {
             // the bit and clear the flag. This should increment the NVM writes.
             if (l.possible_war) {
                 l.possible_war = false;
-                stats.nvm_writes++;
                 stats.dead_block_nvm_writes++;
 
                 // // Perform the actual write to the memory
                 // memcpy(mem->at(l.blocks.addr), &l.blocks.data, sizeof(l.blocks.data));
+                write_to_main_mem(addr, value);
+                cout << "\t\t\tComparing memory at checkpoint: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
             }
         }
     }
+  }
+
+  void write_to_main_mem(address_t addr, address_t *value)
+  {
+    stats.nvm_writes++;
+    memcpy(map_mem(addr), value, sizeof(value));
   }
 
   uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
@@ -262,10 +273,11 @@ class Cache {
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
-      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
+      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset;
+      cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
 
-      memcpy(map_mem(addr), value, sizeof(value));
-      cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
+      write_to_main_mem(addr, value);
+      cout << "\t\t\tComparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
@@ -393,7 +405,7 @@ class Cache {
         // If the line that is being evicted has possible WAR bit set then
         // we need to create a checkpoint.
         if (evicted_line->possible_war)
-            checkpointEviction();
+            checkpointEviction(addr, value);
     }
 
     // Now that the eviction has been done, perform the replacement.
