@@ -29,7 +29,7 @@ Original Author: Shay Gal-on
         Define to 1 if the platform supports floating point.
 */
 #ifndef HAS_FLOAT
-#define HAS_FLOAT 1
+#define HAS_FLOAT 0
 #endif
 /* Configuration : HAS_TIME_H
         Define to 1 if platform has the time.h header file,
@@ -103,7 +103,7 @@ typedef double         ee_f32;
 typedef unsigned char  ee_u8;
 typedef uint32_t       ee_u32;
 typedef uint64_t       ee_u64;
-typedef ee_u64         ee_ptr_int;
+typedef uintptr_t      ee_ptr_int;
 typedef size_t         ee_size_t;
 /* align_mem :
         This macro is used to align an offset to point to a 32b value. It is
