@@ -76,6 +76,7 @@ class HookInstructionCount : public HookCode {
 
   void run(hook_arg_t *arg)
   {
+    (arg);
     instruction_count += 1;
     // cout << "Instr: " << instruction_count << " | ";
   }
@@ -118,14 +119,12 @@ class MemoryAccess : public HookMemory {
     enum memory_type mem_type = arg->mem_type;
     address_t value = arg->value;
 
-    char *read_value = getEmulator().getMemory().at(arg->address);
-    memcpy(&arg->value, read_value, sizeof(arg->value));
+    if (arg->mem_type == MEM_READ) {
+      char *read_value = getEmulator().getMemory().at(arg->address);
+      memcpy(&arg->value, read_value, arg->size); 
+    }
 
     address_t main_memory_start = getEmulator().getMemory().entrypoint;
-
-    // for (auto itr : getEmulator().getConfig().getMemoryRegions()) {
-    //   cout << "Name: " << itr.name << "\tlength: " << itr.length << "\torigin: " << itr.origin << endl;
-    // }
 
     // Process only valid memory
     if (!((address >= main_memory_start)))

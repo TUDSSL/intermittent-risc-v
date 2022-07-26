@@ -28,6 +28,9 @@ using namespace icemu;
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
 
+static const bool PRINT_MEMORY_DIFF = false;
+static const bool MIMIC_CHECKPOINT_TAKEN = true;
+
 // Number of instructions after which a checkpoint is mimicked
 #define ESTIMATED_CHECKPOINT_INSTR 2500000
 
@@ -69,6 +72,7 @@ struct CacheBlock {
   address_t data; // actually store the data in blocks of bytes
   address_t last_used;
   address_t addr;
+  address_t size;
 
   // Overload the = operator to compare evicted blocks
   bool operator==(const CacheBlock &other) const {
@@ -149,7 +153,8 @@ class Cache {
     // Function pointer to be registered back to plugin class
     uint64_t (*get_instr_count)();
 
-    char *main_mem;
+    memseg_t *MainMemSegment = nullptr;
+    uint8_t *ShadowMem = nullptr;
 
   public:
     CacheStats stats;
@@ -193,44 +198,88 @@ class Cache {
     // Initialize the stats
     memset(&stats, 0, sizeof(struct CacheStats));
 
-    // Initialize the fake memory
-    main_mem = (char *) malloc(512 * 1024);
+    init_mem();
 
     // Set to a dummy function. It will be replaced later if the instruction count
     // function is registerd using the appropriate call
     get_instr_count = dummy;
+  }
 
-    // Initialize the local memory copy
-    memcpy(main_mem, mem->at(mem->entrypoint), 512*1024);
-    cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
+  void init_mem()
+  {
+    auto code_entrypoint = mem->entrypoint;
+
+    // Get the memory segment holding the main code (assume it also holds the RAM)
+    MainMemSegment = mem->find(code_entrypoint);
+    assert(MainMemSegment != nullptr);
+
+    // Create shadow memory
+    ShadowMem = new uint8_t[MainMemSegment->length];
+    assert(ShadowMem != nullptr);
+
+    // Populate the shadow memory
+    memcpy(ShadowMem, MainMemSegment->data, MainMemSegment->length);
   }
 
   ~Cache()
   {
-    // Put stuffs to print here
-    cout << "NVM Reads: " << stats.nvm_reads << "\tNVM Writes: " << stats.nvm_writes << "\tCheckpoints: " << stats.checkpoints << endl;
 
-    // for (uint64_t i = 0; i < 512 * 1024; i+=4)
-    // {
-    //   if (memcmp(main_mem + i, mem->at(mem->entrypoint + i), 4) != 0)
-    //     cout << "Comparing memory: " << memcmp(main_mem + i, mem->at(mem->entrypoint + i), 4) << "at addr: " << mem->entrypoint + i << endl;
-    // }
+    // Evict all the writes that are a possible war and reset the bits
+    for (CacheSet &s : sets) {
+        for (CacheLine &l : s.lines) {
+            if (l.dirty) {
+              shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size);
+            }
+        }
+    }
 
-    cout << "Comparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
-
-    free(main_mem);
-
+    compareMemory(); // a final check
+    delete[] ShadowMem;
   }
 
-  char *map_mem(address_t addr)
-  {
-    return (main_mem + addr - mem->entrypoint);
+  bool compareMemory() {
+    // First do a fast memcmp (assume it's optimized)
+    int compareValue = memcmp(ShadowMem, MainMemSegment->data, MainMemSegment->length);
+    cout << "\tCompare value: " << (int)compareValue << endl;
+    if (compareValue == 0) {
+      // Memory is the same
+      return true;
+    }
+
+    // Something is different according to `memcmp`, check byte-per-byte
+    bool same = true;
+    for (size_t i = 0; i < MainMemSegment->length; i++) {
+      if (ShadowMem[i] != MainMemSegment->data[i]) {
+        // Memory is different
+        same = false;
+
+        if (PRINT_MEMORY_DIFF) {
+          address_t addr = MainMemSegment->origin + i;
+          address_t emu_val = MainMemSegment->data[i];
+          address_t shadow_val = ShadowMem[i];
+          cerr << "[mem] memory location at 0x" << hex << addr
+               << " differ - Emulator: 0x" << emu_val << " Shadow: 0x"
+               << shadow_val << dec << endl;
+        }
+      }
+    }
+    return same;
+  }
+
+  void shadowWrite(address_t address, address_t value, address_t size) {
+    stats.nvm_writes++;
+    address_t address_idx = address - MainMemSegment->origin;
+    for (address_t i=0; i<size; i++) {
+      uint64_t byte = (value >>(8*i)) & 0xFF; // Get the bytes
+      ShadowMem[address_idx+i] = byte;
+    }
   }
 
   // Function to be called on eviction of the cache on checkpoint
-  void checkpointEviction(address_t addr, address_t *value)
+  void checkpointEviction()
   {
     stats.checkpoints++;
+    cout << "Creating checkpoint: " << stats.checkpoints << endl;
 
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
@@ -239,27 +288,36 @@ class Cache {
             // there can be no scenario where the previous read can cause a WAR. So
             // the possibleWar bit not get activated in this case.
             l.was_read = false;
-            l.dirty = false;
 
             // Now if there is an actual case of possibleWar then we need to evict
             // the bit and clear the flag. This should increment the NVM writes.
-            if (l.possible_war) {
+            if (l.dirty) {
+                l.dirty = false;
                 l.possible_war = false;
-                stats.dead_block_nvm_writes++;
 
-                // // Perform the actual write to the memory
-                // memcpy(mem->at(l.blocks.addr), &l.blocks.data, sizeof(l.blocks.data));
-                write_to_main_mem(addr, value);
-                cout << "\t\t\tComparing memory at checkpoint: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
+                // Perform the actual write to the memory
+                shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size);
             }
+
         }
     }
-  }
 
-  void write_to_main_mem(address_t addr, address_t *value)
-  {
-    stats.nvm_writes++;
-    memcpy(map_mem(addr), value, sizeof(value));
+    // compareMemory();
+
+    if (MIMIC_CHECKPOINT_TAKEN) {
+      // for (uint32_t i = 0; i < no_of_sets; i++) {
+      //   sets[i].lines.resize(no_of_lines);
+        
+      //   for (auto j = 0; j < no_of_lines; j++) {
+      //     auto line = &sets[i].lines[j];
+      //     memset(&line->blocks, 0, sizeof(struct CacheBlock));
+      //     line->valid = false;
+      //     line->dirty = false;
+      //     line->was_read = false;
+      //     line->possible_war = false;
+      //   }
+      // }
+    }
   }
 
   uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
@@ -272,18 +330,25 @@ class Cache {
       address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+      offset = offset - offset + offset;
 
-      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset;
-      cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
+      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
+      // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
 
-      write_to_main_mem(addr, value);
-      cout << "\t\t\tComparing memory: " << memcmp(main_mem, mem->at(mem->entrypoint), 512*1024) << endl;
+      // compareMemory();
+
+      // switch(type) {
+      //   case HookMemory::MEM_READ:
+      //     // Nothing
+      //     break;
+      //   case HookMemory::MEM_WRITE:
+      //     shadowWrite(addr, *value, size);
+      //     break;
+      // }
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
       uint8_t collisions = 0;
-      
-      address_t cache_data;
 
       // Look for any entry in the Cache line marked by "index"
       for (int i = 0; i < no_of_lines; i++) {
@@ -292,49 +357,52 @@ class Cache {
           // if it is a hit or a miss. In case it is a miss, increment the
           // collisions. This will enable the eviction to be handled.
           if (line->valid) {
-              // Check if the cache actually stores the given memory. If yes
-              // then increment the hit stats and perform READ/WRITE conditional
-              // logic.
               if (line->blocks.tag_bits == tag) {
+                  // Check if the cache actually stores the given memory. If yes
+                  // then increment the hit stats and perform READ/WRITE conditional
+                  // logic.
                   line->blocks.last_used = CurrentTime_nanoseconds();
                   stats.hits++;
                   
                   // If the memory is a READ, then increment the cache read stats
                   // and set the was_read flag. This flag will then be checked later
                   // to see if the possibleWar can occur or not.
-                  if (type == HookMemory::MEM_READ) {
+                  switch (type) {
+                    case HookMemory::MEM_READ:
                       stats.cache_reads++;
                       line->was_read = true;
-
-                      // Read the data from the cache
-                      memcpy(&cache_data, &line->blocks.data, size);
-                  } 
-                  // Otherwise, mark the cache as dirty. This means that this line
-                  // was written to after getting a hit.
-                  else {
+                      break;
+ 
+                    // Otherwise, mark the cache as dirty. This means that this line
+                    // was written to after getting a hit.
+                    case HookMemory::MEM_WRITE:
                       line->dirty = true;
                       stats.cache_writes++;
                       
                       // Perform the write.
-                      memcpy(&line->blocks.data, value, size);
+                      line->blocks.data = *value;
+                      line->blocks.size = size;
                       
                       // If this line was previously stored a READ and now it is
                       // storing a WRITE, that means there is a case of possible WAR
                       // Set the bit to indicate that.
                       if (line->was_read == true)
                           line->possible_war = true;
+                      
+                      break;
                   }
 
                   // No need to continue searching if there is a hit
                   break;
               } else
-                  collisions++;
+                collisions++;
 
           } else {
               // This will be executed only when the cache line is empty, so
               // only the first time. From the next time onwards, only the hits
               // would be executed.
               stats.misses++;
+
               // Since the cache is empty, store the value.
               line->valid = true;
               line->blocks.offset_bits = offset;
@@ -344,24 +412,28 @@ class Cache {
               line->blocks.addr = addr;
               line->type = type;
 
+              // Perform the read/write for the first time. Since this is
+              // first time, so the value needs to be stored in the cache
+              // irrespective of read or write.
+              line->blocks.data = *value;
+              line->blocks.size = size;
+
               // Same logic as above. If it is a READ then set the was read flag.
               // But no need to check for the possibleWAR flag as this is bound to
               // be just the first read/write.
-              if (type == HookMemory::MEM_READ) {
+              switch (type) {
+                case HookMemory::MEM_READ:
                   line->was_read = true;
+                  // The value is read from the NVM and kept in the cache
                   stats.nvm_reads++;
+                  break;
 
-                  // Store the value for the first time.
-                  memcpy(&line->blocks.data, value, size);
-              } else {
+                case HookMemory::MEM_WRITE:
                   line->dirty = true;
-
-                  // Perform the write.
-                  memcpy(&line->blocks.data, value, size);
-
                   // A cache write has taken place as the value is written to
                   // the cache and not the nvm.
                   stats.cache_writes++;
+                  break;
               }
 
               // No need to keep looking now
@@ -371,9 +443,7 @@ class Cache {
 
       // Handle the collisions if any
       if (collisions == no_of_lines)
-          evict(addr, offset, tag, index, value, type, size, &cache_data);
-
-      // Actual data being requested is cache_data[offset]
+          evict(addr, offset, tag, index, value, type, size);
 
       // Return NULL as of now; can be extended to return the data when needed.
       return NULL;
@@ -381,13 +451,13 @@ class Cache {
 
   // Handle collisions.
   void evict(address_t addr, address_t offset, address_t tag, address_t index,
-             address_t *value, enum HookMemory::memory_type type, address_t size, address_t *cache_data)
+             address_t *value, enum HookMemory::memory_type type, address_t size)
   {
     // If needs to evict, then the misses needs to be incremented.
     stats.misses++;
 
     // Get the line to be evicted using the given replacement policy.
-    CacheLine *evicted_line;
+    CacheLine *evicted_line = nullptr;
 
     switch (policy) {
       case LRU:
@@ -398,14 +468,22 @@ class Cache {
         break;
     }
 
-    // If the memory to be evicted is a READ then just evict and be done with it.
-    if (evicted_line->type == HookMemory::MEM_READ) {
+    assert(evicted_line != nullptr);
+
+    switch (evicted_line->type) {
+      case HookMemory::MEM_READ:
+        // If the memory to be evicted is a READ then just evict and be done with it.
         stats.read_evictions++;
-    } else {
+        break;
+      
+      case HookMemory::MEM_WRITE:
         // If the line that is being evicted has possible WAR bit set then
         // we need to create a checkpoint.
         if (evicted_line->possible_war)
-            checkpointEviction(addr, value);
+          checkpointEviction();
+        else
+          shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
+        break;
     }
 
     // Now that the eviction has been done, perform the replacement.
@@ -417,20 +495,25 @@ class Cache {
     evicted_line->type = type;
 
     // Replace the data in the memory
-    memcpy(&evicted_line->blocks.data, value, size);
+    evicted_line->blocks.data = *value;
+    evicted_line->blocks.size = size;
 
     // Again the same logic. If the memory access is a READ then set the was_read
     // flag to true. Otherwise, check if the access is a write, check if there was
     // a read access earlier. In that case, set the possibleWAR flag to true.
-    if (evicted_line->type == HookMemory::MEM_READ) {
-      evicted_line->was_read = true;
-      stats.nvm_reads++;
-    } else {
-      evicted_line->dirty = true;
-      stats.cache_writes++;
+    switch (evicted_line->type) {
+      case HookMemory::MEM_READ:
+        evicted_line->was_read = true;
+        stats.nvm_reads++;
+        break;
 
-      if (evicted_line->was_read)
-        evicted_line->possible_war = true;
+      case HookMemory::MEM_WRITE:
+        evicted_line->dirty = true;
+        stats.cache_writes++;
+
+        if (evicted_line->was_read)
+          evicted_line->possible_war = true;
+        break;
     }
   }
 
@@ -446,8 +529,8 @@ class Cache {
 
   void log_all_cache_contents(ofstream &logger)
   {
-    for (uint32_t i = 0; i < sets.size(); i++) {
-      for (auto j = 0; j < sets[i].lines.size(); j++) {
+    for (address_t i = 0; i < sets.size(); i++) {
+      for (address_t j = 0; j < sets[i].lines.size(); j++) {
         auto line = &sets[i].lines[j];
         logger << hex << line->blocks.addr << dec << ",";
       }
@@ -465,22 +548,24 @@ class Cache {
       auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+      offset = offset - offset + offset;
 
       // Search for the cache line where the hint has to be given. If found
       // then reset the possibleWAR and the was_read flag. This will ensure that
       // eviction of the given memory causes no checkpoint.
-      for (int i = 0; i < no_of_lines; i++) {
-          CacheLine *line = &sets[index].lines[i];
-
-          if (line->valid) {
-              if (line->blocks.tag_bits == tag) {
-                  line->dirty = false;
-                  line->possible_war = false;
-                  line->was_read = false;
-              }
+      for (CacheSet &s : sets) {
+          for (CacheLine &line : s.lines) {
+            if (line.valid) {
+                if (line.blocks.tag_bits == tag) {
+                    line.dirty = false;
+                    line.possible_war = false;
+                    line.was_read = false;
+                }
+            }
           }
       }
 
+      // Do we need this?
       stats.hint_given++;
   }
 };
