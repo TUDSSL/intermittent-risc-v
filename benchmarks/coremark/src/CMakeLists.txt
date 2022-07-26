@@ -8,23 +8,21 @@ add_executable(${PROJECT_NAME}
     coremark/core_state.c
     coremark/core_util.c
     icemu/core_portme.c
-    icemu/printf.c
-    icemu/printfmap.c
-    ${STARTUP_CODE}
+
+    ${ALL_TOOLCHAIN_CODE}
     )
 
 # Change target suffix
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ${OUTPUT_SUFFIX})
 
 target_include_directories(${PROJECT_NAME}
-       PUBLIC
-       ./coremark
-       ./icemu/
+     PUBLIC
+     ./coremark
+     ./icemu/
      )
 
 target_link_libraries(${PROJECT_NAME}
-    gcc
-    c
+    #c
     m
     )
 

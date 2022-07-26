@@ -12,7 +12,6 @@
  * notice must not be changed or removed and no warranty is either
  * expressed or implied by its publication or distribution.
  **********************************************************************/
-#include "printf.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -28,19 +27,19 @@ main(void)
 	/*
 	 * Print the check value for the selected CRC algorithm.
 	 */
-	printf("The check value for the %s standard is 0x%X\n", CRC_NAME, CHECK_VALUE);
+	printf("The check value for the %s standard is 0x%x\n", CRC_NAME, CHECK_VALUE);
 	
 	/*
 	 * Compute the CRC of the test message, slowly.
 	 */
-	printf("The crcSlow() of \"123456789\" is 0x%X\n", crcSlow(test, strlen(test)));
+	printf("The crcSlow() of \"123456789\" is 0x%X\n", crcSlow(test, strlen((const char *)test)));
   crcSlow(test,9);
 	
 	/*
 	 * Compute the CRC of the test message, more efficiently.
 	 */
 	crcInit();
-	printf("The crcFast() of \"123456789\" is 0x%X\n", crcFast(test, strlen(test)));
+	printf("The crcFast() of \"123456789\" is 0x%X\n", crcFast(test, strlen((const char *)test)));
   crcFast(test,9);
 
   return 0;

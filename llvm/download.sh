@@ -12,11 +12,18 @@ function download_extract {
     echo "Untar $tarn"
     tar -xf "$tarn"
     rm "$tarn"
+    rm -rf $1
     mv "$fn" "$1"
 }
 
 pushd "$LLVM_SRC_DIR/tools"
 download_extract "clang"
+# Add the ability to specify ld.lld as the linker using -fuse-ld=lld
+# https://reviews.llvm.org/D74704
+cp "$DIR/patch/riscv-fuse-ld.patch" ./
+patch -p0 -i riscv-fuse-ld.patch
+rm ./riscv-fuse-ld.patch
+
 popd
 
 pushd "$LLVM_SRC_DIR/projects"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Update the submodules
-git submodule update --init --recursive
+git submodule update --init --recursive icemu
 
 # Build ICEmu
 echo "Building ICEmu"

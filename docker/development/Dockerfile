@@ -11,7 +11,26 @@ RUN apt-get update && \
     libboost-system-dev libboost-program-options-dev git ninja-build clang \
     gcc-arm-none-eabi wget golang \
     python3-distutils python3-tabulate python3-pip cm-super dvipng \
-    vim neovim cscope ctags sudo
+    vim neovim cscope ctags curl sudo
+
+# Chipyard dependencies
+# https://chipyard.readthedocs.io/en/stable/Chipyard-Basics/Initial-Repo-Setup.html
+# install sbt: https://www.scala-sbt.org/release/docs/Installing-sbt-on-Linux.html#Ubuntu+and+other+Debian-based+distributions
+RUN echo "deb https://repo.scala-sbt.org/scalasbt/debian /" | tee -a /etc/apt/sources.list.d/sbt.list && \
+    curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | apt-key add
+RUN apt-get update && \
+    apt-get install -y \
+    bison flex software-properties-common \
+    libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev default-jdk default-jre \
+    sbt \
+    texinfo gengetopt \
+    libexpat1-dev libusb-dev libncurses5-dev cmake \
+    patch diffstat texi2html texinfo subversion chrpath \
+    libgtk-3-dev gettext \
+    python3-pip python3-dev rsync libguestfs-tools expat \
+    device-tree-compiler \
+    python autoconf
+
 
 RUN pip install matplotlib==3.5.1
 RUN pip install pandas==1.4.1

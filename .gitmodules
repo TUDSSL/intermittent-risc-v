@@ -4,6 +4,10 @@
 [submodule "noelle/noelle"]
 	path = noelle/noelle
 	url = https://github.com/iiKoe/noelle.git
-[submodule "customriscv"]
-	path = customriscv
-	url = git@github.com:TUDSSL/customriscv.git
+[submodule "chipyard/verilator"]
+	path = chipyard/verilator
+	url = http://git.veripool.org/git/verilator
+[submodule "chipyard/chipyard"]
+	path = chipyard/chipyard
+	url = git@github.com:TUDSSL/chipyard.git
+    branch = intermittent
