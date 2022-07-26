@@ -28,14 +28,8 @@ using namespace icemu;
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
 
-static const bool PRINT_MEMORY_DIFF = false;
+static const bool PRINT_MEMORY_DIFF = true;
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
-
-// Number of instructions after which a checkpoint is mimicked
-#define ESTIMATED_CHECKPOINT_INSTR 2500000
-
-// Window size of the dead block detection part
-#define DEAD_BLOCK_INSTR_WINDOW 500
 
 static inline uint64_t CurrentTime_nanoseconds()
 {
@@ -88,9 +82,9 @@ struct hash_fn
 {
     size_t operator()(const CacheBlock &block) const
     {
-        std::size_t h1 = std::hash<uint32_t>()(block.offset_bits);
-        std::size_t h2 = std::hash<uint32_t>()(block.set_bits);
-        std::size_t h3 = std::hash<uint32_t>()(block.tag_bits);
+        std::size_t h1 = std::hash<address_t>()(block.offset_bits);
+        std::size_t h2 = std::hash<address_t>()(block.set_bits);
+        std::size_t h3 = std::hash<address_t>()(block.tag_bits);
  
         return h1 ^ h2 ^ h3;
     }
@@ -106,11 +100,11 @@ struct CacheLine {
   // For cache management
   bool valid;
   bool dirty;
-  enum HookMemory::memory_type type;
+  // enum HookMemory::memory_type type;
   bool was_read;
   bool possible_war;
   
-  // Overload the < operator to enable LRU
+  // Overload the < operator to enable LRU/MRU
   bool operator<(const CacheLine &other) const {
     return blocks.last_used < other.blocks.last_used;
   }
@@ -141,13 +135,12 @@ class icemu::Memory;
 
 class Cache {
   private:
-    // For initializing
     enum replacement_policy policy;
+    
     uint32_t capacity;  // in bytes
     uint32_t no_of_sets;
     uint8_t no_of_lines;
-    
-    // Where actual stuffs are stored
+
     std::vector<CacheSet> sets;
     
     // Function pointer to be registered back to plugin class
@@ -162,11 +155,15 @@ class Cache {
 
     icemu::Memory *mem;
 
-  // size in bytes and ways as a number
-  // Most of the times will be 512 Bytes, 2 ways. This will make
-  // no of sets = 512 / (2 * 8) = 32 sets
-  // So set bits = log2(32) = 5
-  // |-------56 or 24-------|---5---|--3--| -> tag, set, offset
+  // Size of the cache = 512 bytes
+  // Each data block size = 8 bytes
+  // So can store 512 / 8 bytes = 64 entries
+  // now no of ways = 2
+  // so no of sets = 32 - each set has 2 ways - each way has 8 bytes of data
+  // Now address = 32 or 64 bits
+  // First 3 bytes = doesn't matter becoz results in the block size
+  // Next 5 bits = determine which of the 32 sets
+  // Rest bits just used to compare
   void init(uint32_t size, uint32_t ways, enum replacement_policy p, icemu::Memory &emu_mem)
   {
     mem = &emu_mem;
@@ -198,6 +195,7 @@ class Cache {
     // Initialize the stats
     memset(&stats, 0, sizeof(struct CacheStats));
 
+    // Initialize the shadow mem
     init_mem();
 
     // Set to a dummy function. It will be replaced later if the instruction count
@@ -240,12 +238,12 @@ class Cache {
   bool compareMemory() {
     // First do a fast memcmp (assume it's optimized)
     int compareValue = memcmp(ShadowMem, MainMemSegment->data, MainMemSegment->length);
-    cout << "\tCompare value: " << (int)compareValue << endl;
     if (compareValue == 0) {
       // Memory is the same
       return true;
     }
 
+    cout << "\tCompare value: " << (int)compareValue << endl;
     // Something is different according to `memcmp`, check byte-per-byte
     bool same = true;
     for (size_t i = 0; i < MainMemSegment->length; i++) {
@@ -284,44 +282,26 @@ class Cache {
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
-            // Clear the was_read for all the lines. This is because in a checkpoint
-            // there can be no scenario where the previous read can cause a WAR. So
-            // the possibleWar bit not get activated in this case.
-            l.was_read = false;
-
-            // Now if there is an actual case of possibleWar then we need to evict
-            // the bit and clear the flag. This should increment the NVM writes.
             if (l.dirty) {
-                l.dirty = false;
-                l.possible_war = false;
-
                 // Perform the actual write to the memory
                 shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size);
             }
+            
+            // Reset all bits
+            l.dirty = false;
+            l.was_read = false;
+            l.possible_war = false;
 
         }
     }
 
-    // compareMemory();
-
-    if (MIMIC_CHECKPOINT_TAKEN) {
-      // for (uint32_t i = 0; i < no_of_sets; i++) {
-      //   sets[i].lines.resize(no_of_lines);
-        
-      //   for (auto j = 0; j < no_of_lines; j++) {
-      //     auto line = &sets[i].lines[j];
-      //     memset(&line->blocks, 0, sizeof(struct CacheBlock));
-      //     line->valid = false;
-      //     line->dirty = false;
-      //     line->was_read = false;
-      //     line->possible_war = false;
-      //   }
-      // }
-    }
+    compareMemory();
   }
 
   uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
   {
+      assert(size == 1 || size == 2 || size == 4 || size == 8);
+
       // Offset the main memory start
       address_t addr = address;// - main_memory_start;
 
@@ -330,8 +310,8 @@ class Cache {
       address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
-      offset = offset - offset + offset;
 
+      assert(index <= no_of_sets);
       // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
       // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
 
@@ -353,93 +333,71 @@ class Cache {
       // Look for any entry in the Cache line marked by "index"
       for (int i = 0; i < no_of_lines; i++) {
           CacheLine *line = &sets[index].lines[i];
-          // In case the cache location has something already, check
-          // if it is a hit or a miss. In case it is a miss, increment the
-          // collisions. This will enable the eviction to be handled.
+
           if (line->valid) {
-              if (line->blocks.tag_bits == tag) {
-                  // Check if the cache actually stores the given memory. If yes
-                  // then increment the hit stats and perform READ/WRITE conditional
-                  // logic.
+              if (line->blocks.tag_bits == tag && line->blocks.offset_bits == offset) {
                   line->blocks.last_used = CurrentTime_nanoseconds();
                   stats.hits++;
                   
-                  // If the memory is a READ, then increment the cache read stats
-                  // and set the was_read flag. This flag will then be checked later
-                  // to see if the possibleWar can occur or not.
                   switch (type) {
                     case HookMemory::MEM_READ:
                       stats.cache_reads++;
                       line->was_read = true;
                       break;
  
-                    // Otherwise, mark the cache as dirty. This means that this line
-                    // was written to after getting a hit.
                     case HookMemory::MEM_WRITE:
                       line->dirty = true;
                       stats.cache_writes++;
-                      
-                      // Perform the write.
+
                       line->blocks.data = *value;
                       line->blocks.size = size;
                       
-                      // If this line was previously stored a READ and now it is
-                      // storing a WRITE, that means there is a case of possible WAR
-                      // Set the bit to indicate that.
                       if (line->was_read == true)
                           line->possible_war = true;
-                      
+
                       break;
                   }
 
-                  // No need to continue searching if there is a hit
                   break;
               } else
                 collisions++;
 
           } else {
-              // This will be executed only when the cache line is empty, so
-              // only the first time. From the next time onwards, only the hits
-              // would be executed.
               stats.misses++;
 
-              // Since the cache is empty, store the value.
               line->valid = true;
               line->blocks.offset_bits = offset;
               line->blocks.set_bits = index;
               line->blocks.tag_bits = tag;
               line->blocks.last_used = CurrentTime_nanoseconds();
               line->blocks.addr = addr;
-              line->type = type;
 
-              // Perform the read/write for the first time. Since this is
-              // first time, so the value needs to be stored in the cache
-              // irrespective of read or write.
               line->blocks.data = *value;
               line->blocks.size = size;
 
-              // Same logic as above. If it is a READ then set the was read flag.
-              // But no need to check for the possibleWAR flag as this is bound to
-              // be just the first read/write.
               switch (type) {
                 case HookMemory::MEM_READ:
                   line->was_read = true;
-                  // The value is read from the NVM and kept in the cache
                   stats.nvm_reads++;
                   break;
 
                 case HookMemory::MEM_WRITE:
                   line->dirty = true;
-                  // A cache write has taken place as the value is written to
-                  // the cache and not the nvm.
                   stats.cache_writes++;
+
+                  // Since this is the first time the cache is being accessed
+                  // this should never be possible.
+                  if (line->was_read == true)
+                    assert(false);
+
                   break;
               }
 
-              // No need to keep looking now
               break;
           }
       }
+
+      assert(collisions <= no_of_lines);
 
       // Handle the collisions if any
       if (collisions == no_of_lines)
@@ -470,21 +428,28 @@ class Cache {
 
     assert(evicted_line != nullptr);
 
-    switch (evicted_line->type) {
-      case HookMemory::MEM_READ:
-        // If the memory to be evicted is a READ then just evict and be done with it.
-        stats.read_evictions++;
-        break;
-      
-      case HookMemory::MEM_WRITE:
-        // If the line that is being evicted has possible WAR bit set then
-        // we need to create a checkpoint.
-        if (evicted_line->possible_war)
-          checkpointEviction();
-        else
-          shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
-        break;
+
+    if (evicted_line->dirty) {
+      shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
+      if (evicted_line->possible_war) {
+        checkpointEviction();
+      }
     }
+
+    // switch (evicted_line->type) {
+    //   case HookMemory::MEM_READ:
+    //     stats.read_evictions++;
+    //     break;
+      
+    //   case HookMemory::MEM_WRITE:
+    //     stats.write_evictions++;
+    //     if (evicted_line->possible_war) {
+    //       checkpointEviction();
+    //     } else {
+    //       shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
+    //     }
+    //     break;
+    // }
 
     // Now that the eviction has been done, perform the replacement.
     evicted_line->blocks.offset_bits = offset;
@@ -492,7 +457,12 @@ class Cache {
     evicted_line->blocks.set_bits = index;
     evicted_line->blocks.last_used = CurrentTime_nanoseconds();
     evicted_line->blocks.addr = addr;
-    evicted_line->type = type;
+    // evicted_line->type = type;
+
+    // If evicted then reset all the flags
+    evicted_line->was_read = false;
+    evicted_line->dirty = false;
+    evicted_line->possible_war = false;
 
     // Replace the data in the memory
     evicted_line->blocks.data = *value;
@@ -501,7 +471,7 @@ class Cache {
     // Again the same logic. If the memory access is a READ then set the was_read
     // flag to true. Otherwise, check if the access is a write, check if there was
     // a read access earlier. In that case, set the possibleWAR flag to true.
-    switch (evicted_line->type) {
+    switch (type) {
       case HookMemory::MEM_READ:
         evicted_line->was_read = true;
         stats.nvm_reads++;
@@ -511,8 +481,10 @@ class Cache {
         evicted_line->dirty = true;
         stats.cache_writes++;
 
-        if (evicted_line->was_read)
+        if (evicted_line->was_read) {
+          assert(false);
           evicted_line->possible_war = true;
+        }
         break;
     }
   }
