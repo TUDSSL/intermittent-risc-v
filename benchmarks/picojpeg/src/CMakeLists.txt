@@ -7,22 +7,16 @@ add_executable(${PROJECT_NAME}
     picojpeg/picojpegtest.c
 
     # Other
-    portme/printf.c
-    portme/printfmap.c
-    ${STARTUP_CODE}
+    ${ALL_TOOLCHAIN_CODE}
     )
 
 # Change target suffix
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ${OUTPUT_SUFFIX})
 
 target_include_directories(${PROJECT_NAME}
-       PUBLIC
-       picojpeg
-       portme
-     )
+    PUBLIC
+    picojpeg
+    )
 
 target_link_libraries(${PROJECT_NAME}
-    gcc
-    c
-    m
     )

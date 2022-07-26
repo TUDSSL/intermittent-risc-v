@@ -1,0 +1,5 @@
+/home/user/intermittent-risc-v/toolchains/riscv/testcode/towers/build/CMakeFiles/rebuild_cache.dir
+/home/user/intermittent-risc-v/toolchains/riscv/testcode/towers/build/CMakeFiles/edit_cache.dir
+/home/user/intermittent-risc-v/toolchains/riscv/testcode/towers/build/src/CMakeFiles/rebuild_cache.dir
+/home/user/intermittent-risc-v/toolchains/riscv/testcode/towers/build/src/CMakeFiles/edit_cache.dir
+/home/user/intermittent-risc-v/toolchains/riscv/testcode/towers/build/src/CMakeFiles/towers.dir
