@@ -1,5 +1,0 @@
-Checking whether the ASM compiler is GNU using "--version" did not match "(GNU assembler)|(GCC)|(Free Software Foundation)":
-clang version 9.0.1 (git@github.com:TUDSSL/intermittent-risc-v.git bc678592bdefa582ef31c9a6e3572cc985917417)
-Target: x86_64-unknown-linux-gnu
-Thread model: posix
-InstalledDir: /home/user/intermittent-risc-v/llvm/llvm-9.0.1/install/bin
