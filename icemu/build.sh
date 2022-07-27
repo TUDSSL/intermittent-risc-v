@@ -6,5 +6,8 @@ git submodule update --init --recursive icemu
 # Build ICEmu
 echo "Building ICEmu"
 cd icemu
-mkdir build && cd build && cmake ../ && make -j"$(nproc)"
+# Build the dependencies
+./setup-lib.sh
+# Build ICEmu
+mkdir -p build && cd build && cmake ../ && make -j"$(nproc)"
 echo "Done building ICEmu"
