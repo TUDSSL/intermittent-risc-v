@@ -28,7 +28,7 @@ using namespace icemu;
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
 
-static const bool PRINT_MEMORY_DIFF = true;
+static const bool PRINT_MEMORY_DIFF = false;
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
 
 static inline uint64_t CurrentTime_nanoseconds()
@@ -126,9 +126,10 @@ struct CacheStats {
   uint32_t checkpoints;
   uint32_t cache_reads;
   uint32_t cache_writes;
-  int64_t dead_block_nvm_writes;
   uint32_t hint_violations;
   uint32_t hint_given;
+  uint32_t nvm_no_cache_read;
+  uint32_t nvm_no_cache_write;
 };
 
 class icemu::Memory;
@@ -226,16 +227,31 @@ class Cache {
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
             if (l.dirty) {
-              shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size);
+              shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size, false);
             }
         }
     }
 
+    cout << "Final check: \t";
     compareMemory(); // a final check
     delete[] ShadowMem;
+
+        // Printout any stats if there
+    cout << "\n\n== STATS ==" << endl;
+    cout << "Misses\t\t: " << stats.misses << endl;
+    cout << "Hits\t\t: " << stats.hits << endl;
+    cout << "With Cache, NVM reads\t: " << stats.nvm_reads << endl;
+    cout << "With Cache, NVM writes\t: " << stats.nvm_writes << endl;
+    cout << "Cache reads\t: " << stats.cache_reads << endl;
+    cout << "Cache writes\t: " << stats.cache_writes << endl;
+    cout << "Checkpoints\t: " << stats.checkpoints << endl;
+    cout << "With no cache, NVM reads\t: " << stats.nvm_no_cache_read << endl;
+    cout << "With no cache, NVM writes\t: " << stats.nvm_no_cache_write << endl;
+  
   }
 
-  bool compareMemory() {
+  bool compareMemory()
+  {
     // First do a fast memcmp (assume it's optimized)
     int compareValue = memcmp(ShadowMem, MainMemSegment->data, MainMemSegment->length);
     if (compareValue == 0) {
@@ -244,6 +260,9 @@ class Cache {
     }
 
     cout << "\tCompare value: " << (int)compareValue << endl;
+    // This assert fails
+    // assert(compareValue == 0);
+
     // Something is different according to `memcmp`, check byte-per-byte
     bool same = true;
     for (size_t i = 0; i < MainMemSegment->length; i++) {
@@ -264,8 +283,11 @@ class Cache {
     return same;
   }
 
-  void shadowWrite(address_t address, address_t value, address_t size) {
-    stats.nvm_writes++;
+  void shadowWrite(address_t address, address_t value, address_t size, bool doesCountForStats)
+  {
+    if (doesCountForStats)
+      stats.nvm_writes++;
+    
     address_t address_idx = address - MainMemSegment->origin;
     for (address_t i=0; i<size; i++) {
       uint64_t byte = (value >>(8*i)) & 0xFF; // Get the bytes
@@ -277,21 +299,20 @@ class Cache {
   void checkpointEviction()
   {
     stats.checkpoints++;
-    cout << "Creating checkpoint: " << stats.checkpoints << endl;
+    // cout << "Creating checkpoint: " << stats.checkpoints << endl;
 
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
             if (l.dirty) {
                 // Perform the actual write to the memory
-                shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size);
+                shadowWrite(l.blocks.addr, l.blocks.data, l.blocks.size, true);
             }
             
             // Reset all bits
             l.dirty = false;
             l.was_read = false;
             l.possible_war = false;
-
         }
     }
 
@@ -317,14 +338,14 @@ class Cache {
 
       // compareMemory();
 
-      // switch(type) {
-      //   case HookMemory::MEM_READ:
-      //     // Nothing
-      //     break;
-      //   case HookMemory::MEM_WRITE:
-      //     shadowWrite(addr, *value, size);
-      //     break;
-      // }
+      switch(type) {
+        case HookMemory::MEM_READ:
+          stats.nvm_no_cache_read++;
+          break;
+        case HookMemory::MEM_WRITE:
+          stats.nvm_no_cache_write++;
+          break;
+      }
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
@@ -387,8 +408,8 @@ class Cache {
 
                   // Since this is the first time the cache is being accessed
                   // this should never be possible.
-                  if (line->was_read == true)
-                    assert(false);
+                  assert(line->possible_war == false);
+                  assert(line->was_read == false);
 
                   break;
               }
@@ -428,28 +449,13 @@ class Cache {
 
     assert(evicted_line != nullptr);
 
-
+    // Perform the eviction
     if (evicted_line->dirty) {
-      shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
-      if (evicted_line->possible_war) {
+      if (evicted_line->possible_war)
         checkpointEviction();
-      }
+      else
+        shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size, true);
     }
-
-    // switch (evicted_line->type) {
-    //   case HookMemory::MEM_READ:
-    //     stats.read_evictions++;
-    //     break;
-      
-    //   case HookMemory::MEM_WRITE:
-    //     stats.write_evictions++;
-    //     if (evicted_line->possible_war) {
-    //       checkpointEviction();
-    //     } else {
-    //       shadowWrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size);
-    //     }
-    //     break;
-    // }
 
     // Now that the eviction has been done, perform the replacement.
     evicted_line->blocks.offset_bits = offset;
@@ -481,10 +487,9 @@ class Cache {
         evicted_line->dirty = true;
         stats.cache_writes++;
 
-        if (evicted_line->was_read) {
-          assert(false);
-          evicted_line->possible_war = true;
-        }
+        assert(evicted_line->possible_war == false);
+        assert(evicted_line->was_read == false);
+
         break;
     }
   }
@@ -496,7 +501,14 @@ class Cache {
 
   void print_stats(ofstream &logger)
   {
-      logger << "Print to log here";
+      logger << stats.checkpoints << ","
+             << stats.nvm_reads << "."
+             << stats.nvm_writes << ","
+             << stats.cache_reads << ","
+             << stats.cache_writes << ","
+             << stats.hits << ","
+             << stats.misses << "."
+             << endl;
   }
 
   void log_all_cache_contents(ofstream &logger)
