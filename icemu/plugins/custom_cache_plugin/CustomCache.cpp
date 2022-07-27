@@ -24,13 +24,13 @@
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Function.h"
+#include "icemu/emu/Architecture.h"
 
 // Local includes
 #include "../includes/DetectWAR.h"
-#include "../includes/CacheSkewAssociative.hpp"
-// #include "../includes/Cache.hpp"
-#include "../includes/CycleCounter.h"
+// #include "../includes/CacheSkewAssociative.hpp"
+#include "../includes/CacheMem.hpp"
+// #include "../includes/CycleCounter.h"
 
 using namespace std;
 using namespace icemu;
@@ -76,7 +76,9 @@ class HookInstructionCount : public HookCode {
 
   void run(hook_arg_t *arg)
   {
+    (arg);
     instruction_count += 1;
+    // cout << "Instr: " << instruction_count << " | ";
   }
 
 };
@@ -88,9 +90,6 @@ class MemoryAccess : public HookMemory {
 
     // Create cache object
     Cache CacheObj = Cache();
-
-    // Create WAR detection object
-    DetectWAR war;
 
     string filename = "log/default_log";
 
@@ -116,12 +115,26 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) {
-    armaddr_t address = arg->address;
+    address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    armaddr_t value = arg->value;
+    address_t value = arg->value;
+
+    if (arg->mem_type == MEM_READ) {
+      char *read_value = getEmulator().getMemory().at(arg->address);
+      memcpy(&arg->value, read_value, arg->size); 
+    }
+
+    address_t main_memory_start = getEmulator().getMemory().entrypoint;
+
+    // Process only valid memory
+    if (!((address >= main_memory_start)))
+        return;
+
+    // cout << "Memory type: " << arg->mem_type << "\t size: " << arg->size << "\t address: " << arg->address << "\tData: " << arg->value << endl;
+    // return;
 
     // Call the cache
-    CacheObj.run(address, mem_type, &value);
+    CacheObj.run(address, mem_type, &value, arg->size);
     // Log if needed
     CacheObj.log_all_cache_contents(logger);
   }
@@ -152,7 +165,7 @@ class MemoryAccess : public HookMemory {
         }
       }
 
-      CacheObj.init(size, lines, LRU);
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory());
       filename += "_" + std::to_string(size) + "_" + std::to_string(lines);
   }
 };
