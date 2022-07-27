@@ -46,5 +46,5 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/plugins)
 # add_subdirectory(cache_dead_block_plugin)
 # add_subdirectory(cache_temp_dead_block_plugin)
 # add_subdirectory(cache_with_hints)
-add_subdirectory(cache_example)
+add_subdirectory(custom_cache_plugin)
 

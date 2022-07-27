@@ -1,8 +1,8 @@
 
-set(PLUGIN_NAME "cache_example.so")
+set(PLUGIN_NAME "custom_cache_plugin.so")
 
 add_executable(${PLUGIN_NAME}
-    "CacheExample.cpp"
+    "CustomCache.cpp"
     )
 
 target_include_directories(${PLUGIN_NAME}

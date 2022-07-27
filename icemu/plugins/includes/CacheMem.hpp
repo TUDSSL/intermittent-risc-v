@@ -236,7 +236,7 @@ class Cache {
     compareMemory(); // a final check
     delete[] ShadowMem;
 
-        // Printout any stats if there
+    // Printout any stats if there
     cout << "\n\n== STATS ==" << endl;
     cout << "Misses\t\t: " << stats.misses << endl;
     cout << "Hits\t\t: " << stats.hits << endl;
@@ -247,7 +247,6 @@ class Cache {
     cout << "Checkpoints\t: " << stats.checkpoints << endl;
     cout << "With no cache, NVM reads\t: " << stats.nvm_no_cache_read << endl;
     cout << "With no cache, NVM writes\t: " << stats.nvm_no_cache_write << endl;
-  
   }
 
   bool compareMemory()
@@ -386,6 +385,7 @@ class Cache {
           } else {
               stats.misses++;
 
+              // Store the values. Only place where valid is set true
               line->valid = true;
               line->blocks.offset_bits = offset;
               line->blocks.set_bits = index;
@@ -393,6 +393,7 @@ class Cache {
               line->blocks.last_used = CurrentTime_nanoseconds();
               line->blocks.addr = addr;
 
+              // Store the data and the size
               line->blocks.data = *value;
               line->blocks.size = size;
 
@@ -463,7 +464,6 @@ class Cache {
     evicted_line->blocks.set_bits = index;
     evicted_line->blocks.last_used = CurrentTime_nanoseconds();
     evicted_line->blocks.addr = addr;
-    // evicted_line->type = type;
 
     // If evicted then reset all the flags
     evicted_line->was_read = false;
@@ -475,8 +475,7 @@ class Cache {
     evicted_line->blocks.size = size;
 
     // Again the same logic. If the memory access is a READ then set the was_read
-    // flag to true. Otherwise, check if the access is a write, check if there was
-    // a read access earlier. In that case, set the possibleWAR flag to true.
+    // flag to true.
     switch (type) {
       case HookMemory::MEM_READ:
         evicted_line->was_read = true;
@@ -532,7 +531,6 @@ class Cache {
       auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
       auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
-      offset = offset - offset + offset;
 
       // Search for the cache line where the hint has to be given. If found
       // then reset the possibleWAR and the was_read flag. This will ensure that
@@ -540,7 +538,7 @@ class Cache {
       for (CacheSet &s : sets) {
           for (CacheLine &line : s.lines) {
             if (line.valid) {
-                if (line.blocks.tag_bits == tag) {
+                if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
                     line.dirty = false;
                     line.possible_war = false;
                     line.was_read = false;
