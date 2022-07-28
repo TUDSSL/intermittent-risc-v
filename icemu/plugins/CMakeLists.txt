@@ -36,6 +36,7 @@ set(PLUGIN_LINK_OPTIONS
     )
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/plugins)
+include_directories(${PROJECT_SOURCE_DIR}/../icemu/plugins/common)
 
 # add_subdirectory(external_test_plugin)
 # add_subdirectory(cache_lru_plugin)

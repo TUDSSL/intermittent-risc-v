@@ -26,21 +26,15 @@
 #include "icemu/hooks/RegisterHook.h"
 #include "icemu/emu/Architecture.h"
 
+#include "Riscv32E21Pipeline.hpp"
+#include "PluginArgumentParsing.h"
+
 // Local includes
 #include "../includes/DetectWAR.h"
-// #include "../includes/CacheSkewAssociative.hpp"
 #include "../includes/CacheMem.hpp"
-// #include "../includes/CycleCounter.h"
 
 using namespace std;
 using namespace icemu;
-
-
-uint64_t instruction_count = 0;
-uint64_t return_instr_count()
-{
-  return instruction_count;
-}
 
 ofstream logger;
 
@@ -49,19 +43,21 @@ class HookInstructionCount : public HookCode {
   private:
     // Config
     Cache *obj;
+    RiscvE21Pipeline Pipeline;
 
   public:
     uint64_t pc = 0;
     uint64_t count = 0;
 
-  explicit HookInstructionCount(Emulator &emu) : HookCode(emu, "stack-war")
+  explicit HookInstructionCount(Emulator &emu) : HookCode(emu, "stack-war"), Pipeline(emu)
   {
-
+    Pipeline.setVerifyJumpDestinationGuess(false);
+    Pipeline.setVerifyNextInstructionGuess(false);
   }
 
   ~HookInstructionCount() override
   {
-
+    cout << "Total cycle count: " << Pipeline.getTotalCycles() << endl; 
   }
 
   void register_cache(Cache *ext_obj)
@@ -69,16 +65,10 @@ class HookInstructionCount : public HookCode {
     obj = ext_obj;
   }
 
-  void log_cache_content()
-  {
-    obj->log_all_cache_contents(logger);
-  }
-
   void run(hook_arg_t *arg)
   {
-    (arg);
-    instruction_count += 1;
-    // cout << "Instr: " << instruction_count << " | ";
+    (void)arg;
+    Pipeline.add(arg->address, arg->size);
   }
 
 };
@@ -103,9 +93,6 @@ class MemoryAccess : public HookMemory {
     parseLogArguements();
     parseCacheArguements();
 
-    // Means to provide the instruction count to the cache
-    CacheObj.register_instr_count_fn(&return_instr_count);
-
     // Open the file for logging
     logger.open(filename.c_str(), ios::out | ios::trunc);
   }
@@ -114,7 +101,7 @@ class MemoryAccess : public HookMemory {
     cout << "End of the cache" << endl;
   }
 
-  void run(hook_arg_t *arg) {
+  void run(hook_arg_t *arg) { 
     address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
     address_t value = arg->value;
@@ -135,22 +122,15 @@ class MemoryAccess : public HookMemory {
 
     // Call the cache
     CacheObj.run(address, mem_type, &value, arg->size);
-    // Log if needed
-    CacheObj.log_all_cache_contents(logger);
   }
     
-  void parseLogArguements() { 
-      string argument_name = "log-file=";
-      for (const auto &a : getEmulator().getPluginArguments().getArgs()) {
-        auto pos = a.find(argument_name);
-        if (pos != string::npos) {
-          filename = "log/" + a.substr(pos+argument_name.length());
-        }
-      }
-
+  void parseLogArguements() {
+      if (PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=").args.size())
+        filename = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=").args[0];
   }
   
   void parseCacheArguements() {
+      // Default values
       uint32_t size = 512, lines = 2;
       string arg1 = "cache-size=", arg2 = "cache-lines=";
       for (const auto &a : getEmulator().getPluginArguments().getArgs()) {
