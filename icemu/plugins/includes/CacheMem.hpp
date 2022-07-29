@@ -10,7 +10,6 @@
 #include <math.h>
 #include <bitset>
 #include <string.h>
-#include <chrono>
 
 #include "icemu/emu/Emulator.h"
 #include "icemu/emu/Memory.h"
@@ -24,37 +23,17 @@
 #include "../includes/ShadowMemory.hpp"
 #include "../includes/Stats.hpp"
 #include "../includes/CycleCostCalculator.hpp"
+#include "../includes/Logger.hpp"
+#include "../includes/Utils.hpp"
 
 using namespace std;
 using namespace icemu;
 
 // The cache block size in number of bytes
-#define NO_OF_CACHE_BLOCKS 8 // Equates to the cache block size of 8 bytes
+#define NO_OF_CACHE_BLOCKS 4 // Equates to the cache block size of 4 bytes
 #define CACHE_BLOCK_SIZE NO_OF_CACHE_BLOCKS
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
-
-static const bool MIMIC_CHECKPOINT_TAKEN = true;
-static const float DIRTY_RATIO_THRESHOLD = 10.0;
-
-static inline uint64_t CurrentTime_nanoseconds()
-{
-  return std::chrono::duration_cast<std::chrono::nanoseconds>
-         (std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-}
-
-static inline uint64_t dummy() { return 0; }
-
-enum replacement_policy {
-  LRU,
-  MRU
-};
-
-enum CheckpointReason {
-  CHECKPOINT_DUE_TO_WAR,
-  CHECKPOINT_DUE_TO_DIRTY,
-  CHECKPOINT_DUE_TO_PERIOD
-};
 
 /*
  * The smallest unit of a cache that stores the data.
@@ -143,6 +122,8 @@ class Cache {
     ShadowMemory nvm;
     icemu::Memory *mem;
     CycleCost cost;
+    Logger log;
+    uint64_t last_checkpoint_cycle;
 
   public:
   // No need for constructor now
@@ -164,7 +145,10 @@ class Cache {
     nvm.compareMemory(); // a final check
 
     stats.printStats();
-    cout << "Exact cycle count: " << cost.calculateCost(stats, 0) << endl;
+    log.printEndStats(stats);
+
+    // Perform final checks
+    assert(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
   }
 
   // Size of the cache = 512 bytes
@@ -176,8 +160,9 @@ class Cache {
   // First 3 bytes = doesn't matter becoz results in the block size
   // Next 5 bits = determine which of the 32 sets
   // Rest bits just used to compare
-  void init(uint32_t size, uint32_t ways, enum replacement_policy p, icemu::Memory &emu_mem)
+  void init(uint32_t size, uint32_t ways, enum replacement_policy p, icemu::Memory &emu_mem, string filename)
   {
+    // Initialize meta stuffs
     mem = &emu_mem;
     capacity = size;
     no_of_lines = ways;
@@ -189,8 +174,9 @@ class Cache {
 
     // Initialize the cache
     sets.resize(no_of_sets);
-    // cout << "SETS: " << no_of_sets << endl;
-    // cout << "Lines: " << no_of_lines << endl;
+    cout << "CAPACITY: " << capacity << endl;
+    cout << "SETS: " << no_of_sets << endl;
+    cout << "Lines: " << no_of_lines << endl;
 
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
@@ -207,26 +193,138 @@ class Cache {
 
     // Initialize the shadow mem
     nvm.initMem(mem);
+
+    // Initialize the logger
+    log.init(filename);
   }
 
+  uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
+  {
+      assert(size == 1 || size == 2 || size == 4);
+
+      // Offset the main memory start
+      address_t addr = address;// - main_memory_start;
+
+      // Fetch the tag, set and offset from the mem address
+      address_t offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
+      address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
+      index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
+      address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+
+      assert(index <= no_of_sets);
+      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
+      // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
+
+      // cout << "Dirty ratio: " << dirty_ratio << endl;
+      if (checkDirtyRatioAndCreateCheckpoint())
+        cout << "Creating checkpoint due to dirty ratio" << endl;
+      else if (checkCycleCountAndCreateCheckpoint())
+        cout << "Creating checkpoint due to period expiring" << endl;
+
+      // Dirty ratio should never go negative
+      assert(dirty_ratio >= 0);
+
+      // stats for normal nvm
+      normalNVMAccess(type, size);
+
+      // Checks if there are any collisions. If yes, then something has to be
+      // evicted before putting in the current mem access.
+      uint8_t collisions = 0;
+
+      // Look for any entry in the Cache line marked by "index"
+      for (int i = 0; i < no_of_lines; i++) {
+          CacheLine &line = sets[index].lines[i];
+
+          if (line.valid) {
+              if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
+                  line.blocks.last_used = CurrentTime_nanoseconds();
+                  stats.incCacheHits();
+                  
+                  switch (type) {
+                    case HookMemory::MEM_READ:
+                      stats.incCacheReads(size);
+                      line.was_read = true;
+                      break;
+ 
+                    case HookMemory::MEM_WRITE:
+                      setDirty(line);
+                      stats.incCacheWrites(size);
+
+                      line.blocks.data = *value;
+                      line.blocks.size = size;
+                      
+                      if (line.was_read == true)
+                          line.possible_war = true;
+
+                      break;
+                  }
+
+                  break;
+              } else
+                collisions++;
+
+          } else {
+              stats.incCacheMiss();
+
+              // Store the values. Only place where valid is set true
+              line.valid = true;
+              line.blocks.offset_bits = offset;
+              line.blocks.set_bits = index;
+              line.blocks.tag_bits = tag;
+              line.blocks.last_used = CurrentTime_nanoseconds();
+              line.blocks.addr = addr;
+
+              // Store the data and the size
+              line.blocks.data = *value;
+              line.blocks.size = size;
+
+              cacheResetEntry(line, type, size);
+
+              break;
+          }
+      }
+
+      assert(collisions <= no_of_lines);
+
+      // Handle the collisions if any
+      if (collisions == no_of_lines)
+          evict(addr, offset, tag, index, value, type, size);
+
+      // Return NULL as of now; can be extended to return the data when needed.
+      return NULL;
+  }
+
+  // Create a checkpoint with proper reason
   void createCheckpoint(enum CheckpointReason reason)
   {
-    stats.checkpoint.checkpoints++;
+    // Only place where checkpoints are incremented
+    stats.incCheckpoints();
 
+    // Update the cause to the stats
+    stats.updateCheckpointCause(reason);
+
+    // Increment based on reasons
     switch (reason)
     {
       case CHECKPOINT_DUE_TO_WAR:
-        stats.checkpoint.due_to_war++;
+        stats.incCheckpointsDueToWAR();
         break;
       case CHECKPOINT_DUE_TO_DIRTY:
-        stats.checkpoint.due_to_dirty++;
+        stats.incCheckpointsDueToDirty();
         break;
       case CHECKPOINT_DUE_TO_PERIOD:
-        stats.checkpoint.due_to_period++;
+        stats.incCheckpointsDueToPeriod();
         break;
     }
 
+    // Perform the actual evictions due to checkpoints
     checkpointEviction();
+
+    // Print the log line
+    log.printCheckpointStats(stats);
+
+    // And then update when this checkpoint was created
+    stats.updateLastCheckpointCycle(stats.getCurrentCycle());
   }
 
   // Function to be called on eviction of the cache on checkpoint
@@ -247,7 +345,13 @@ class Cache {
         }
     }
 
+    // Sanity check - MUST pass
     nvm.compareMemory();
+  }
+
+  void updateCycleCount(uint64_t cycle_count)
+  {
+    stats.updateCurrentCycle(cycle_count);
   }
 
   // Set the dirty bit and also update the dirty ratio.
@@ -255,21 +359,23 @@ class Cache {
   {
     if (!l.dirty) {
       l.dirty = true;
-      dirty_ratio = ((dirty_ratio * capacity) + 1) / capacity;
+      dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) / (capacity / CACHE_BLOCK_SIZE);
     }
   }
 
+  // Clear the dirty bit and also update the dirty ratio.
   void clearDirty(CacheLine &l)
   {
     if (l.dirty) {
       l.dirty = false;
-      dirty_ratio = ((dirty_ratio * capacity) - 1) / capacity;
+      dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) / (capacity / CACHE_BLOCK_SIZE);
     }
   }
 
-  bool checkDirtyRatio()
+  // Check and create checkpoints if dirty bit is present
+  bool checkDirtyRatioAndCreateCheckpoint()
   {
-    stats.update_dirty_ratio(dirty_ratio);
+    stats.updateDirtyRatio(dirty_ratio);
 
     if (dirty_ratio > DIRTY_RATIO_THRESHOLD) {
       createCheckpoint(CHECKPOINT_DUE_TO_DIRTY);
@@ -279,131 +385,54 @@ class Cache {
     return false;
   }
 
+  // Check and create checkpoints in a period.
+  bool checkCycleCountAndCreateCheckpoint()
+  {
+    if (CYCLE_COUNT_CHECKPOINT_THRESHOLD == 0)
+      return false;
+
+    if (stats.getCurrentCycle() - stats.getLastCheckpointCycle() > CYCLE_COUNT_CHECKPOINT_THRESHOLD) {
+      createCheckpoint(CHECKPOINT_DUE_TO_PERIOD);
+      return true;
+    }
+
+    return false;
+      
+  }
+
   void cacheNVMwrite(address_t address, address_t value, address_t size, bool doesCountForStats)
   {
-    if (doesCountForStats)
-      stats.nvm.nvm_writes++;
+    if (doesCountForStats) {
+      stats.incNVMWrites(size);
+    }
     
     nvm.shadowWrite(address, value, size);
   }
 
-  void normalNVMAccess(enum HookMemory::memory_type type)
+  void normalNVMAccess(enum HookMemory::memory_type type, address_t size)
   {
     switch(type) {
       case HookMemory::MEM_READ:
-        stats.nvm.nvm_reads_without_cache++;
+        stats.incNonCacheNVMReads(size);
         break;
       case HookMemory::MEM_WRITE:
-        stats.nvm.nvm_writes_without_cache++;
+        stats.incNonCacheNVMWrites(size);
+        break;
         break;
     }
   }
 
-  uint32_t* run(address_t address, enum HookMemory::memory_type type, address_t *value, address_t size)
-  {
-      assert(size == 1 || size == 2 || size == 4 || size == 8);
-
-      // Offset the main memory start
-      address_t addr = address;// - main_memory_start;
-
-      // Fetch the tag, set and offset from the mem address
-      address_t offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
-      address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
-      index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
-      address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
-
-      assert(index <= no_of_sets);
-      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
-      // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
-
-      // cout << "dirty_ratio:\t" << dirty_ratio * capacity << endl;
-      if (checkDirtyRatio())
-        cout << "Creating checkpoint due to dirty ratio" << endl;
-
-      // Dirty ratio should never go negative
-      assert(dirty_ratio >= 0);
-
-      // stats for normal nvm
-      normalNVMAccess(type);
-
-      // Checks if there are any collisions. If yes, then something has to be
-      // evicted before putting in the current mem access.
-      uint8_t collisions = 0;
-
-      // Look for any entry in the Cache line marked by "index"
-      for (int i = 0; i < no_of_lines; i++) {
-          CacheLine &line = sets[index].lines[i];
-
-          if (line.valid) {
-              if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
-                  line.blocks.last_used = CurrentTime_nanoseconds();
-                  stats.cache.hits++;
-                  
-                  switch (type) {
-                    case HookMemory::MEM_READ:
-                      stats.cache.reads++;
-                      line.was_read = true;
-                      break;
- 
-                    case HookMemory::MEM_WRITE:
-                      setDirty(line);
-                      stats.cache.writes++;
-
-                      line.blocks.data = *value;
-                      line.blocks.size = size;
-                      
-                      if (line.was_read == true)
-                          line.possible_war = true;
-
-                      break;
-                  }
-
-                  break;
-              } else
-                collisions++;
-
-          } else {
-              stats.cache.misses++;
-
-              // Store the values. Only place where valid is set true
-              line.valid = true;
-              line.blocks.offset_bits = offset;
-              line.blocks.set_bits = index;
-              line.blocks.tag_bits = tag;
-              line.blocks.last_used = CurrentTime_nanoseconds();
-              line.blocks.addr = addr;
-
-              // Store the data and the size
-              line.blocks.data = *value;
-              line.blocks.size = size;
-
-              cacheResetEntry(line, type);
-
-              break;
-          }
-      }
-
-      assert(collisions <= no_of_lines);
-
-      // Handle the collisions if any
-      if (collisions == no_of_lines)
-          evict(addr, offset, tag, index, value, type, size);
-
-      // Return NULL as of now; can be extended to return the data when needed.
-      return NULL;
-  }
-
-  void cacheResetEntry(CacheLine &line, enum HookMemory::memory_type type)
+  void cacheResetEntry(CacheLine &line, enum HookMemory::memory_type type, address_t size)
   {
     switch (type) {
       case HookMemory::MEM_READ:
         line.was_read = true;
-        stats.nvm.nvm_reads++;
+        stats.incNVMReads(size);
         break;
 
       case HookMemory::MEM_WRITE:
         setDirty(line);
-        stats.cache.writes++;
+        stats.incCacheWrites(size);
 
         assert(line.possible_war == false);
         assert(line.was_read == false);
@@ -416,7 +445,7 @@ class Cache {
              address_t *value, enum HookMemory::memory_type type, address_t size)
   {
     // If needs to evict, then the misses needs to be incremented.
-    stats.cache.misses++;
+    stats.incCacheMiss();
 
     // Get the line to be evicted using the given replacement policy.
     CacheLine *evicted_line = nullptr;
@@ -439,8 +468,10 @@ class Cache {
       else {
         cacheNVMwrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size, true);
         clearDirty(*evicted_line);
+        stats.incCacheDirtyEvictions();
       }
-    }
+    } else
+      stats.incCacheCleanEvictions();
 
     // Now that the eviction has been done, perform the replacement.
     evicted_line->blocks.offset_bits = offset;
@@ -459,13 +490,7 @@ class Cache {
 
     // Again the same logic. If the memory access is a READ then set the was_read
     // flag to true.
-    cacheResetEntry(*evicted_line, type);
-  }
-
-  void printStats(ofstream &logger)
-  {
-      (void)logger;
-      // stats.logStats(logger);
+    cacheResetEntry(*evicted_line, type, size);
   }
 
   void applyCompilerHints(uint32_t address)
@@ -495,7 +520,7 @@ class Cache {
       }
 
       // Do we need this?
-      stats.misc.hints_given++;
+      stats.incHintsGiven();
   }
 };
 

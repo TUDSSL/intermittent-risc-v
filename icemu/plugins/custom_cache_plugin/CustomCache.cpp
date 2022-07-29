@@ -36,8 +36,6 @@
 using namespace std;
 using namespace icemu;
 
-ofstream logger;
-
 // TODO: Need a way to get information from other hooks
 class HookInstructionCount : public HookCode {
   private:
@@ -69,6 +67,7 @@ class HookInstructionCount : public HookCode {
   {
     (void)arg;
     Pipeline.add(arg->address, arg->size);
+    obj->updateCycleCount(Pipeline.getTotalCycles());
   }
 
 };
@@ -92,9 +91,6 @@ class MemoryAccess : public HookMemory {
     // Parse optional args
     parseLogArguements();
     parseCacheArguements();
-
-    // Open the file for logging
-    logger.open(filename.c_str(), ios::out | ios::trunc);
   }
 
   ~MemoryAccess() {
@@ -125,28 +121,23 @@ class MemoryAccess : public HookMemory {
   }
     
   void parseLogArguements() {
-      if (PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=").args.size())
-        filename = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=").args[0];
+      if (PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=", ".log").args.size())
+        filename = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=", ".log").args[0];
   }
   
   void parseCacheArguements() {
       // Default values
       uint32_t size = 512, lines = 2;
       string arg1 = "cache-size=", arg2 = "cache-lines=";
-      for (const auto &a : getEmulator().getPluginArguments().getArgs()) {
-        auto pos1 = a.find(arg1);
-        if (pos1 != string::npos) {
-          size = std::stoul(a.substr(pos1+arg1.length()));
-        }
+      
+      if (PluginArgumentParsing::GetArguments(getEmulator(), arg1).args.size())
+        size = std::stoul(PluginArgumentParsing::GetArguments(getEmulator(), arg1).args[0]);
 
-        auto pos2 = a.find(arg2);
-        if (pos2 != string::npos) {
-          lines = std::stoul(a.substr(pos2+arg2.length()));
-        }
-      }
+      if (PluginArgumentParsing::GetArguments(getEmulator(), arg2).args.size())
+        lines = std::stoul(PluginArgumentParsing::GetArguments(getEmulator(), arg2).args[0]);
 
-      CacheObj.init(size, lines, LRU, getEmulator().getMemory());
       filename += "_" + std::to_string(size) + "_" + std::to_string(lines);
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename);
   }
 };
 

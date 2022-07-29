@@ -11,40 +11,23 @@
 
 using namespace std;
 
-#define CACHE_READ_COST
-#define CACHE_WRITE_COST
-#define NVM_READ_COST
-#define NVM_WRITE_COST
-#define CACHE_CLEAN_EVICTION_COST
-#define CACHE_DIRTY_EVICTION_COST
-#define CACHE_CHECKPOINT_COST
-#define PROCESSING_HINTS_COST
+// Cycle costs per byte of access
+#define CACHE_READ_COST 1
+#define CACHE_WRITE_COST 1
+#define NVM_READ_COST 2
+#define NVM_WRITE_COST 2
+
+// Non-access related costs
+#define CACHE_CLEAN_EVICTION_COST 1
+#define CACHE_DIRTY_EVICTION_COST 2
+#define CACHE_CHECKPOINT_COST 4
+#define PROCESSING_HINTS_COST 1
 
 class CycleCost {
   private:
     uint64_t final_cycle_count;
 
-    void CacheAccessCosts(Stats &stats, uint64_t cycle_count)
-    {
-        final_cycle_count = cycle_count;
-    }
-
-    void CacheEvictionCosts(Stats &stats, uint64_t cycle_count)
-    {
-        final_cycle_count = cycle_count;
-    }
-
-    void HintsCosts(Stats &stats, uint64_t cycle_count)
-    {
-        final_cycle_count = cycle_count;
-    }
-
-
   public:
-    struct CacheStats cache;
-    struct NVMStats nvm;
-    struct CheckpointStats checkpoint;
-    struct MiscStats misc;
 
     CycleCost()
     {
@@ -55,9 +38,20 @@ class CycleCost {
 
     uint64_t calculateCost(Stats &stats, uint64_t cycle_count)
     {
-        CacheAccessCosts(stats, cycle_count);
-        CacheEvictionCosts(stats, cycle_count);
-        HintsCosts(stats, cycle_count);
+        final_cycle_count = cycle_count
+                                // Remove NVM mem accesses
+                                - stats.nvm.nvm_reads * NVM_READ_COST
+                                - stats.nvm.nvm_writes * NVM_READ_COST
+                                // Add cache mem accesses
+                                + stats.cache.reads * CACHE_READ_COST
+                                + stats.cache.writes * CACHE_READ_COST
+                                // Due to checkpoints
+                                + stats.checkpoint.checkpoints * CACHE_CHECKPOINT_COST
+                                // Due to evictions
+                                + stats.cache.clean_evictions * CACHE_CLEAN_EVICTION_COST
+                                + stats.cache.dirty_evictions * CACHE_DIRTY_EVICTION_COST
+                                // Due to other factors
+                                + stats.misc.hints_given * PROCESSING_HINTS_COST;
 
         return final_cycle_count;
     }
