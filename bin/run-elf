@@ -3,9 +3,7 @@
 
 # Run the ICEmu emulator with the appropriate flags
 icemu \
-    -p mock_putc_plugin.so -a putc-logfile=% \
     -p mock_clockfunc_plugin.so \
-    -p instruction_profiling_plugin.so -a instruction-profiling-file=% \
-    -p cycle_count_plugin.so -a cycle-count-file=% \
+    -p riscv32_rocketchip_syscall_plugin.so \
     "$@"
 
