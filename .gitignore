@@ -2,3 +2,10 @@ binaries/
 .devcontainer/
 .vscode/
 riscv/tests/build*
+.bloop/
+.bsp/
+.metals/
+figures/*.bkp
+project/
+target/
+
