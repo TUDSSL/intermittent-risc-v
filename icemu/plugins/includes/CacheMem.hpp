@@ -1,3 +1,10 @@
+/*
+ * CacheMem: Cache implementation for a real-life cache system.
+ *
+ * Cache obj: Primary cache object.
+ * obj.run(): Primary entry point, needs to be called with the address and the type of the memory.
+ */
+
 #ifndef _CACHE_MEM_HPP_
 #define _CACHE_MEM_HPP_
 
@@ -11,6 +18,7 @@
 #include <bitset>
 #include <string.h>
 
+// ICEmu includes
 #include "icemu/emu/Emulator.h"
 #include "icemu/emu/Memory.h"
 #include "icemu/hooks/HookFunction.h"
@@ -25,85 +33,10 @@
 #include "../includes/CycleCostCalculator.hpp"
 #include "../includes/Logger.hpp"
 #include "../includes/Utils.hpp"
+#include "Riscv32E21Pipeline.hpp"
 
 using namespace std;
 using namespace icemu;
-
-// The cache block size in number of bytes
-#define NO_OF_CACHE_BLOCKS 4 // Equates to the cache block size of 4 bytes
-#define CACHE_BLOCK_SIZE NO_OF_CACHE_BLOCKS
-#define NUM_BITS(_n) ((uint32_t)log2(_n))
-#define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
-
-/*
- * The smallest unit of a cache that stores the data.
- * A group of blocks form a cache line (or way)
- * A group of cache lines form a cache set
- * A group of cache sets form a cache
- *
- * @tag_bits: Bits to represent the significat memory bits
- * @set_bits: Bits to decide which set of the cache is being used
- * @offset_bits: Bits to decide the byte/word being referred to inside a set
- * @data: The block of data to be stored
- * @last_used: Time it was last used
- * @addr: Store the actual address - for easy reference
- *
- * SUM_OF_BITS(tag_bits, set_bits, offset_bits) = Memory address lines. (32 bit in this case)
- */
-struct CacheBlock {
-  address_t tag_bits;
-  address_t set_bits;
-  address_t offset_bits;
-  address_t data; // actually store the data in blocks of bytes
-  address_t last_used;
-  address_t addr;
-  address_t size;
-
-  // Overload the = operator to compare evicted blocks
-  bool operator==(const CacheBlock &other) const {
-    return (tag_bits == other.tag_bits &&
-           set_bits == other.set_bits &&
-           offset_bits == other.offset_bits);
-  }
-
-};
-
-// Hash function for the evicted_blocks unordered map
-struct hash_fn
-{
-    size_t operator()(const CacheBlock &block) const
-    {
-        std::size_t h1 = std::hash<address_t>()(block.offset_bits);
-        std::size_t h2 = std::hash<address_t>()(block.set_bits);
-        std::size_t h3 = std::hash<address_t>()(block.tag_bits);
- 
-        return h1 ^ h2 ^ h3;
-    }
-};
-
-/* 
- * A cache line that consists of blocks. A 2-way set associative cache will have
- * 2 blocks. Each block will be then CACHE_BLOCK_SIZE big
- */
-struct CacheLine {
-  CacheBlock blocks;
-  
-  // For cache management
-  bool valid;
-  bool dirty;
-  // enum HookMemory::memory_type type;
-  bool was_read;
-  bool possible_war;
-  
-  // Overload the < operator to enable LRU/MRU
-  bool operator<(const CacheLine &other) const {
-    return blocks.last_used < other.blocks.last_used;
-  }
-};
-
-struct CacheSet {
-  std::vector<CacheLine> lines;
-};
 
 class Cache {
   private:    
@@ -126,12 +59,12 @@ class Cache {
     uint64_t last_checkpoint_cycle;
 
   public:
+    RiscvE21Pipeline *Pipeline;
   // No need for constructor now
   Cache() = default;
 
   ~Cache()
   {
-
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
@@ -141,9 +74,10 @@ class Cache {
         }
     }
 
-    cout << "Final check: \t";
-    nvm.compareMemory(); // a final check
+    // This needs to pass
+    nvm.compareMemory(); 
 
+    // Do any logging/printing
     stats.printStats();
     log.printEndStats(stats);
 
@@ -185,8 +119,8 @@ class Cache {
         auto line = &sets[i].lines[j];
         memset(&line->blocks, 0, sizeof(struct CacheBlock));
         line->valid = false;
-        line->dirty = false;
-        line->was_read = false;
+        line->read_dominated = false;
+        line->write_dominated = false;
         line->possible_war = false;
       }
     }
@@ -216,10 +150,13 @@ class Cache {
       // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
 
       // cout << "Dirty ratio: " << dirty_ratio << endl;
-      if (checkDirtyRatioAndCreateCheckpoint())
-        cout << "Creating checkpoint due to dirty ratio" << endl;
-      else if (checkCycleCountAndCreateCheckpoint())
-        cout << "Creating checkpoint due to period expiring" << endl;
+      // if (checkDirtyRatioAndCreateCheckpoint())
+      //   cout << "Creating checkpoint due to dirty ratio" << endl;
+      // else if (checkCycleCountAndCreateCheckpoint())
+      //   cout << "Creating checkpoint due to period expiring" << endl;
+
+      checkDirtyRatioAndCreateCheckpoint();
+      checkCycleCountAndCreateCheckpoint();
 
       // Dirty ratio should never go negative
       assert(dirty_ratio >= 0);
@@ -243,19 +180,18 @@ class Cache {
                   switch (type) {
                     case HookMemory::MEM_READ:
                       stats.incCacheReads(size);
-                      line.was_read = true;
+                      cost.modifyCost(Pipeline, CACHE_READ, size);
+                      setBit(READ_DOMINATED, line);
                       break;
  
                     case HookMemory::MEM_WRITE:
-                      setDirty(line);
+                      setBit(DIRTY, line);
+                      setBit(WRITE_DOMINATED, line);
+                      setBit(POSSIBLE_WAR, line);
                       stats.incCacheWrites(size);
-
+                      cost.modifyCost(Pipeline, CACHE_WRITE, size);
                       line.blocks.data = *value;
                       line.blocks.size = size;
-                      
-                      if (line.was_read == true)
-                          line.possible_war = true;
-
                       break;
                   }
 
@@ -267,7 +203,7 @@ class Cache {
               stats.incCacheMiss();
 
               // Store the values. Only place where valid is set true
-              line.valid = true;
+              setBit(VALID, line);
               line.blocks.offset_bits = offset;
               line.blocks.set_bits = index;
               line.blocks.tag_bits = tag;
@@ -299,6 +235,7 @@ class Cache {
   {
     // Only place where checkpoints are incremented
     stats.incCheckpoints();
+    cost.modifyCost(Pipeline, CHECKPOINT, 0);
 
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
@@ -339,9 +276,10 @@ class Cache {
             }
             
             // Reset all bits
-            clearDirty(l);
-            l.was_read = false;
-            l.possible_war = false;
+            clearBit(READ_DOMINATED, l);
+            clearBit(WRITE_DOMINATED, l);
+            clearBit(POSSIBLE_WAR, l);
+            clearBit(DIRTY, l);
         }
     }
 
@@ -354,21 +292,61 @@ class Cache {
     stats.updateCurrentCycle(cycle_count);
   }
 
-  // Set the dirty bit and also update the dirty ratio.
-  void setDirty(CacheLine &l)
+  // Set the specified bit with associated conditions and actions
+  void setBit(enum CacheBits bit, CacheLine &line)
   {
-    if (!l.dirty) {
-      l.dirty = true;
-      dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) / (capacity / CACHE_BLOCK_SIZE);
+    switch (bit) {
+      case VALID:
+        // Should never set a valid bit twice
+        assert(line.valid == false);
+        line.valid = true;
+        break;
+      case READ_DOMINATED:
+        if (line.write_dominated == false)
+          line.read_dominated = true;
+        break;
+      case WRITE_DOMINATED:
+        if (line.read_dominated == false)
+          line.write_dominated = true;
+        break;
+      case POSSIBLE_WAR:
+        if (line.read_dominated == true)
+          line.possible_war = true;
+        break;
+      case DIRTY:
+        // Check if not already set, set the bit and update the dirty ratio
+        if (line.dirty == false) {
+          line.dirty = true;
+          dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) / (capacity / CACHE_BLOCK_SIZE);
+        }
+        break;
     }
   }
 
-  // Clear the dirty bit and also update the dirty ratio.
-  void clearDirty(CacheLine &l)
+  void clearBit(enum CacheBits bit, CacheLine &line)
   {
-    if (l.dirty) {
-      l.dirty = false;
-      dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) / (capacity / CACHE_BLOCK_SIZE);
+    switch (bit) {
+      case VALID:
+        // Should never clear a valid bit twice
+        assert(line.valid == true);
+        line.valid = false;
+        break;
+      case READ_DOMINATED:
+        line.read_dominated = false;
+        break;
+      case WRITE_DOMINATED:
+        line.write_dominated = false;
+        break;
+      case POSSIBLE_WAR:
+        line.possible_war = false;
+        break;
+      case DIRTY:
+        // Check if not already cleared, clear the bit and update the dirty ratio
+        if (line.dirty == true) {
+          line.dirty = false;
+          dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) / (capacity / CACHE_BLOCK_SIZE);
+        }
+        break;
     }
   }
 
@@ -377,6 +355,7 @@ class Cache {
   {
     stats.updateDirtyRatio(dirty_ratio);
 
+    // Create checkpoint on exceeding the threshold
     if (dirty_ratio > DIRTY_RATIO_THRESHOLD) {
       createCheckpoint(CHECKPOINT_DUE_TO_DIRTY);
       return true;
@@ -404,6 +383,7 @@ class Cache {
   {
     if (doesCountForStats) {
       stats.incNVMWrites(size);
+      cost.modifyCost(Pipeline, NVM_WRITE, size);
     }
     
     nvm.shadowWrite(address, value, size);
@@ -426,16 +406,18 @@ class Cache {
   {
     switch (type) {
       case HookMemory::MEM_READ:
-        line.was_read = true;
+        setBit(READ_DOMINATED, line);
         stats.incNVMReads(size);
+        cost.modifyCost(Pipeline, NVM_READ, size);
         break;
 
       case HookMemory::MEM_WRITE:
-        setDirty(line);
+        setBit(DIRTY, line);
+        setBit(WRITE_DOMINATED, line);
         stats.incCacheWrites(size);
-
+        cost.modifyCost(Pipeline, CACHE_WRITE, size);
         assert(line.possible_war == false);
-        assert(line.was_read == false);
+        assert(line.read_dominated == false);
         break;
     }
   }
@@ -467,7 +449,7 @@ class Cache {
         createCheckpoint(CHECKPOINT_DUE_TO_WAR);
       else {
         cacheNVMwrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size, true);
-        clearDirty(*evicted_line);
+        clearBit(DIRTY, *evicted_line);
         stats.incCacheDirtyEvictions();
       }
     } else
@@ -480,9 +462,11 @@ class Cache {
     evicted_line->blocks.last_used = CurrentTime_nanoseconds();
     evicted_line->blocks.addr = addr;
 
-    // If evicted then reset all the flags
-    evicted_line->was_read = false;
-    evicted_line->possible_war = false;
+    // If evicted then reset all the flags (except VALID)
+    clearBit(READ_DOMINATED, *evicted_line);
+    clearBit(WRITE_DOMINATED, *evicted_line);
+    clearBit(POSSIBLE_WAR, *evicted_line);
+    clearBit(DIRTY, *evicted_line);
 
     // Replace the data in the memory
     evicted_line->blocks.data = *value;
@@ -511,9 +495,10 @@ class Cache {
           for (CacheLine &line : s.lines) {
             if (line.valid) {
                 if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
-                    clearDirty(line);
-                    line.possible_war = false;
-                    line.was_read = false;
+                  clearBit(READ_DOMINATED, line);
+                  clearBit(WRITE_DOMINATED, line);
+                  clearBit(POSSIBLE_WAR, line);
+                  clearBit(DIRTY, line);
                 }
             }
           }
@@ -521,7 +506,9 @@ class Cache {
 
       // Do we need this?
       stats.incHintsGiven();
+      cost.modifyCost(Pipeline, HINTS, 0);
   }
+
 };
 
 #endif /* _CACHE_MEM_HPP_ */

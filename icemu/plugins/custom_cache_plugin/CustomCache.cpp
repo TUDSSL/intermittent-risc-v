@@ -58,9 +58,10 @@ class HookInstructionCount : public HookCode {
     cout << "Total cycle count: " << Pipeline.getTotalCycles() << endl; 
   }
 
-  void register_cache(Cache *ext_obj)
+  void registerCache(Cache *ext_obj)
   {
     obj = ext_obj;
+    obj->Pipeline = &Pipeline;
   }
 
   void run(hook_arg_t *arg)
@@ -86,7 +87,7 @@ class MemoryAccess : public HookMemory {
     hook_instr_cnt = new HookInstructionCount(emu);
 
     // Register the cache object - could be done with OOPs but I like C style :(
-    hook_instr_cnt->register_cache(&CacheObj);
+    hook_instr_cnt->registerCache(&CacheObj);
 
     // Parse optional args
     parseLogArguements();

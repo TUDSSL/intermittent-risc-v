@@ -8,12 +8,14 @@
 
 // Local includes
 #include "../includes/Stats.hpp"
+#include "../includes/Utils.hpp"
+#include "Riscv32E21Pipeline.hpp"
 
 using namespace std;
 
 // Cycle costs per byte of access
 #define CACHE_READ_COST 1
-#define CACHE_WRITE_COST 1
+#define CACHE_WRITE_COST CACHE_READ_COST
 #define NVM_READ_COST 2
 #define NVM_WRITE_COST 2
 
@@ -54,6 +56,29 @@ class CycleCost {
                                 + stats.misc.hints_given * PROCESSING_HINTS_COST;
 
         return final_cycle_count;
+    }
+
+    void modifyCost(RiscvE21Pipeline *Pipeline, enum CostSpecification type, address_t size)
+    {
+        switch (type) {
+            case CACHE_READ:
+            case CACHE_WRITE:
+                /* do nothing as this is the default case */
+                break;
+            case NVM_READ:
+                Pipeline->addToCycles(NVM_READ_COST * size - CACHE_READ_COST);
+                break;
+            case NVM_WRITE:
+            case EVICT:
+                Pipeline->addToCycles(NVM_WRITE_COST * size - CACHE_READ_COST);
+                break;
+            case CHECKPOINT:
+                Pipeline->addToCycles(CACHE_CHECKPOINT_COST);
+                break;
+            case HINTS:
+                Pipeline->addToCycles(PROCESSING_HINTS_COST);
+                break;
+        }
     }
 };
 
