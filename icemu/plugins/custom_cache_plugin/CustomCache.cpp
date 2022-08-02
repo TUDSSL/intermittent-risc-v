@@ -121,8 +121,9 @@ class MemoryAccess : public HookMemory {
   }
     
   void parseLogArguements() {
-      if (PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=", ".log").args.size())
-        filename = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=", ".log").args[0];
+      auto args = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=");
+      if (args.size())
+        filename = args[0];
   }
   
   void parseCacheArguements() {
@@ -130,11 +131,13 @@ class MemoryAccess : public HookMemory {
       uint32_t size = 512, lines = 2;
       string arg1 = "cache-size=", arg2 = "cache-lines=";
       
-      if (PluginArgumentParsing::GetArguments(getEmulator(), arg1).args.size())
-        size = std::stoul(PluginArgumentParsing::GetArguments(getEmulator(), arg1).args[0]);
+      auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), arg1);
+      if (arg1_val.size())
+        size = std::stoul(arg1_val[0]);
 
-      if (PluginArgumentParsing::GetArguments(getEmulator(), arg2).args.size())
-        lines = std::stoul(PluginArgumentParsing::GetArguments(getEmulator(), arg2).args[0]);
+      auto arg2_val = PluginArgumentParsing::GetArguments(getEmulator(), arg2);
+      if (arg2_val.size())
+        lines = std::stoul(arg2_val[0]);
 
       filename += "_" + std::to_string(size) + "_" + std::to_string(lines);
       CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename);
