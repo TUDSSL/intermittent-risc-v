@@ -115,7 +115,7 @@ class MemoryAccess : public HookMemory {
     if (!((address >= main_memory_start)))
         return;
 
-    // cout << "Memory type: " << arg->mem_type << "\t size: " << arg->size << "\t address: " << arg->address << "\tData: " << arg->value << endl;
+    // cout  << "Memory type: " << arg->mem_type << "\t size: " << arg->size << hex << "\t address: " << arg->address << "\tData: " << arg->value << dec << endl;
     // return;
 
     // Call the cache

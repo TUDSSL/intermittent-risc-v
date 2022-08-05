@@ -76,7 +76,7 @@ class Cache {
             }
             
             if (l.dirty) {
-              cacheNVMwrite(l.blocks.addr, l.blocks.data, l.blocks.size, false);
+              cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, false);
             }
         }
     }
@@ -148,8 +148,22 @@ class Cache {
     log.init(filename);
   }
 
+  address_t reconstructAddress(CacheLine &line)
+  {
+    address_t tag = line.blocks.tag_bits;
+    address_t index = line.blocks.set_bits;
+    address_t offset = line.blocks.offset_bits;
+
+    address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE))
+                        | index << (NUM_BITS(CACHE_BLOCK_SIZE))
+                        | offset;
+    return address;
+  }
+
   uint32_t* run(address_t addr, enum HookMemory::memory_type type, address_t *value, address_t size)
   {
+      // addr = 0b11010110110101000111011010101111;
+
       // Only supports 32 bit now, will assert for 64bit
       assert(size == 1 || size == 2 || size == 4);
 
@@ -160,7 +174,8 @@ class Cache {
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
       assert(index <= no_of_sets);
-      // cout << "Address: " << addr << "\tTag: " << tag << "\tIndex: " << index << "\tOffset: " << offset << endl;
+      // cout << "Address: " << std::bitset<32>(addr) << "\tTag: " << std::bitset<25>(tag) << "\tIndex: " << std::bitset<5>(index) << "\tOffset: " << std::bitset<2>(offset) << endl;
+      
       // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
 
       // cout << "Dirty ratio: " << dirty_ratio << endl;
@@ -184,8 +199,9 @@ class Cache {
           CacheLine &line = sets.at(hashed_index).lines[i];
 
           if (line.valid) {
-              if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
+              if (addr == reconstructAddress(line)) {
                   line.blocks.last_used = CurrentTime_nanoseconds();
+                  // cout << "CACHE HIT" << endl;
                   stats.incCacheHits();
                   
                   switch (type) {
@@ -208,6 +224,7 @@ class Cache {
 
                   break;
               } else {
+                // cout << "CACHE MISS" << endl;
                 collisions++;
               }
           } else {
@@ -219,7 +236,6 @@ class Cache {
               line.blocks.set_bits = index;
               line.blocks.tag_bits = tag;
               line.blocks.last_used = CurrentTime_nanoseconds();
-              line.blocks.addr = addr;
 
               // Store the data and the size
               line.blocks.data = *value;
@@ -236,6 +252,11 @@ class Cache {
       // Handle the collisions if any
       if (collisions == no_of_lines)
           evict(addr, offset, tag, index, value, type, size);
+
+      // cout << "Cache content: set 0 line 0 data: " << sets.at(0).lines[0].blocks.data  << " size: " << sets.at(0).lines[0].blocks.size
+      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[0]) << dec << endl;
+      // cout << "Cache content: set 0 line 1 data: " << sets.at(0).lines[1].blocks.data  << " size: " << sets.at(0).lines[1].blocks.size
+      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[1]) << dec << endl;
 
       // Return NULL as of now; can be extended to return the data when needed.
       return NULL;
@@ -274,12 +295,15 @@ class Cache {
     assert(evicted_line != nullptr);
     assert(evicted_line->valid == true);
 
+    // cout << "Evicting: " << evicted_line->blocks.data  << " size: " << evicted_line->blocks.size
+    //       << hex << " addr: " << reconstructAddress(*evicted_line) << dec << endl;
+
     // Perform the eviction
     if (evicted_line->dirty) {
       if (evicted_line->possible_war)
         createCheckpoint(CHECKPOINT_DUE_TO_WAR);
       else {
-        cacheNVMwrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size, true);
+        cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
         clearBit(DIRTY, *evicted_line);
         stats.incCacheDirtyEvictions();
       }
@@ -291,7 +315,6 @@ class Cache {
     evicted_line->blocks.tag_bits = tag;
     evicted_line->blocks.set_bits = index;
     evicted_line->blocks.last_used = CurrentTime_nanoseconds();
-    evicted_line->blocks.addr = addr;
 
     // If evicted then reset all the flags (except VALID)
     clearBit(READ_DOMINATED, *evicted_line);
@@ -326,7 +349,7 @@ class Cache {
       for (CacheSet &s : sets) {
           for (CacheLine &line : s.lines) {
             if (line.valid) {
-                if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
+                if (addr == reconstructAddress(line)) {
                   clearBit(READ_DOMINATED, line);
                   clearBit(WRITE_DOMINATED, line);
                   clearBit(POSSIBLE_WAR, line);
@@ -344,7 +367,6 @@ class Cache {
   // Perform the hashing which fetches the set from the cache.
   address_t cacheHash(address_t index, enum CacheHashMethod type, uint32_t line_number)
   {
-    return 0;
     switch (type) {
       case SET_ASSOCIATIVE:
         return index;
@@ -410,7 +432,7 @@ class Cache {
             if (l.valid) {
               if (l.dirty) {
                   // Perform the actual write to the memory
-                  cacheNVMwrite(l.blocks.addr, l.blocks.data, l.blocks.size, true);
+                  cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
               }
               
               // Reset all bits

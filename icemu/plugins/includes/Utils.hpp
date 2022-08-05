@@ -10,7 +10,7 @@
 using namespace std;
 
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
-static const float DIRTY_RATIO_THRESHOLD = 0.6;
+static const float DIRTY_RATIO_THRESHOLD = 1.1;
 static const bool NVM_STATS_PER_BYTE = true;
 
 static const uint64_t FREQ = 50 * 1000 * 1000; // MHz
@@ -79,7 +79,6 @@ struct CacheBlock {
   address_t offset_bits;
   address_t data; // actually store the data in blocks of bytes
   address_t last_used;
-  address_t addr;
   address_t size;
 
   // Overload the = operator to compare evicted blocks
