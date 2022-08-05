@@ -32,6 +32,7 @@
 // Local includes
 #include "../includes/DetectWAR.h"
 #include "../includes/CacheMem.hpp"
+// #include "../includes/CacheProwl.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -125,12 +126,14 @@ class MemoryAccess : public HookMemory {
       auto args = PluginArgumentParsing::GetArguments(getEmulator(), "custom-cache-log-file=");
       if (args.size())
         filename = args[0];
+      
+      cout << "Log file: " << filename << endl;
   }
   
   void parseCacheArguements() {
       // Default values
-      uint32_t size = 512, lines = 2;
-      string arg1 = "cache-size=", arg2 = "cache-lines=";
+      uint32_t size = 512, lines = 2, hash_method = 0;
+      string arg1 = "cache-size=", arg2 = "cache-lines=", arg3 = "hash-method=";
       
       auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), arg1);
       if (arg1_val.size())
@@ -140,8 +143,13 @@ class MemoryAccess : public HookMemory {
       if (arg2_val.size())
         lines = std::stoul(arg2_val[0]);
 
+      auto arg3_val = PluginArgumentParsing::GetArguments(getEmulator(), arg3);
+      if (arg3_val.size())
+        hash_method = std::stoul(arg3_val[0]);
+
       filename += "_" + std::to_string(size) + "_" + std::to_string(lines);
-      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename);
+      cout << "Lines from outside " << lines << endl;
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method);
   }
 };
 

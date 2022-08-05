@@ -5,8 +5,8 @@
  * obj.run(): Primary entry point, needs to be called with the address and the type of the memory.
  */
 
-#ifndef _CACHE_MEM_HPP_
-#define _CACHE_MEM_HPP_
+#ifndef _CACHE_PROWL_HPP_
+#define _CACHE_PROWL_HPP_
 
 #include <map>
 #include <unordered_map>
@@ -66,15 +66,9 @@ class Cache {
 
   ~Cache()
   {
-    uint32_t non_used_cache_blocks = 0;
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
-            if (!l.valid) {
-              non_used_cache_blocks++;
-              continue;
-            }
-            
             if (l.dirty) {
               cacheNVMwrite(l.blocks.addr, l.blocks.data, l.blocks.size, false);
             }
@@ -90,8 +84,6 @@ class Cache {
 
     // Perform final checks
     assert(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
-
-    cout << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
 
   // Size of the cache = 512 bytes
@@ -130,14 +122,14 @@ class Cache {
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
       
-      for (auto j = 0; j < no_of_lines; j++) {
+      for (uint32_t j = 0; j < no_of_lines; j++) {
         auto line = &sets[i].lines[j];
         memset(&line->blocks, 0, sizeof(struct CacheBlock));
         line->valid = false;
-        line->read_dominated = false;
-        line->write_dominated = false;
-        line->possible_war = false;
         line->dirty = false;
+        // line->read_dominated = false;
+        // line->write_dominated = false;
+        // line->possible_war = false;
       }
     }
 
@@ -165,8 +157,8 @@ class Cache {
 
       // cout << "Dirty ratio: " << dirty_ratio << endl;
 
-      checkDirtyRatioAndCreateCheckpoint();
-      checkCycleCountAndCreateCheckpoint();
+    //   checkDirtyRatioAndCreateCheckpoint();
+    //   checkCycleCountAndCreateCheckpoint();
 
       // Dirty ratio should never go negative
       assert(dirty_ratio >= 0);
@@ -187,18 +179,18 @@ class Cache {
               if (line.blocks.tag_bits == tag && line.blocks.offset_bits == offset) {
                   line.blocks.last_used = CurrentTime_nanoseconds();
                   stats.incCacheHits();
-                  
+                  cout << "HIT in set: " << hashed_index << " line: " << i << endl;
                   switch (type) {
                     case HookMemory::MEM_READ:
                       stats.incCacheReads(size);
                       cost.modifyCost(Pipeline, CACHE_READ, size);
-                      setBit(READ_DOMINATED, line);
+                    //   setBit(READ_DOMINATED, line);
                       break;
  
                     case HookMemory::MEM_WRITE:
                       setBit(DIRTY, line);
-                      setBit(WRITE_DOMINATED, line);
-                      setBit(POSSIBLE_WAR, line);
+                    //   setBit(WRITE_DOMINATED, line);
+                    //   setBit(POSSIBLE_WAR, line);
                       stats.incCacheWrites(size);
                       cost.modifyCost(Pipeline, CACHE_WRITE, size);
                       line.blocks.data = *value;
@@ -207,12 +199,12 @@ class Cache {
                   }
 
                   break;
-              } else {
+              } else
                 collisions++;
-              }
+
           } else {
               stats.incCacheMiss();
-
+              cout << "INIT in set: " << hashed_index << " line: " << i << endl;
               // Store the values. Only place where valid is set true
               setBit(VALID, line);
               line.blocks.offset_bits = offset;
@@ -250,40 +242,27 @@ class Cache {
 
     // Get the line to be evicted using the given replacement policy.
     CacheLine *evicted_line = nullptr;
-    address_t hashed_index, hashed_index_0, hashed_index_1;
-
+    cout << "MISS in set: " << cacheHash(index, SET_ASSOCIATIVE, 0) << endl;
     switch (policy) {
       case LRU:
-        hashed_index = cacheHash(index, SET_ASSOCIATIVE, 0);
-        evicted_line = &(*std::min_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
+        evicted_line = &(*std::min_element(sets.at(cacheHash(index, SET_ASSOCIATIVE, 0)).lines.begin(), sets.at(cacheHash(index, SET_ASSOCIATIVE, 0)).lines.end()));
         break;
       case MRU:
-        hashed_index = cacheHash(index, SET_ASSOCIATIVE, 0);
-        evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
+        evicted_line = &(*std::max_element(sets.at(cacheHash(index, SET_ASSOCIATIVE, 0)).lines.begin(), sets.at(cacheHash(index, SET_ASSOCIATIVE, 0)).lines.end()));
         break;
       case SKEW:
-        hashed_index_0 = cacheHash(index, SKEW_ASSOCIATIVE, 0);
-        hashed_index_1 = cacheHash(index, SKEW_ASSOCIATIVE, 1);
-        if (sets.at(hashed_index_0).lines.at(0).blocks.last_used < sets.at(hashed_index_1).lines.at(1).blocks.last_used)
-          evicted_line = &sets.at(hashed_index_0).lines.at(0);
+        if (sets.at(cacheHash(index, SKEW_ASSOCIATIVE, 0)).lines.at(0).blocks.last_used < sets.at(cacheHash(index, SKEW_ASSOCIATIVE, 1)).lines.at(1).blocks.last_used)
+          evicted_line = &sets.at(cacheHash(index, SKEW_ASSOCIATIVE, 0)).lines.at(0);
         else
-          evicted_line = &sets.at(hashed_index_1).lines.at(1);
-        break;
+          evicted_line = &sets.at(cacheHash(index, SKEW_ASSOCIATIVE, 1)).lines.at(1);
     }
 
     assert(evicted_line != nullptr);
-    assert(evicted_line->valid == true);
 
-    // Perform the eviction
-    if (evicted_line->dirty) {
-      if (evicted_line->possible_war)
+    // Perform the eviction - NO POSSIBLE WAR CHECK, just evict and create checkpoint
+    if (evicted_line->dirty)
         createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-      else {
-        cacheNVMwrite(evicted_line->blocks.addr, evicted_line->blocks.data, evicted_line->blocks.size, true);
-        clearBit(DIRTY, *evicted_line);
-        stats.incCacheDirtyEvictions();
-      }
-    } else
+    else
       stats.incCacheCleanEvictions();
 
     // Now that the eviction has been done, perform the replacement.
@@ -294,9 +273,9 @@ class Cache {
     evicted_line->blocks.addr = addr;
 
     // If evicted then reset all the flags (except VALID)
-    clearBit(READ_DOMINATED, *evicted_line);
-    clearBit(WRITE_DOMINATED, *evicted_line);
-    clearBit(POSSIBLE_WAR, *evicted_line);
+    // clearBit(READ_DOMINATED, *evicted_line);
+    // clearBit(WRITE_DOMINATED, *evicted_line);
+    // clearBit(POSSIBLE_WAR, *evicted_line);
     clearBit(DIRTY, *evicted_line);
 
     // Replace the data in the memory
@@ -344,22 +323,27 @@ class Cache {
   // Perform the hashing which fetches the set from the cache.
   address_t cacheHash(address_t index, enum CacheHashMethod type, uint32_t line_number)
   {
-    return 0;
+    return 15;
+    address_t idx_to_return, idx;
     switch (type) {
       case SET_ASSOCIATIVE:
-        return index;
+        idx_to_return = index;
+        break;
       case SKEW_ASSOCIATIVE:
         // Only support 2-way skew associative as of now
         assert(no_of_lines == 2);
         if (line_number == 0)
-          return (2 * index) % no_of_sets;
-        else
-          return (9 * index + 3) % no_of_sets;
+          idx_to_return = ((2 * index) % 71) % no_of_sets;
+        else if (line_number == 1)
+          idx_to_return = ((9 * index + 3) % 71) % no_of_sets;
+        break;
     }
 
+    // cout << "INDEX: " << idx_to_return << endl;
+
     // No no, you should not come here
-    assert(false);
-    return 0;
+    assert(idx_to_return <= no_of_sets);
+    return idx_to_return;
   }
 
   // Create a checkpoint with proper reason
@@ -405,22 +389,20 @@ class Cache {
   void checkpointEviction()
   {
     // Evict all the writes that are a possible war and reset the bits
-    for (CacheSet &s : sets) {
-        for (CacheLine &l : s.lines) {
-            if (l.valid) {
-              if (l.dirty) {
-                  // Perform the actual write to the memory
-                  cacheNVMwrite(l.blocks.addr, l.blocks.data, l.blocks.size, true);
-              }
-              
-              // Reset all bits
-              clearBit(READ_DOMINATED, l);
-              clearBit(WRITE_DOMINATED, l);
-              clearBit(POSSIBLE_WAR, l);
-              clearBit(DIRTY, l);
+    // for (CacheSet &s : sets) {
+        for (CacheLine &l : sets[15].lines) {
+            if (l.dirty) {
+                // Perform the actual write to the memory
+                cacheNVMwrite(l.blocks.addr, l.blocks.data, l.blocks.size, true);
             }
+            
+            // Reset all bits
+            // clearBit(READ_DOMINATED, l);
+            // clearBit(WRITE_DOMINATED, l);
+            // clearBit(POSSIBLE_WAR, l);
+            clearBit(DIRTY, l);
         }
-    }
+    // }
 
     // Sanity check - MUST pass
     nvm.compareMemory();
@@ -438,26 +420,26 @@ class Cache {
   {
     switch (bit) {
       case VALID:
+        // Should never set a valid bit twice
+        assert(line.valid == false);
         line.valid = true;
         break;
       case READ_DOMINATED:
-        assert(line.valid == true);
+        assert(false);
         if (line.write_dominated == false)
           line.read_dominated = true;
         break;
       case WRITE_DOMINATED:
-        assert(line.valid == true);
+        assert(false);
         if (line.read_dominated == false)
           line.write_dominated = true;
         break;
       case POSSIBLE_WAR:
-        assert(line.valid == true);
-        assert(line.dirty == true);
+        assert(false);
         if (line.read_dominated == true)
           line.possible_war = true;
         break;
       case DIRTY:
-        assert(line.valid == true);
         // Check if not already set, set the bit and update the dirty ratio
         if (line.dirty == false) {
           line.dirty = true;
@@ -477,12 +459,15 @@ class Cache {
         line.valid = false;
         break;
       case READ_DOMINATED:
+        assert(false);
         line.read_dominated = false;
         break;
       case WRITE_DOMINATED:
+        assert(false);
         line.write_dominated = false;
         break;
       case POSSIBLE_WAR:
+        assert(false);
         line.possible_war = false;
         break;
       case DIRTY:
@@ -545,6 +530,7 @@ class Cache {
       case HookMemory::MEM_WRITE:
         stats.incNonCacheNVMWrites(size);
         break;
+        break;
     }
   }
 
@@ -554,18 +540,18 @@ class Cache {
   {
     switch (type) {
       case HookMemory::MEM_READ:
-        setBit(READ_DOMINATED, line);
+        // setBit(READ_DOMINATED, line);
         stats.incNVMReads(size);
         cost.modifyCost(Pipeline, NVM_READ, size);
         break;
 
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        setBit(WRITE_DOMINATED, line);
+        // setBit(WRITE_DOMINATED, line);
         stats.incCacheWrites(size);
         cost.modifyCost(Pipeline, CACHE_WRITE, size);
-        assert(line.possible_war == false);
-        assert(line.read_dominated == false);
+        // assert(line.possible_war == false);
+        // assert(line.read_dominated == false);
         break;
     }
   }

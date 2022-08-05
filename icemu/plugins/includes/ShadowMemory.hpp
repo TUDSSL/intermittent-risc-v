@@ -20,7 +20,7 @@
 using namespace std;
 using namespace icemu;
 
-static const bool PRINT_MEMORY_DIFF = true;
+static const bool PRINT_MEMORY_DIFF = false;
 
 class ShadowMemory{
   private:
@@ -62,7 +62,7 @@ class ShadowMemory{
         }
 
         cout << "\tCompare value: " << (int)compareValue << endl;
-        assert(compareValue == 0);
+        // assert(compareValue == 0);
 
         // Something is different according to `memcmp`, check byte-per-byte
         bool same = true;
@@ -87,8 +87,8 @@ class ShadowMemory{
     void shadowWrite(address_t address, address_t value, address_t size) {
         address_t address_idx = address - MainMemSegment->origin;
         for (address_t i=0; i<size; i++) {
-        uint64_t byte = (value >>(8*i)) & 0xFF; // Get the bytes
-        ShadowMem[address_idx+i] = byte;
+            uint64_t byte = (value >>(8*i)) & 0xFF; // Get the bytes
+            ShadowMem[address_idx+i] = byte;
         }
     }
 

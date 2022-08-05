@@ -25,7 +25,13 @@ static const uint64_t CYCLE_COUNT_CHECKPOINT_THRESHOLD = TIME_FOR_CHECKPOINT_THR
 
 enum replacement_policy {
   LRU,
-  MRU
+  MRU,
+  SKEW
+};
+
+enum CacheHashMethod {
+  SET_ASSOCIATIVE,
+  SKEW_ASSOCIATIVE
 };
 
 enum CheckpointReason {

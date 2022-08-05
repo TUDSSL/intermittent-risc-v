@@ -28,7 +28,9 @@ class Logger {
 
         // Open the file for logging
         logger_cont.open(continuous_logging_filename.c_str(), ios::out | ios::trunc);
+        assert(logger_cont.is_open());
         logger_final.open(final_logging_filename.c_str(), ios::out | ios::trunc);
+        assert(logger_final.is_open());
         
         logger_cont << "# checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
     }
