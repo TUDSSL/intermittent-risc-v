@@ -3,6 +3,7 @@
 
 #include <string>
 #include <chrono>
+#include <execinfo.h>
 
 #include "icemu/emu/Emulator.h"
 #include "icemu/emu/Memory.h"
@@ -132,5 +133,33 @@ static inline uint64_t CurrentTime_nanoseconds()
   return std::chrono::duration_cast<std::chrono::nanoseconds>
          (std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 }
+
+#define ASSERT(condition) { \
+          if (!(condition)) {  \
+            std::cerr << "ASSERT FAILED: " << #condition << " @ " << __FILE__ << " (" << __LINE__ << ")" << std::endl; \
+            print_trace(); \
+            assert(condition); \
+          } \
+        }
+
+
+void print_trace (void)
+{
+  void *array[10];
+  size_t size;
+  char **strings;
+  size_t i;
+
+  size = backtrace (array, 10);
+  strings = backtrace_symbols (array, size);
+
+  printf ("Obtained %zd stack frames.\n", size);
+
+  for (i = 0; i < size; i++)
+     printf ("%s\n", strings[i]);
+
+  free (strings);
+}
+
 
 #endif /* _UTILS */
