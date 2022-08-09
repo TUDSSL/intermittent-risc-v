@@ -141,6 +141,7 @@ class Stats {
 
         log("Misc: hints given:", misc.hints_given, logger);
         log("Misc: Max ratio", misc.max_dirty_ratio, logger);
+        log("Misc: No of cuckoo iter:", misc.no_of_cuckoos, logger);
         logger << endl;
     }
 

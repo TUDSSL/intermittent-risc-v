@@ -45,6 +45,7 @@
 #include "../includes/DetectWAR.h"
 #include "../includes/Stats.hpp"
 #include "../includes/Logger.hpp"
+#include "PluginArgumentParsing.h"
 
 using namespace std;
 using namespace icemu;
@@ -78,7 +79,14 @@ class MemoryAccess : public HookMemory {
 
   MemoryAccess(Emulator &emu) : HookMemory(emu, "memory-access-ratio") {
     hook_instr_cnt = new HookInstructionCount(emu);
-    log.init("log/clank.log", SET_ASSOCIATIVE);
+    string filename;
+    
+
+    auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), "clank-log-file=");
+      if (arg1_val.size())
+        filename = arg1_val[0];
+    
+    log.init(filename, SET_ASSOCIATIVE);
   }
 
   ~MemoryAccess() {
