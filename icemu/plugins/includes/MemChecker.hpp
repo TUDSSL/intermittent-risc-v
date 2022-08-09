@@ -21,6 +21,14 @@
 using namespace std;
 using namespace icemu;
 
+struct hashFunction
+{
+  size_t operator()(const tuple<address_t, address_t> &x) const
+  {
+    return get<0>(x) ^ get<1>(x);
+  }
+};
+
 class MemChecker {
   public:
     unordered_set<address_t> writes;

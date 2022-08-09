@@ -13,6 +13,7 @@ using namespace std;
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
 static const float DIRTY_RATIO_THRESHOLD = 1.1;
 static const bool NVM_STATS_PER_BYTE = true;
+static const uint8_t CUCKOO_MAX_ITER = 6;
 
 static const uint64_t FREQ = 50 * 1000 * 1000; // MHz
 static const double TIME_FOR_CHECKPOINT_THRESHOLD = 50 / 1000; // in ms

@@ -8,6 +8,7 @@
 
 // Local includes
 #include "../includes/Stats.hpp"
+#include "../includes/Utils.hpp"
 
 using namespace std;
 
@@ -21,7 +22,7 @@ class Logger {
     Logger() = default;
     ~Logger() = default;
     
-    void init(string filename)
+    void init(string filename, enum CacheHashMethod hash)
     {
         continuous_logging_filename = filename + "-cont";
         final_logging_filename = filename + "-final";
@@ -31,6 +32,14 @@ class Logger {
         assert(logger_cont.is_open());
         logger_final.open(final_logging_filename.c_str(), ios::out | ios::trunc);
         assert(logger_final.is_open());
+        
+        if (hash == SKEW_ASSOCIATIVE) {
+          logger_cont << "PROWL" << endl;
+          logger_final << "PROWL" << endl;
+        } else {
+          logger_cont << "NACHO" << endl;
+          logger_final << "NACHO" << endl;
+        }
         
         logger_cont << "# checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
     }

@@ -43,6 +43,7 @@ struct MiscStats {
     float max_dirty_ratio;
     float dirty_ratio;
     uint64_t current_cycle;
+    uint32_t no_of_cuckoos;
 };
 
 class Stats {
@@ -91,7 +92,12 @@ class Stats {
     struct CheckpointStats checkpoint;
     struct MiscStats misc;
     
-    Stats() = default;
+    Stats() {
+        cache = {};
+        nvm = {};
+        checkpoint = {};
+        misc = {};
+    }
     ~Stats() = default;
 
     void printStats() {
@@ -113,6 +119,7 @@ class Stats {
 
         print("Misc: hints given:", misc.hints_given);
         print("Misc: Max ratio", misc.max_dirty_ratio);
+        print("Misc: No of cuckoo iter:", misc.no_of_cuckoos);
         cout << "\n-------------------------------------" << endl;
     }
 
@@ -162,6 +169,7 @@ class Stats {
     void incHintsGiven() { misc.hints_given++; }
     void updateCurrentCycle(uint64_t cycle) { misc.current_cycle = cycle; }
     uint64_t getCurrentCycle() { return misc.current_cycle; }
+    void incCuckooIterations() { misc.no_of_cuckoos++; }
     
     // Update checkpoint stats
     void incCheckpoints() { checkpoint.checkpoints++; }

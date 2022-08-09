@@ -63,19 +63,19 @@ class DetectWAR{
         case HookMemory::MEM_WRITE:
           // WAR scenario - R...W access
           if (isInReads && !isInWrites) {
-            cout << "R...W" << endl;
+            // cout << "R...W" << endl;
             possibleWAR = true;
             reset();
           }
           // Safe scenario - W...W or W..R..W access
           else if (isInReads || isInWrites) {
-            cout << "W...W or W..R..W" << endl;
+            // cout << "W...W or W..R..W" << endl;
             possibleWAR = false;
             writes.erase(writeLoc);
           }
           // Neither in read or write - new entry.
           else {
-            cout << "Just W" << endl;
+            // cout << "Just W" << endl;
             possibleWAR = false;
           }
 

@@ -36,11 +36,15 @@
 #include <chrono>
 
 #include "icemu/emu/Emulator.h"
+#include "icemu/emu/Memory.h"
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
 #include "icemu/emu/Architecture.h"
+
 #include "../includes/DetectWAR.h"
+#include "../includes/Stats.hpp"
+#include "../includes/Logger.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -68,19 +72,18 @@ class MemoryAccess : public HookMemory {
  public:
   HookInstructionCount *hook_instr_cnt;
   DetectWAR war;
-  uint32_t nvm_reads = 0, nvm_writes = 0, checkpoints = 0;
-  ofstream logger;
+  Logger log;
+  Stats stats;
+  
 
   MemoryAccess(Emulator &emu) : HookMemory(emu, "memory-access-ratio") {
     hook_instr_cnt = new HookInstructionCount(emu);
-    logger.open("plugins/stats/with_no_cache/stats", ios::out | ios::app);
+    log.init("log/clank.log", SET_ASSOCIATIVE);
   }
 
   ~MemoryAccess() {
-      logger << "NMV Reads: " << nvm_reads << endl;
-      logger << "NVM Writes: " << nvm_writes << endl;
-      logger << "Checkpoints: " << checkpoints << endl;
-      cout << "Ending the memory plugin" << endl;
+      stats.printStats();
+      log.printEndStats(stats);
   }
 
   void run(hook_arg_t *arg) {
@@ -90,19 +93,19 @@ class MemoryAccess : public HookMemory {
 
     switch (mem_type) {
       case MEM_READ:
-        nvm_reads++;
+        stats.incNVMReads(arg->size);
         break;
       
       case MEM_WRITE:
-        nvm_writes++;
+        stats.incNVMWrites(arg->size);
         break;
     }
 
-    if (war.isWAR(address, mem_type))
-      checkpoints++;
-
-    if (hook_instr_cnt->count % 100000 == 0)
+    if (war.isWAR(address, mem_type)) {
+      stats.incCheckpoints();
+      stats.incCheckpointsDueToWAR();
       war.reset();
+    }
   }
 };
 

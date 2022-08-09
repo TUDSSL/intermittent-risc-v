@@ -85,14 +85,14 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(); 
+    nvm.compareMemory(true); 
 
     // Do any logging/printing
     stats.printStats();
     log.printEndStats(stats);
 
     // Perform final checks
-    ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
+    ASSERT(hash_method == SKEW_ASSOCIATIVE || stats.cache.writes == stats.nvm.nvm_writes_without_cache);
 
     cout << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
@@ -148,7 +148,7 @@ class Cache {
     nvm.initMem(mem);
 
     // Initialize the logger
-    log.init(filename);
+    log.init(filename, hash_method);
   }
 
   address_t reconstructAddress(CacheLine &line)
@@ -178,9 +178,7 @@ class Cache {
 
       ASSERT(index <= no_of_sets);
       // cout << "Address: " << std::bitset<32>(addr) << "\tTag: " << std::bitset<25>(tag) << "\tIndex: " << std::bitset<5>(index) << "\tOffset: " << std::bitset<2>(offset) << endl;
-      
       // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
-
       // cout << "Dirty ratio: " << dirty_ratio << endl;
 
       checkDirtyRatioAndCreateCheckpoint();
@@ -284,6 +282,7 @@ class Cache {
         evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
         break;
       case SKEW:
+        // Perform the cuckoo hashing
         cuckooHashing(addr, offset, tag, index, value, type, size);
         return;
     }
@@ -328,45 +327,50 @@ class Cache {
                      address_t *value, enum HookMemory::memory_type type, address_t size)
   {
         // Algorithm based on https://ieeexplore-ieee-org.tudelft.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=9224198 (Section C)
+        int line_used = 0;
+        address_t cuckoo_hash;
         CacheLine cuckoo_incoming = {}, *cuckoo_cache = nullptr, cuckoo_temp = {};
 
-        // This line will be cuckooed around
+        // This line will be cuckooed around - this is the data that has to be inserted
+        setBit(VALID, cuckoo_incoming);
         cuckoo_incoming.blocks.offset_bits = offset;
         cuckoo_incoming.blocks.tag_bits = tag;
         cuckoo_incoming.blocks.set_bits = index;
         cuckoo_incoming.blocks.last_used = CurrentTime_nanoseconds();
-        clearBit(READ_DOMINATED, cuckoo_incoming);
-        clearBit(WRITE_DOMINATED, cuckoo_incoming);
-        clearBit(POSSIBLE_WAR, cuckoo_incoming);
-        clearBit(DIRTY, cuckoo_incoming);
-        setBit(VALID, cuckoo_incoming);
         cuckoo_incoming.blocks.data = *value;
         cuckoo_incoming.blocks.size = size;
-        cacheResetEntry(cuckoo_incoming, type, size);
+        cacheResetEntry(cuckoo_incoming, type, size); 
 
-        int line_used = 0;
-        address_t cuckoo_hash;
+        // cout << "Handling addr #" << hex << addr << "with data #" << *value << dec << endl;
 
         // Until we find a place or till max number of times
-        for (int cuckoo_iter = 0; cuckoo_iter < 10; cuckoo_iter++) {
-          cuckoo_hash = cacheHash(0, reconstructAddress(cuckoo_incoming), SKEW_ASSOCIATIVE, line_used); //32
-          // Find the next element that has to be removed
-          cuckoo_cache = &sets.at(cuckoo_hash).lines.at(line_used); //32
+        for (int cuckoo_iter = 0; cuckoo_iter < CUCKOO_MAX_ITER; cuckoo_iter++) {
+          // Get the line already in the cache based on the address of the incoming line
+          cuckoo_hash = cacheHash(0, reconstructAddress(cuckoo_incoming), SKEW_ASSOCIATIVE, line_used);
+          cuckoo_cache = &sets.at(cuckoo_hash).lines.at(line_used);
           
           // cout << "iter #" << cuckoo_iter << endl;
           // cout << "cuckoo_cache with index #" << cuckoo_incoming.blocks.set_bits << " line #" << line_used << " hash #" << cuckoo_hash << endl;
+          stats.incCuckooIterations();
 
+          // If the current line is dirty, then we need to move around stuff
           if (cuckoo_cache->valid && cuckoo_cache->dirty) {
-            // Backup the next element in the cache
-            memcpy(&cuckoo_temp, cuckoo_cache, sizeof(struct CacheLine));
-            // store the incoming element in the cache
-            memcpy(cuckoo_cache, &cuckoo_incoming, sizeof(struct CacheLine));
-            // The backedup element becomes the incoming element
-            memcpy(&cuckoo_incoming, &cuckoo_temp, sizeof(struct CacheLine));
-          } else {
-            // If found a nice place, just put it there
-            memcpy(cuckoo_cache, &cuckoo_incoming,  sizeof(struct CacheLine));
+            // Each unsuccessful iteration adds in 1 cache swap (which is 1 read, 1 write)
+            stats.incCacheReads(cuckoo_cache->blocks.size);
+            stats.incCacheWrites(cuckoo_incoming.blocks.size);
 
+            // Backup the line already in the cache
+            copyCacheLines(cuckoo_temp, *cuckoo_cache);
+            // store the incoming line in the cache
+            copyCacheLines(*cuckoo_cache, cuckoo_incoming);
+            // The removed line becomes the incoming element
+            copyCacheLines(cuckoo_incoming, cuckoo_temp);
+          } else {
+            // In case successful Cuckoo, it is 1 cache write
+            stats.incCacheWrites(cuckoo_incoming.blocks.size);
+
+            // If found a nice place, just put it there
+            copyCacheLines(*cuckoo_cache, cuckoo_incoming);
             // eviction is done, return
             return;
           }
@@ -384,10 +388,45 @@ class Cache {
         cacheNVMwrite(reconstructAddress(cuckoo_incoming), cuckoo_incoming.blocks.data, cuckoo_incoming.blocks.size, true);
         clearBit(DIRTY, cuckoo_incoming);
 
-        // Create a checkpoint because this can cause a WAR
-        createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+        stats.incCheckpoints();
+        stats.incCheckpointsDueToWAR(); 
+        for (CacheSet &s : sets) {
+            for (CacheLine &l : s.lines) {
+                if (l.valid) {
+                  // This is the line that was inserted in this iteration. This should not be evicted
+                  // during the current checkpoint. The checkpoint should be placed before the write
+                  // instruction and this write should not be placed.
+                  if (addr == reconstructAddress(l))
+                    continue;
+                  
+                  if (l.dirty) {
+                      // Perform the actual write to the memory
+                      cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                  }
+                  
+                  clearBit(DIRTY, l);
+                }
+            }
+        }
+ 
+        nvm.compareMemory();
 
         return;
+  }
+
+  void copyCacheLines(struct CacheLine &dst, struct CacheLine &src)
+  {
+    dst.blocks.data = src.blocks.data;
+    dst.blocks.set_bits = src.blocks.set_bits;
+    dst.blocks.tag_bits = src.blocks.tag_bits;
+    dst.blocks.offset_bits = src.blocks.offset_bits;
+    dst.blocks.size = src.blocks.size;
+    dst.blocks.last_used = src.blocks.last_used;
+    dst.valid = src.valid;
+    dst.dirty = src.dirty;
+    dst.possible_war = src.possible_war;
+    dst.read_dominated = src.read_dominated;
+    dst.write_dominated = src.write_dominated;
   }
 
   // Apply compiler hints
@@ -417,7 +456,8 @@ class Cache {
             }
           }
       }
-
+      
+      
       // Do we need this?
       stats.incHintsGiven();
       cost.modifyCost(Pipeline, HINTS, 0);
@@ -492,7 +532,6 @@ class Cache {
               if (l.dirty) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                  check_mem.writes.erase(reconstructAddress(l));
               }
               
               // Reset all bits
@@ -506,6 +545,8 @@ class Cache {
 
     for (auto &w : check_mem.writes)
       cout << "Writes not evicted #" << hex << w << dec << endl;
+
+    // assert(check_mem.writes.size() == 0);
 
     // Sanity check - MUST pass
     nvm.compareMemory();
@@ -542,7 +583,6 @@ class Cache {
           line.possible_war = true;
         break;
       case DIRTY:
-        check_mem.writes.insert(reconstructAddress(line));
         ASSERT(line.valid == true);
         // Check if not already set, set the bit and update the dirty ratio
         if (line.dirty == false) {
