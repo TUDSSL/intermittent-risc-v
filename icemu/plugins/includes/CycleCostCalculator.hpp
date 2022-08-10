@@ -25,6 +25,9 @@ using namespace std;
 #define CACHE_CHECKPOINT_COST 4
 #define PROCESSING_HINTS_COST 1
 
+// PROWL related costs
+#define CUCKOO_ITERATION_COST 1
+
 class CycleCost {
   private:
     uint64_t final_cycle_count;
@@ -77,6 +80,9 @@ class CycleCost {
                 break;
             case HINTS:
                 Pipeline->addToCycles(PROCESSING_HINTS_COST);
+                break;
+            case CUCKOO_ITER:
+                Pipeline->addToCycles(CUCKOO_ITERATION_COST);
                 break;
         }
     }

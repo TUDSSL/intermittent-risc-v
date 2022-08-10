@@ -92,7 +92,8 @@ class Cache {
     log.printEndStats(stats);
 
     // Perform final checks
-    ASSERT(hash_method == SKEW_ASSOCIATIVE || stats.cache.writes == stats.nvm.nvm_writes_without_cache);
+    ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
+    ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
 
     cout << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
@@ -133,7 +134,7 @@ class Cache {
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
       
-      for (auto j = 0; j < no_of_lines; j++) {
+      for (uint32_t j = 0; j < no_of_lines; j++) {
         auto line = &sets[i].lines[j];
         memset(&line->blocks, 0, sizeof(struct CacheBlock));
         line->valid = false;
@@ -181,6 +182,7 @@ class Cache {
       // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
       // cout << "Dirty ratio: " << dirty_ratio << endl;
 
+      // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
       checkCycleCountAndCreateCheckpoint();
 
@@ -195,15 +197,20 @@ class Cache {
       uint8_t collisions = 0;
 
       // Look for any entry in the Cache line marked by "index"
-      for (int i = 0; i < no_of_lines; i++) {
+      for (uint32_t i = 0; i < no_of_lines; i++) {
+          // Based on the type of hashing, fetch the location of the line
           address_t hashed_index = cacheHash(index, addr, hash_method, i);
           CacheLine &line = sets.at(hashed_index).lines[i];
 
+          // If the cache bit is valid, then there is some data
           if (line.valid) {
+              // Condition for a cache hit
               if (addr == reconstructAddress(line)) {
                   line.blocks.last_used = CurrentTime_nanoseconds();
                   stats.incCacheHits();
                   
+                  // Perform hit actions - note that these are slightly different
+                  // from putting a new element in an empty cache line
                   switch (type) {
                     case HookMemory::MEM_READ:
                       stats.incCacheReads(size);
@@ -240,12 +247,14 @@ class Cache {
               line.blocks.data = *value;
               line.blocks.size = size;
 
+              // Handle the cache entry specifically for the first time
               cacheResetEntry(line, type, size);
 
               break;
           }
       }
 
+      // Oh ho no no can't do this shit, must panic
       ASSERT(collisions <= no_of_lines);
 
       // Handle the collisions if any
@@ -272,6 +281,7 @@ class Cache {
     CacheLine *evicted_line = nullptr;
     address_t hashed_index;
 
+    // Perform the eviction based on the policy.
     switch (policy) {
       case LRU:
         hashed_index = cacheHash(index, 0, SET_ASSOCIATIVE, 0);
@@ -352,12 +362,13 @@ class Cache {
           // cout << "iter #" << cuckoo_iter << endl;
           // cout << "cuckoo_cache with index #" << cuckoo_incoming.blocks.set_bits << " line #" << line_used << " hash #" << cuckoo_hash << endl;
           stats.incCuckooIterations();
+          cost.modifyCost(Pipeline, CUCKOO_ITER, 0);
 
           // If the current line is dirty, then we need to move around stuff
           if (cuckoo_cache->valid && cuckoo_cache->dirty) {
-            // Each unsuccessful iteration adds in 1 cache swap (which is 1 read, 1 write)
-            stats.incCacheReads(cuckoo_cache->blocks.size);
-            stats.incCacheWrites(cuckoo_incoming.blocks.size);
+            // Each unsuccessful iteration adds 2 cache reads and 2 cache writes = 4 cache accesses
+            stats.incCacheAccess(cuckoo_cache->blocks.size * 2);
+            stats.incCacheAccess(cuckoo_incoming.blocks.size * 2);
 
             // Backup the line already in the cache
             copyCacheLines(cuckoo_temp, *cuckoo_cache);
@@ -367,7 +378,7 @@ class Cache {
             copyCacheLines(cuckoo_incoming, cuckoo_temp);
           } else {
             // In case successful Cuckoo, it is 1 cache write
-            stats.incCacheWrites(cuckoo_incoming.blocks.size);
+            stats.incCacheAccess(cuckoo_incoming.blocks.size);
 
             // If found a nice place, just put it there
             copyCacheLines(*cuckoo_cache, cuckoo_incoming);
@@ -378,8 +389,6 @@ class Cache {
           // Alternate the line use for every iteration
           line_used = (line_used + 1) % 2;
         }
-        
-        cout << "Cuckoo failed to find a nest - so throwing off the egg" << endl;
 
         ASSERT(cuckoo_incoming.valid == true);
         ASSERT(cuckoo_incoming.dirty == true);
@@ -390,6 +399,9 @@ class Cache {
 
         stats.incCheckpoints();
         stats.incCheckpointsDueToWAR(); 
+        
+        cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+        cost.modifyCost(Pipeline, CHECKPOINT, 0);
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
                 if (l.valid) {
@@ -399,9 +411,14 @@ class Cache {
                   if (addr == reconstructAddress(l))
                     continue;
                   
+                  // Note: Now there is a corner case for which the above if check will not work. It is
+                  // the corner case where the cuckoo forms a circle (which should not occur IMO). For
+                  // this case, the "addr" is a valid eviction and this results in a shadowMem failure.
+
                   if (l.dirty) {
                       // Perform the actual write to the memory
                       cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                      stats.incCacheAccess(l.blocks.size);
                   }
                   
                   clearBit(DIRTY, l);
@@ -436,10 +453,8 @@ class Cache {
       auto addr = address;
 
       // Fetch the tag, set and offset from the mem address
-      auto offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
       auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
-      auto tag = addr >> (uint32_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
       // Search for the cache line where the hint has to be given. If found
       // then reset the possibleWAR and the was_read flag. This will ensure that
@@ -464,6 +479,7 @@ class Cache {
   }
 
   // Perform the hashing which fetches the set from the cache.
+  // Note that @index is only used for SET ASSOCIATIVE and @addr is only used for SKEW ASSOCIATIVE
   address_t cacheHash(address_t index, address_t addr, enum CacheHashMethod type, uint32_t line_number)
   {
     switch (type) {
@@ -532,6 +548,7 @@ class Cache {
               if (l.dirty) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                  stats.incCacheAccess(l.blocks.size);
               }
               
               // Reset all bits
@@ -642,10 +659,18 @@ class Cache {
   // Check and create checkpoints in a period.
   bool checkCycleCountAndCreateCheckpoint()
   {
+    uint64_t diff = stats.getCurrentCycle() - stats.getLastCheckpointCycle();
+   
+    if (diff > stats.checkpoint.cycles_between_checkpoints)
+      stats.checkpoint.cycles_between_checkpoints = diff;
+
+    // A value of 0 disables the periodic checkpoint
     if (CYCLE_COUNT_CHECKPOINT_THRESHOLD == 0)
       return false;
 
-    if (stats.getCurrentCycle() - stats.getLastCheckpointCycle() > CYCLE_COUNT_CHECKPOINT_THRESHOLD) {
+    // If the difference between the current cycle and the last checkpoint is
+    // higher that the threshold, then create a checkpoint.
+    if (diff > CYCLE_COUNT_CHECKPOINT_THRESHOLD) {
       createCheckpoint(CHECKPOINT_DUE_TO_PERIOD);
       return true;
     }

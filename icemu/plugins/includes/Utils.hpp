@@ -11,13 +11,13 @@
 using namespace std;
 
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
-static const float DIRTY_RATIO_THRESHOLD = 1.1;
+static const float DIRTY_RATIO_THRESHOLD = 1.0;
 static const bool NVM_STATS_PER_BYTE = true;
 static const uint8_t CUCKOO_MAX_ITER = 6;
 
-static const uint64_t FREQ = 50 * 1000 * 1000; // MHz
-static const double TIME_FOR_CHECKPOINT_THRESHOLD = 50 / 1000; // in ms
-static const uint64_t CYCLE_COUNT_CHECKPOINT_THRESHOLD = TIME_FOR_CHECKPOINT_THRESHOLD * FREQ; // checkpoint after these cycles
+static const double FREQ = 1 * 1000 * 1000; // MHz
+static const double TIME_FOR_CHECKPOINT_THRESHOLD = 50.0 / 1000.0; // in ms
+static const double CYCLE_COUNT_CHECKPOINT_THRESHOLD = 0;//TIME_FOR_CHECKPOINT_THRESHOLD * FREQ; // checkpoint after these cycles
 
 // The cache block size in number of bytes
 #define NO_OF_CACHE_BLOCKS 4 // Equates to the cache block size of 4 bytes
@@ -49,7 +49,8 @@ enum CostSpecification {
   NVM_WRITE,
   EVICT,
   CHECKPOINT,
-  HINTS
+  HINTS,
+  CUCKOO_ITER
 };
 
 enum CacheBits {

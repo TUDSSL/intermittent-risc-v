@@ -19,6 +19,7 @@ struct CacheStats {
     uint32_t writes;
     uint32_t clean_evictions;
     uint32_t dirty_evictions;
+    uint32_t cache_access;
 };
 
 struct NVMStats {
@@ -34,6 +35,7 @@ struct CheckpointStats {
     uint32_t due_to_dirty;
     uint32_t due_to_period;
     uint64_t last_checkpoint_cycle;
+    uint64_t cycles_between_checkpoints;
     enum CheckpointReason cause;
     
 };
@@ -49,7 +51,7 @@ struct MiscStats {
 class Stats {
   private:    
     char separator = ' ';
-    int text_width = 26;
+    int text_width = 30;
     int num_width = 10;
     
     template<typename T> void printNum(T t)
@@ -106,6 +108,7 @@ class Stats {
         print("Cache hits:", cache.hits);
         print("Cache reads:", cache.reads);
         print("Cache writes:", cache.writes);
+        print("Cache Accesses:", cache.cache_access);
 
         print("NVM reads w/o cache:", nvm.nvm_reads_without_cache);
         print("NVM writes w/o cache:", nvm.nvm_writes_without_cache);
@@ -116,6 +119,7 @@ class Stats {
         print("Checkpoints due to WAR:", checkpoint.due_to_war);
         print("Checkpoints due to dirty:", checkpoint.due_to_dirty);
         print("Checkpoints due to period:", checkpoint.due_to_period);
+        print("Max cycles b/ checkpoints: ", checkpoint.cycles_between_checkpoints);
 
         print("Misc: hints given:", misc.hints_given);
         print("Misc: Max ratio", misc.max_dirty_ratio);
@@ -128,6 +132,7 @@ class Stats {
         log("Cache hits:", cache.hits, logger);
         log("Cache reads:", cache.reads, logger);
         log("Cache writes:", cache.writes, logger);
+        log("Cache Accesses:", cache.cache_access, logger);
 
         log("NVM reads w/o cache:", nvm.nvm_reads_without_cache, logger);
         log("NVM writes w/o cache:", nvm.nvm_writes_without_cache, logger);
@@ -159,6 +164,7 @@ class Stats {
     void incCacheWrites(uint64_t size) { cache.writes += size; }
     void incCacheCleanEvictions() { cache.clean_evictions++; }
     void incCacheDirtyEvictions() { cache.dirty_evictions++; }
+    void incCacheAccess(uint64_t size) { cache.cache_access += size;}
 
     // Update NVM stats
     void incNVMReads(uint64_t size) { nvm.nvm_reads += size; }

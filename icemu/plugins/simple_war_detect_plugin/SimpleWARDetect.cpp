@@ -97,7 +97,6 @@ class MemoryAccess : public HookMemory {
   void run(hook_arg_t *arg) {
     address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
-    address_t value = arg->value;
 
     switch (mem_type) {
       case MEM_READ:
