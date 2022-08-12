@@ -33,22 +33,14 @@ class Logger {
         logger_final.open(final_logging_filename.c_str(), ios::out | ios::trunc);
         assert(logger_final.is_open());
         
-        if (hash == SKEW_ASSOCIATIVE) {
-          logger_cont << "PROWL" << endl;
-          logger_final << "PROWL" << endl;
-        } else {
-          logger_cont << "NACHO" << endl;
-          logger_final << "NACHO" << endl;
-        }
-        
-        logger_cont << "# checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
+        logger_cont << "checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
     }
 
     void printCheckpointStats(Stats &stats) {
-        logger_cont << stats.checkpoint.checkpoints << "."
-                    << stats.misc.current_cycle << "."
-                    << stats.misc.current_cycle - stats.checkpoint.last_checkpoint_cycle << "."
-                    << stats.misc.dirty_ratio << "."
+        logger_cont << stats.checkpoint.checkpoints << ","
+                    << stats.misc.current_cycle << ","
+                    << stats.misc.current_cycle - stats.checkpoint.last_checkpoint_cycle << ","
+                    << stats.misc.dirty_ratio << ","
                     << stats.checkpoint.cause << endl;
     }
 

@@ -19,7 +19,8 @@ struct CacheStats {
     uint32_t writes;
     uint32_t clean_evictions;
     uint32_t dirty_evictions;
-    uint32_t cache_access;
+    uint32_t cache_cuckoo;
+    uint32_t cache_checkpoint;
 };
 
 struct NVMStats {
@@ -73,12 +74,12 @@ class Stats {
 
     template<typename T> void logNum(T t, ofstream &logger)
     {
-        logger << left << setw(text_width) << setfill(separator) << t;
+        logger << left << t;
     }
 
     template<typename T> void logText(T t, ofstream &logger)
     {
-        logger << left << setw(text_width) << setfill(separator) << t;
+        logger << left << t;
     }
 
     template<typename T, typename U> void log(T t1, U t2, ofstream &logger)
@@ -108,7 +109,8 @@ class Stats {
         print("Cache hits:", cache.hits);
         print("Cache reads:", cache.reads);
         print("Cache writes:", cache.writes);
-        print("Cache Accesses:", cache.cache_access);
+        print("Cache Cuckoo:", cache.cache_cuckoo);
+        print("Cache Checkpoints:", cache.cache_checkpoint);
 
         print("NVM reads w/o cache:", nvm.nvm_reads_without_cache);
         print("NVM writes w/o cache:", nvm.nvm_writes_without_cache);
@@ -128,25 +130,27 @@ class Stats {
     }
 
     void logStats(ofstream &logger) {
-        log("Cache misses:", cache.misses, logger);
-        log("Cache hits:", cache.hits, logger);
-        log("Cache reads:", cache.reads, logger);
-        log("Cache writes:", cache.writes, logger);
-        log("Cache Accesses:", cache.cache_access, logger);
+        log("cache_miss:", cache.misses, logger);
+        log("cache_hit:", cache.hits, logger);
+        log("cache_read:", cache.reads, logger);
+        log("cache_write:", cache.writes, logger);
+        log("cache_cuckoo:", cache.cache_cuckoo, logger);
+        log("cache_checkpoint:", cache.cache_checkpoint, logger);
 
-        log("NVM reads w/o cache:", nvm.nvm_reads_without_cache, logger);
-        log("NVM writes w/o cache:", nvm.nvm_writes_without_cache, logger);
-        log("NVM reads:", nvm.nvm_reads, logger);
-        log("NVM writes:", nvm.nvm_writes, logger);
+        log("nvm_reads_no_cache:", nvm.nvm_reads_without_cache, logger);
+        log("nvm_writes_no_cache:", nvm.nvm_writes_without_cache, logger);
+        log("nvm_reads:", nvm.nvm_reads, logger);
+        log("nvm_writes:", nvm.nvm_writes, logger);
 
-        log("Checkpoint:", checkpoint.checkpoints, logger);
-        log("Checkpoint WAR:", checkpoint.due_to_war, logger);
-        log("Checkpoint dirty:", checkpoint.due_to_dirty, logger);
-        log("Checkpoint period:", checkpoint.due_to_period, logger);
+        log("checkpoint:", checkpoint.checkpoints, logger);
+        log("checkpoint_war:", checkpoint.due_to_war, logger);
+        log("checkpoint_dirty:", checkpoint.due_to_dirty, logger);
+        log("checkpoint_period:", checkpoint.due_to_period, logger);
+        log("checkpoint_max_cycles: ", checkpoint.cycles_between_checkpoints, logger);
 
-        log("Misc: hints given:", misc.hints_given, logger);
-        log("Misc: Max ratio", misc.max_dirty_ratio, logger);
-        log("Misc: No of cuckoo iter:", misc.no_of_cuckoos, logger);
+        log("hints_given:", misc.hints_given, logger);
+        log("max_dirty_ratio:", misc.max_dirty_ratio, logger);
+        log("cuckoo_iter:", misc.no_of_cuckoos, logger);
         logger << endl;
     }
 
@@ -164,7 +168,8 @@ class Stats {
     void incCacheWrites(uint64_t size) { cache.writes += size; }
     void incCacheCleanEvictions() { cache.clean_evictions++; }
     void incCacheDirtyEvictions() { cache.dirty_evictions++; }
-    void incCacheAccess(uint64_t size) { cache.cache_access += size;}
+    void incCacheCuckoo(uint64_t size) { cache.cache_cuckoo += size;}
+    void incCacheCheckpoint(uint64_t size) { cache.cache_checkpoint += size;}
 
     // Update NVM stats
     void incNVMReads(uint64_t size) { nvm.nvm_reads += size; }

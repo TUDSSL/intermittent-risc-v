@@ -46,6 +46,10 @@
 #include "../includes/Stats.hpp"
 #include "../includes/Logger.hpp"
 #include "PluginArgumentParsing.h"
+#include "Riscv32E21Pipeline.hpp"
+#include "../includes/ShadowMemory.hpp"
+#include "../includes/CycleCostCalculator.hpp"
+#include "../includes/Utils.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -54,8 +58,11 @@ using namespace icemu;
 class HookInstructionCount : public HookCode {
  public:
   uint64_t count = 0;
+  RiscvE21Pipeline Pipeline;
 
-  HookInstructionCount(Emulator &emu) : HookCode(emu, "icnt-ratio") {
+  HookInstructionCount(Emulator &emu) : HookCode(emu, "icnt-ratio"), Pipeline(emu) {
+    Pipeline.setVerifyJumpDestinationGuess(false);
+    Pipeline.setVerifyNextInstructionGuess(false);
   }
 
   ~HookInstructionCount() {
@@ -63,6 +70,7 @@ class HookInstructionCount : public HookCode {
 
   void run(hook_arg_t *arg) {
     (void)arg;  // Don't care
+    Pipeline.add(arg->address, arg->size);
     ++count;
   }
 };
@@ -75,6 +83,9 @@ class MemoryAccess : public HookMemory {
   DetectWAR war;
   Logger log;
   Stats stats;
+  ShadowMemory nvm;
+  CycleCost cost;
+  address_t last_chp = 0;
   
 
   MemoryAccess(Emulator &emu) : HookMemory(emu, "memory-access-ratio") {
@@ -87,6 +98,7 @@ class MemoryAccess : public HookMemory {
         filename = arg1_val[0];
     
     log.init(filename, SET_ASSOCIATIVE);
+    nvm.initMem(&getEmulator().getMemory());
   }
 
   ~MemoryAccess() {
@@ -100,18 +112,37 @@ class MemoryAccess : public HookMemory {
 
     switch (mem_type) {
       case MEM_READ:
+        cost.modifyCost(&hook_instr_cnt->Pipeline, NVM_READ, arg->size);
         stats.incNVMReads(arg->size);
         break;
       
       case MEM_WRITE:
+        cost.modifyCost(&hook_instr_cnt->Pipeline, NVM_WRITE, arg->size);
         stats.incNVMWrites(arg->size);
         break;
     }
 
-    if (war.isWAR(address, mem_type)) {
+    switch(arg->mem_type) {
+      case MEM_READ:
+        // Nothing
+        break;
+      case MEM_WRITE:
+        nvm.shadowWrite(arg->address, arg->value, arg->size);
+        break;
+    }
+
+    if (hook_instr_cnt->Pipeline.getTotalCycles() - last_chp > CYCLE_COUNT_CHECKPOINT_THRESHOLD) {
       stats.incCheckpoints();
+      stats.incCheckpointsDueToPeriod();
+      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      war.reset();
+      last_chp = hook_instr_cnt->Pipeline.getTotalCycles();
+    } else if (war.isWAR(address, mem_type)) {
+      stats.incCheckpoints();
+      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
       stats.incCheckpointsDueToWAR();
       war.reset();
+      last_chp = hook_instr_cnt->Pipeline.getTotalCycles();
     }
   }
 };

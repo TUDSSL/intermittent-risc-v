@@ -57,8 +57,8 @@ class ShadowMemory{
         // First do a fast memcmp (assume it's optimized)
         int compareValue = memcmp(ShadowMem, MainMemSegment->data, MainMemSegment->length);
         if (compareValue == 0) {
-        // Memory is the same
-        return true;
+            // Memory is the same
+            return true;
         }
 
         cout << "\tCompare value: " << (int)compareValue << endl;
@@ -89,8 +89,8 @@ class ShadowMemory{
         // First do a fast memcmp (assume it's optimized)
         int compareValue = memcmp(ShadowMem, MainMemSegment->data, MainMemSegment->length);
         if (compareValue == 0) {
-        // Memory is the same
-        return true;
+            // Memory is the same
+            return true;
         }
 
         cout << "\tCompare value: " << (int)compareValue << endl;

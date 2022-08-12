@@ -147,7 +147,7 @@ class MemoryAccess : public HookMemory {
       if (arg3_val.size())
         hash_method = std::stoul(arg3_val[0]);
 
-      filename += "_" + std::to_string(size) + "_" + std::to_string(lines);
+      filename += "-" + std::to_string(size) + "-" + std::to_string(lines);
       cout << "Lines from outside " << lines << endl;
       CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method);
   }

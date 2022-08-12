@@ -85,7 +85,7 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(true); 
+    nvm.compareMemory(); 
 
     // Do any logging/printing
     stats.printStats();
@@ -191,6 +191,9 @@ class Cache {
 
       // stats for normal nvm
       normalNVMAccess(type, size);
+
+      if (type == HookMemory::MEM_WRITE)
+        check_mem.writes.insert(addr);
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
@@ -367,8 +370,11 @@ class Cache {
           // If the current line is dirty, then we need to move around stuff
           if (cuckoo_cache->valid && cuckoo_cache->dirty) {
             // Each unsuccessful iteration adds 2 cache reads and 2 cache writes = 4 cache accesses
-            stats.incCacheAccess(cuckoo_cache->blocks.size * 2);
-            stats.incCacheAccess(cuckoo_incoming.blocks.size * 2);
+            stats.incCacheCuckoo(cuckoo_cache->blocks.size * 2);
+            stats.incCacheCuckoo(cuckoo_incoming.blocks.size * 2);
+            // Apart from the access, compute the extra cycle cost as well.
+            cost.modifyCost(Pipeline, CACHE_ACCESS, cuckoo_cache->blocks.size * 2);
+            cost.modifyCost(Pipeline, CACHE_ACCESS, cuckoo_incoming.blocks.size * 2);
 
             // Backup the line already in the cache
             copyCacheLines(cuckoo_temp, *cuckoo_cache);
@@ -378,7 +384,8 @@ class Cache {
             copyCacheLines(cuckoo_incoming, cuckoo_temp);
           } else {
             // In case successful Cuckoo, it is 1 cache write
-            stats.incCacheAccess(cuckoo_incoming.blocks.size);
+            stats.incCacheCuckoo(cuckoo_incoming.blocks.size);
+            cost.modifyCost(Pipeline, CACHE_READ, size);
 
             // If found a nice place, just put it there
             copyCacheLines(*cuckoo_cache, cuckoo_incoming);
@@ -405,6 +412,7 @@ class Cache {
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
                 if (l.valid) {
+                  ASSERT(l.blocks.size != 0);
                   // This is the line that was inserted in this iteration. This should not be evicted
                   // during the current checkpoint. The checkpoint should be placed before the write
                   // instruction and this write should not be placed.
@@ -418,7 +426,7 @@ class Cache {
                   if (l.dirty) {
                       // Perform the actual write to the memory
                       cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                      stats.incCacheAccess(l.blocks.size);
+                      stats.incCacheCheckpoint(l.blocks.size);
                   }
                   
                   clearBit(DIRTY, l);
@@ -548,7 +556,7 @@ class Cache {
               if (l.dirty) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                  stats.incCacheAccess(l.blocks.size);
+                  stats.incCacheCheckpoint(l.blocks.size);
               }
               
               // Reset all bits
@@ -687,6 +695,7 @@ class Cache {
       cost.modifyCost(Pipeline, NVM_WRITE, size);
     }
     
+    check_mem.writes.erase(address);
     nvm.shadowWrite(address, value, size);
   }
 

@@ -68,6 +68,9 @@ class CycleCost {
             case CACHE_WRITE:
                 /* do nothing as this is the default case */
                 break;
+            case CACHE_ACCESS:
+                Pipeline->addToCycles(CACHE_READ_COST * size);
+                break;
             case NVM_READ:
                 Pipeline->addToCycles(NVM_READ_COST * size - CACHE_READ_COST);
                 break;
