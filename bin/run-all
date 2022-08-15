@@ -7,14 +7,14 @@ ICEMU="$ROOT/icemu"
 ICEMU_EXTERNAL_PLUGINS="$ICEMU/plugins/"
 ICEMU_LOG="$ICEMU/log"
 
-for prg in crc aes sha coremark picojpeg dijkstra towers quicksort                               
+for prg in crc aes coremark picojpeg dijkstra towers quicksort sha                               
 do                                                                              
 	echo -n "Running $prg <===="    
-	run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=512 -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-NACHO &> $ICEMU_LOG/all_dump.log
+	run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=512 -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho &> $ICEMU_LOG/all_dump.log
 	echo -n "==="
-	run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=1 -a cache-size=512 -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-PROWL &> $ICEMU_LOG/all_dump.log
+	run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=1 -a cache-size=512 -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-prowl &> $ICEMU_LOG/all_dump.log
 	echo -n "==="
-	run-elf -p simple_war_detect_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a clank-log-file=$ICEMU_LOG/$prg-CLANK &> $ICEMU_LOG/all_dump.log
+	run-elf -p simple_war_detect_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a clank-log-file=$ICEMU_LOG/$prg-clank &> $ICEMU_LOG/all_dump.log
 	echo "===>"
 done
 
