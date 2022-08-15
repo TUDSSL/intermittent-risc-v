@@ -25,7 +25,7 @@ using namespace std;
 using namespace icemu;
 
 class DetectWAR{
-  private:
+  public:
     unordered_set<address_t> reads, writes;
 
   public:
