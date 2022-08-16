@@ -7,20 +7,23 @@ ICEMU="$ROOT/icemu"
 ICEMU_EXTERNAL_PLUGINS="$ICEMU/plugins/"
 ICEMU_LOG="$ICEMU/log"
 
-for cache in 256 512 1024
+for cache in $1
 do
-	echo "Running for cache size: $cache" 
-	for prg in crc aes coremark picojpeg dijkstra towers quicksort sha                               
+	for lines in 2 4
 	do
-		echo -n "Running $prg\t <===="
-		run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-naive &> $ICEMU_LOG/all_dump.log -a enable-pw-bit=0
-		echo -n ".==="
-		run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-pw &> $ICEMU_LOG/all_dump.log -a enable-pw-bit=1
-		echo -n ".==="
-		run-elf -p clank_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-clank &> $ICEMU_LOG/all_dump.log
-		echo -n ".==="
-		run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=1 -a cache-size=$cache -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-prowl &> $ICEMU_LOG/all_dump.log
-		echo ".===>"
+		echo "Running for cache size: $cache" 
+		for prg in crc aes coremark picojpeg dijkstra towers quicksort sha                               
+		do
+			echo -n "Running $prg\t <===="
+			run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=$lines -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-naive &> $ICEMU_LOG/all_dump.log -a enable-pw-bit=0
+			echo -n ".==="
+			run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=$lines -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-pw &> $ICEMU_LOG/all_dump.log -a enable-pw-bit=1
+			echo -n ".==="
+			run-elf -p clank_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=0 -a cache-size=$cache -a cache-lines=$lines -a custom-cache-log-file=$ICEMU_LOG/$prg-nacho-clank &> $ICEMU_LOG/all_dump.log
+			echo -n ".==="
+			run-elf -p custom_cache_plugin.so $ICEMU/binaries/riscv/$prg-32bit.elf -a hash-method=1 -a cache-size=$cache -a cache-lines=2 -a custom-cache-log-file=$ICEMU_LOG/$prg-prowl &> $ICEMU_LOG/all_dump.log
+			echo ".===>"
+		done
 	done
 done
 
