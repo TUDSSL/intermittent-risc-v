@@ -4,7 +4,7 @@
 /*
  * Can be compiled with debug information
  */
-#define DEBUG_PRINT
+//#define DEBUG_PRINT
 #ifdef DEBUG_PRINT
 #define dbg() errs()
 #else
@@ -23,9 +23,8 @@ void DependencyAnalysis::analyzeModule() {
     if (F->isIntrinsic())
       continue;
 
-    if (F->hasExternalLinkage()) {
+    if (F->getInstructionCount() == 0)
       continue;
-    }
 
     // Analyze the function
     analyzeFunction(F);
