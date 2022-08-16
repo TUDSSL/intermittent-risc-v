@@ -8,6 +8,8 @@
 #include "Configurations.hpp"
 #include "PassUtils.hpp"
 
+#include "SetManipulation.hpp"
+
 using namespace llvm::noelle;
 
 namespace CacheNoWritebackHintNS {
@@ -26,24 +28,21 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
   if (F.isIntrinsic())
     return Candidates;
 
-  if (F.hasExternalLinkage()) {
-    return Candidates;
-  }
-
   auto FunctionName = F.getName();
-  dbg() << "Analyzing function: " << FunctionName << "\n";
+  dbgs() << "Analyzing function: " << FunctionName << "\n";
+
+  if (F.getInstructionCount() == 0)
+    return Candidates;
+
+  //if (F.hasExternalLinkage()) {
+  //  dbgs() << "External\n";
+  //  return Candidates;
+  //}
 
   if (FunctionName == "__cache_hint") {
-    dbg() << "Skipping function\n";
+    dbgs() << "Skipping function\n";
     return Candidates;
   }
-
-#if 0
-  if (FunctionName != "main") {
-    dbg() << "Skipping function\n";
-    return Candidates;
-  }
-#endif
 
   // Get the Reach analysis for the function
   auto DFA = N.getDataFlowAnalyses();
@@ -52,198 +51,47 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
   // Get the Dominator Tree analysis
   auto DT = N.getDominators(&F)->DT;
 
-  // Find all the read instructions
-  for (auto &BB : F) {
-    for (auto &I : BB) {
-      auto [IsCandidate, Candidate] = analyzeInstruction(N, DA, *DFR, DT, I);
-      if (IsCandidate) {
-        Candidates.push_back(Candidate);
+  //struct WAR {
+  //  Instruction *Read;
+  //  Instruction *Write;
+  //};
+
+  // Get all the WAR violations in the function
+  vector<WAR> WARs;
+  for (auto &I : instructions(F)) {
+    auto WARDeps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
+    if (WARDeps == nullptr) continue;
+    set<Instruction *> WARWrites;
+    for (auto &WARDep : *WARDeps) {
+      if (WARDep.IsMust) {
+        WARs.push_back(WAR{.Read = &I, .Write = WARDep.Instruction});
       }
+    }
+  }
+
+  dbgs() << "WARs in function:\n";
+  for (auto &WAR : WARs) {
+    dbgs() << "WAR:\n  read: " << *WAR.Read << "\n  write: " << *WAR.Write << "\n";
+  }
+
+  // Create the DFA
+  auto DFE = N.getDataFlowEngine();
+  
+  auto CustomDFA = writeAfterReadReachDFA(DFE, F, WARs);
+
+  dbgs() << "\n";
+  for (auto &I : instructions(F)) {
+    dbgs() << "Instruction: " << I << "\n";
+    auto IOUT = CustomDFA->OUT(&I);
+    dbgs() << " OUT:\n";
+    for (auto &II : IOUT) {
+      dbgs() << "  " << *II << "\n";
     }
   }
 
   return Candidates;
 }
 
-std::tuple<bool, CacheNoWritebackHint::CandidateTy>
-CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
-                                         DataFlowResult &DFReach, DomTreeSummary &DT,
-                                         Instruction &I) {
-
-  // Only Load instructions can be a candidate
-  if (!isa<LoadInst>(&I))
-    return {false, CandidateTy{}};
-
-  // Load instruction
-  dbgs() << "Analyzing possible candidate instruction: " << I << "\n";
-
-  // Get the candidate RAR dependencies
-  set<Instruction *> RARs;
-  auto RARDeps =
-      DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, &I);
-  if (RARDeps != nullptr) {
-    dbgs() << "  Candidate RAR dependencies:\n";
-    for (auto Dep : *RARDeps) {
-      dbgs() << "    " << Dep << "\n";
-
-      // If MAY or MUST we add it to the candidate
-      RARs.insert(Dep.Instruction);
-    }
-  } else {
-    dbgs() << "  Candidate has no RAR dependencies\n";
-  }
-
-  // Get the candidate WAR dependencies
-  set<Instruction *> WARs;
-  auto WARDeps =
-      DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
-  if (WARDeps != nullptr) {
-    dbgs() << "  candidate WAR dependencies:\n";
-    for (auto Dep : *WARDeps) {
-      dbgs() << "    " << Dep << "\n";
-
-      // If MUST we add it to the candidate
-      if (Dep.IsMust)
-        WARs.insert(Dep.Instruction);
-    }
-  } else {
-    dbgs() << "  Candidate has no WAR dependencies\n";
-  }
-
-  // Instructions reachable by the WAR writes
-  set<Value *> WARWritesReach;
-  for (auto &Store : WARs) {
-    auto &ReachedByWarWrite = DFReach.OUT(Store);
-    for (auto R : ReachedByWarWrite) {
-      WARWritesReach.insert(R);
-    }
-  }
-
-  // Instructions reachable by the RAR reads
-  set<Value *> RARReadsReach;
-  for (auto &Load : RARs) {
-    auto &ReachedByRarRead = DFReach.OUT(Load);
-    for (auto R : ReachedByRarRead) {
-      RARReadsReach.insert(R);
-    }
-  }
-
-  // Instructions reachable by the Candidate instruction (Load)
-  auto &CandidateReach = DFReach.OUT(&I);
-
-  // Instructions that are candidates (a subset of CandidateReach)
-  set<Instruction *> CandidateHintLocations;
-
-  // Contains helper
-  auto contains = [](set<Value *> ValueSet, Value *InstrValue) {
-    if (ValueSet.find(InstrValue) != ValueSet.end()) {
-      return true;
-    } else {
-      return false;
-    }
-  };
-
-  // The VALID possible hint locations
-  HintLocationsTy PossibleHintLocations;
-
-  // Go through the possible hint locations for the candidate
-  dbgs() << "  Finding hint locations for candidate\n";
-  for (auto &PossibleHintLocation : CandidateReach) {
-
-    // Skip debug insructions
-    if (isa<IntrinsicInst>(PossibleHintLocation))
-      continue;
-
-    // Skip PHI nodes
-    if (isa<PHINode>(PossibleHintLocation))
-      continue;
-
-    dbgs() << "    Analyzing possible hint location: " << *PossibleHintLocation
-           << "\n";
-
-    // The read MUST dominate the candidate (otherwise the read might not have happened)
-    if (!DT.dominates(&I, dyn_cast<Instruction>(PossibleHintLocation))) {
-      dbgs() << "      INVALID - Candidate does not Dominate possible hint location\n";
-      continue;
-    }
-
-    // If it is a RAR read, then it's not a candidate
-    bool IsRARRead = false;
-    for (auto &Load : RARs) {
-      if (Load == PossibleHintLocation) {
-        IsRARRead = true;
-        break;
-      }
-    }
-    if (IsRARRead) {
-      dbgs() << "      INVALID - Possible hint location is RAR read\n";
-      continue;
-    }
-
-    // If it is in the RARReadReach, then it's not a candidate (it's after a RAR
-    // read)
-    if (contains(RARReadsReach, PossibleHintLocation)) {
-      dbgs() << "      INVALID - Possible hint location is in the RARReachReads\n";
-      continue;
-    }
-
-    // If it is in the WARWriteReach, then it's not a candidate (it's after a
-    // WAR write)
-    if (contains(WARWritesReach, PossibleHintLocation)) {
-      dbgs() << "      INVALID - Possible hint location is in the WARWriteReach\n";
-      continue;
-    }
-
-    // If ANY reachable instructions FROM THIS CANDIDATE can reach any RAR read,
-    // then it's NOT a candidate (it can lead to the RAR read)
-    auto &PossibleHintLocationReach =
-        DFReach.OUT(dyn_cast<Instruction>(PossibleHintLocation));
-    bool CanReachRARRead = false;
-    for (auto &RARRead : RARs) {
-      if (contains(PossibleHintLocationReach, RARRead)) {
-        CanReachRARRead = true;
-        break;
-      }
-    }
-    if (CanReachRARRead) {
-      dbgs() << "      INVALID - Possible hint location can reach a RAR read\n";
-      continue;
-    }
-
-    // If ALL reachable instructions FROM THIS CANDIDATE MUST reach any WAR write,
-    // then it's a candidate
-
-    // Otherwise, it's a candidate
-    dbgs() << "      VALID - Valid hint location!\n";
-    PossibleHintLocations.insert(dyn_cast<Instruction>(PossibleHintLocation));
-  }
-
-  // If the candidate instruction has NO possible hint locations, it's not a candidate
-  if (PossibleHintLocations.size() == 0) {
-    return {false, CandidateTy{}};
-  }
-
-
-  // The instruction I is a valid candidate, and has possible hint locations
-  return {true,
-          CandidateTy{.I = &I, .PossibleHintLocations = PossibleHintLocations}};
-}
-
-void CacheNoWritebackHint::selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
-  CandidatesTy HintLocations;
-
-  for (auto &C : Candidates) {
-    Instruction *I = C.I;
-    // Get reachable instructions from candidate
-    dbgs() << "Analyzing candidate: " << *I << "\n";
-
-    // TODO: Select the best candidate
-    Instruction *HI = *C.PossibleHintLocations.begin();
-    dbgs() << "Selected instruction: " << *HI << "\n";
-
-    C.SelectedHintLocations.insert(HI);
-  }
-}
 
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
                                                   std::string FunctionName,
@@ -307,6 +155,9 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
   // Analyze all the instruction dependencies
   DependencyAnalysis DA = DependencyAnalysis(N);
 
+  // Debug
+  dbgs() << "#WARs: " << DA.getInstructionDependenciesTo().WARs.size() << "\n";
+
   // Go through all the functions
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
@@ -316,9 +167,6 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
 
     // Analyze the function
     CandidatesTy Candidates = analyzeFunction(N, DA, *F);
-
-    // Find the ideal instructions to place hints
-    selectHintLocations(N, DA, Candidates);
 
     // Print the candidates and possible locations
     dbgs() << "CacheNoWritebackHint candidates for function: " << F->getName() << "\n";
@@ -360,6 +208,9 @@ bool CacheNoWritebackHint::runOnModule(Module &M) {
   auto &N = getAnalysis<Noelle>();
   errs() << prefixString << "The program has "
          << N.numberOfProgramInstructions() << " instructions\n";
+
+  // For unit tests
+  dbgs() << "#instructions: " << N.numberOfProgramInstructions() << "\n";
 
   /*
    * Apply the transformation

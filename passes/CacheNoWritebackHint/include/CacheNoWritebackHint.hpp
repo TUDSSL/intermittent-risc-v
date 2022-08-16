@@ -31,6 +31,11 @@ public:
 private:
   std::string prefixString;
 
+  struct WAR {
+    llvm::Instruction *Read;
+    llvm::Instruction *Write;
+  };
+
   bool run(Noelle &N, Module &M);
 
   //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
@@ -42,6 +47,8 @@ private:
   void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I, Instruction *HintLocation);
 
   void selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+
+  DataFlowResult *writeAfterReadReachDFA(DataFlowEngine &DFE, Function &F, std::vector<WAR> &WARs);
 
   //CandidatesTy analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
   //void analyzeCandidate(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
