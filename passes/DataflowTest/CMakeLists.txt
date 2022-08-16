@@ -1,6 +1,6 @@
 # Project
 cmake_minimum_required(VERSION 3.12)
-project(DataflowIntersection)
+project(DataflowTest)
 
 # Programming languages to use
 enable_language(C CXX)

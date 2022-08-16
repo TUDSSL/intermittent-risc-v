@@ -28,6 +28,7 @@ include_directories(
     $ENV{NOELLE}/include/svf
     ${CMAKE_SOURCE_DIR}/include
     ${COMMON_DIR}/PassUtils/include
+    ${COMMON_DIR}/DataFlowEngineExt/include
 )
 
 # Declare the LLVM pass to compile
