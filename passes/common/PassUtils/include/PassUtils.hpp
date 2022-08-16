@@ -48,6 +48,11 @@ llvm::GlobalVariable *GetOrInsertGlobalInteger(llvm::Module *M,
                                                size_t Alignment = 4);
 
 /*
+ * Operand string helper
+ */
+std::string GetOperandString(llvm::Value &V);
+
+/*
  * Iteration Helper
  *
  * FunctionToInvokePerInstruction returns [bool, bool]

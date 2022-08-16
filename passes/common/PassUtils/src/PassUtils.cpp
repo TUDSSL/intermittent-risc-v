@@ -99,6 +99,13 @@ void PassUtils::SetInstrumentationMetadata(Instruction *I,
   return;
 }
 
+std::string PassUtils::GetOperandString(llvm::Value &V) {
+  std::string op_str;
+  raw_string_ostream op_stream(op_str);
+  V.printAsOperand(op_stream, false);
+  return op_stream.str();
+}
+
 GlobalVariable *PassUtils::GetOrInsertGlobalInteger(llvm::Module *M,
                                                llvm::IntegerType *Type,
                                                const std::string Name,
