@@ -21,4 +21,30 @@ StackedBarColors = [
     ['#9FA8DA', '#7986CB', '#5C6BC0', '#3F51B5']
 ]
 
-patterns = ('/', '\\', '.', '*', 'x', 'O')
+ColorWheel = [
+    ['#BFC0C0'], # Silver
+    ['#4F5D75'], # Coral
+    ['#85BAA1'], # Teal
+    ['#2D3142'], # Deep grey
+    ['#EF8354'], # Mandarin
+]
+
+ColorName = {
+    'Silver' : '#BFC0C0',
+    'Coral' : '#4F5D75',
+    'Teal' : '#85BAA1',
+    'Deep grey' : '#2D3142',
+    'Mandarin' : '#EF8354',
+    'Purple' : '#571F4E'
+}
+
+ColorShades = [
+    ['#507255'],
+    ['#488B49'],
+    ['#606D5D'],
+    ['#88958D'],
+    ['#508CA4'],
+    ['#4A8FE7'],
+]
+
+patterns = ('', '\\', 'x', '*', 'x', '/')
