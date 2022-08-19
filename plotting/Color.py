@@ -22,10 +22,10 @@ StackedBarColors = [
 ]
 
 ColorWheel = [
-    ['#BFC0C0'], # Silver
-    ['#4F5D75'], # Coral
-    ['#85BAA1'], # Teal
-    ['#2D3142'], # Deep grey
+    ['#BFC0C0'], # Silver - Clank
+    ['#4F5D75'], # Coral - Prowl
+    ['#85BAA1'], # Teal - Nacho
+    ['#2D3142'], # Deep grey - Nacho
     ['#EF8354'], # Mandarin
 ]
 
@@ -35,16 +35,25 @@ ColorName = {
     'Teal' : '#85BAA1',
     'Deep grey' : '#2D3142',
     'Mandarin' : '#EF8354',
-    'Purple' : '#571F4E'
+    'Purple' : '#571F4E',
+    'Pink' : '#F7AEF8'
 }
 
 ColorShades = [
-    ['#507255'],
-    ['#488B49'],
+    ['#507255'], 
+    ['#488B49'], 
     ['#606D5D'],
     ['#88958D'],
     ['#508CA4'],
     ['#4A8FE7'],
 ]
 
-patterns = ('', '\\', 'x', '*', 'x', '/')
+ColorScheme = {
+    "clank" : '#BFC0C0', # Silver 
+    "prowl" : '#4F5D75', # Coral 
+    "nacho-pw" : '#85BAA1', # Teal 
+    "nacho-naive" : '#2D3142', # Deep grey
+    "nacho-clank" : '#005E7C', # Blue
+}
+
+patterns = ('', '\\', 'x', '-', 'x', '/')
