@@ -40,20 +40,32 @@ ColorName = {
 }
 
 ColorShades = [
-    ['#507255'], 
-    ['#488B49'], 
-    ['#606D5D'],
-    ['#88958D'],
-    ['#508CA4'],
-    ['#4A8FE7'],
+    ['#fca17d'], 
+    ['#f9dbbd'], 
+    ['#52b788'],
+    ['#b7e4c7'],
+    ['#468faf'],
+    ['#89c2d9'],
 ]
 
+ColorPalette = {
+    "Matte" : {'silver':"#cad2c5",
+               'orange':"#e07a5f",
+               'blue':"#3d405b",
+               'teal':"#81b29a",
+               'yellow':"#f1c40f",
+               'brown':"#a98467",
+               'green':"#40916c",
+               'coral' :'#4F5D75',
+               }
+}
+
 ColorScheme = {
-    "clank" : '#BFC0C0', # Silver 
-    "prowl" : '#4F5D75', # Coral 
-    "nacho-pw" : '#85BAA1', # Teal 
-    "nacho-naive" : '#2D3142', # Deep grey
-    "nacho-clank" : '#005E7C', # Blue
+    "clank" : ColorPalette['Matte']["blue"], # Silver 
+    "prowl" : ColorPalette['Matte']["teal"], # Coral 
+    "nacho-pw" : ColorPalette['Matte']["orange"], # Teal 
+    "nacho-naive" : ColorPalette['Matte']["brown"], # Deep grey
+    "nacho-clank" : ColorPalette['Matte']["coral"], # Blue
 }
 
 patterns = ('', '\\', 'x', '-', 'x', '/')
