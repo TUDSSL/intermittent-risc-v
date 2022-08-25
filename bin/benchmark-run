@@ -11,6 +11,7 @@ set -e
 
 LOGDIR="$ICLANG_ROOT/benchmarks/logs"
 mkdir -p $LOGDIR
+mkdir -p $LOGDIR/binaries
 
 # Uninstrumented
 # Does not perform any transformations but does go trough the pipeline
@@ -25,6 +26,7 @@ function nacho-naive() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho-naive \
         -a enable-pw-bit=0 \
         $elf
+
 }
 
 function nacho-pw() {
@@ -102,8 +104,13 @@ fi
 # Run a composit target with arguemts
 # Replace + with space should be the correct argument
 comp_target=${target//"+"/" "}
+
 echo "Running target: $comp_target"
 $comp_target $elf $bench_name
+
+# Copy the elf file to the binaries directory
+cp "$elf" "$LOGDIR/binaries/$compile_config-$elf"
+
 exit 0
 
 # Not a target
