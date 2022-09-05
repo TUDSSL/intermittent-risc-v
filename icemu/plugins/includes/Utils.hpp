@@ -127,14 +127,33 @@ struct CacheLine {
   }
 };
 
+class CacheeLine {
+  private:
+    CacheBlock blocks;
+    bool valid;
+    bool dirty;
+    bool read_dominated;
+    bool write_dominated;
+    bool possible_war;
+
+  public:
+
+    CacheeLine() {}
+    ~CacheeLine() {}
+
+    
+
+}
+
+
 struct CacheSet {
   std::vector<CacheLine> lines;
 };
 
-static inline uint64_t CurrentTime_nanoseconds()
+static inline volatile void updateCacheLastUsed(CacheLine &line)
 {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>
-         (std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+  line.blocks.last_used = std::chrono::duration_cast<std::chrono::nanoseconds>
+                          (std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 }
 
 #define ASSERT(condition) { \
@@ -164,5 +183,10 @@ void print_trace (void)
   free (strings);
 }
 
+static inline void cacheStoreAddress(CacheLine &line, address_t tag, address_t offset, address_t index) {
+  line.blocks.tag_bits = tag;
+  line.blocks.offset_bits = offset;
+  line.blocks.set_bits = index;
+}
 
 #endif /* _UTILS */

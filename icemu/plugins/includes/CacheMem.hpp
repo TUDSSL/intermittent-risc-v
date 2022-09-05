@@ -28,7 +28,7 @@
 
 // Local includes
 #include "../includes/DetectWAR.h"
-#include "../includes/ShadowMemory.hpp"
+#include "../includes/LocalMemory.hpp"
 #include "../includes/Stats.hpp"
 #include "../includes/CycleCostCalculator.hpp"
 #include "../includes/Logger.hpp"
@@ -54,14 +54,13 @@ class Cache {
 
     // Helper stuffs
     Stats stats;
-    ShadowMemory nvm;
-    icemu::Memory *mem;
+    LocalMemory nvm;
+    icemu::Memory *EmuMem;
     CycleCost cost;
     Logger log;
     uint64_t last_checkpoint_cycle;
     MemChecker check_mem;
     bool enable_pw;
-
 
   public:
     RiscvE21Pipeline *Pipeline;
@@ -71,6 +70,7 @@ class Cache {
   ~Cache()
   {
     uint32_t non_used_cache_blocks = 0;
+
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
@@ -112,7 +112,7 @@ class Cache {
             icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method, bool enable_pw)
   {
     // Initialize meta stuffs
-    mem = &emu_mem;
+    EmuMem = &emu_mem;
     capacity = size;
     no_of_lines = ways;
     policy = p;
@@ -148,7 +148,7 @@ class Cache {
     }
 
     // Initialize the shadow mem
-    nvm.initMem(mem);
+    nvm.initMem(EmuMem);
 
     // Initialize the logger
     log.init(filename, hash_method);
@@ -166,23 +166,20 @@ class Cache {
     return address;
   }
 
-  uint32_t* run(address_t addr, enum HookMemory::memory_type type, address_t *value, address_t size)
+  uint32_t* run(address_t addr, enum HookMemory::memory_type type, address_t *value, const address_t size)
   {
-      // addr = 0b11010110110101000111011010101111;
+      // This is the data tha needs to be returned to the CPU from the cache.
+      uint64_t data = 0;
 
       // Only supports 32 bit now, will ASSERT for 64bit
       ASSERT(size == 1 || size == 2 || size == 4);
 
       // Fetch the tag, set and offset from the mem address
-      address_t offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
-      address_t index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
-      index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
-      address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
+      const address_t offset = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE));
+      const address_t index = (addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)))) >> NUM_BITS(CACHE_BLOCK_SIZE);
+      const address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
       ASSERT(index <= no_of_sets);
-      // cout << "Address: " << std::bitset<32>(addr) << "\tTag: " << std::bitset<25>(tag) << "\tIndex: " << std::bitset<5>(index) << "\tOffset: " << std::bitset<2>(offset) << endl;
-      // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
-      // cout << "Dirty ratio: " << dirty_ratio << endl;
 
       // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
@@ -194,6 +191,7 @@ class Cache {
       // stats for normal nvm
       normalNVMAccess(type, size);
 
+      // Extra checks for the shadow memory
       if (type == HookMemory::MEM_WRITE)
         check_mem.writes.insert(addr);
 
@@ -207,30 +205,50 @@ class Cache {
           address_t hashed_index = cacheHash(index, addr, hash_method, i);
           CacheLine &line = sets.at(hashed_index).lines[i];
 
-          // If the cache bit is valid, then there is some data
-          if (line.valid) {
+          // New cache entry for the line.
+          if (line.valid == false) {
+              stats.incCacheMiss();
+
+              setBit(VALID, line);
+              cacheStoreAddress(line, tag, offset, index);
+              updateCacheLastUsed(line);
+              cacheCreateEntry(line, addr, type, size, *value);
+
+              // In case of read, get the data form the cache
+              if (type == HookMemory::MEM_READ)
+                data = line.blocks.data;
+
+              break;
+          } else {
               // Condition for a cache hit
               if (addr == reconstructAddress(line)) {
-                  line.blocks.last_used = CurrentTime_nanoseconds();
+                  updateCacheLastUsed(line);
                   stats.incCacheHits();
                   
                   // Perform hit actions - note that these are slightly different
                   // from putting a new element in an empty cache line
                   switch (type) {
                     case HookMemory::MEM_READ:
+                      setBit(READ_DOMINATED, line);
                       stats.incCacheReads(size);
                       cost.modifyCost(Pipeline, CACHE_READ, size);
-                      setBit(READ_DOMINATED, line);
+                  
+                      // Fetch the data from the cache
+                      data = line.blocks.data;
                       break;
- 
+
                     case HookMemory::MEM_WRITE:
                       setBit(DIRTY, line);
                       setBit(WRITE_DOMINATED, line);
                       setBit(POSSIBLE_WAR, line);
-                      stats.incCacheWrites(size);
-                      cost.modifyCost(Pipeline, CACHE_WRITE, size);
+
+                      // In case of a read, the value from the CPU is stored in
+                      // the cache.
                       line.blocks.data = *value;
                       line.blocks.size = size;
+
+                      stats.incCacheWrites(size);
+                      cost.modifyCost(Pipeline, CACHE_WRITE, size);
                       break;
                   }
 
@@ -238,25 +256,8 @@ class Cache {
               } else {
                 collisions++;
               }
-          } else {
-              stats.incCacheMiss();
-
-              // Store the values. Only place where valid is set true
-              setBit(VALID, line);
-              line.blocks.offset_bits = offset;
-              line.blocks.set_bits = index;
-              line.blocks.tag_bits = tag;
-              line.blocks.last_used = CurrentTime_nanoseconds();
-
-              // Store the data and the size
-              line.blocks.data = *value;
-              line.blocks.size = size;
-
-              // Handle the cache entry specifically for the first time
-              cacheResetEntry(line, type, size);
-
-              break;
           }
+
       }
 
       // Oh ho no no can't do this shit, must panic
@@ -264,83 +265,104 @@ class Cache {
 
       // Handle the collisions if any
       if (collisions == no_of_lines)
-          evict(addr, offset, tag, index, value, type, size);
+          data = evict(addr, offset, tag, index, value, type, size);
 
-      // cout << "Cache content: set 0 line 0 data: " << sets.at(0).lines[0].blocks.data  << " size: " << sets.at(0).lines[0].blocks.size
-      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[0]) << dec << endl;
-      // cout << "Cache content: set 0 line 1 data: " << sets.at(0).lines[1].blocks.data  << " size: " << sets.at(0).lines[1].blocks.size
-      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[1]) << dec << endl;
+      // If it is a read, then see if our implementation provides same as emulator NVM
+      if (type == HookMemory::MEM_READ) {
+        address_t valueFromEmuMem;
+        valueFromEmuMem = nvm.emulatorRead(addr, size);
 
-      // Return NULL as of now; can be extended to return the data when needed.
+        data = 0;
+        bool foundData = false;
+
+        for (uint32_t i = 0; i < no_of_lines; i++) {
+          // Based on the type of hashing, fetch the location of the line
+          address_t hashed_index = cacheHash(index, addr, hash_method, i);
+          CacheLine &line = sets.at(hashed_index).lines[i];
+
+          if (line.valid) {
+              if (addr == reconstructAddress(line)) {
+                data = line.blocks.data;
+                valueFromEmuMem = nvm.emulatorRead(addr, line.blocks.size);
+                foundData = true;
+                break;
+              }
+          }
+        }
+
+        ASSERT(foundData == true);
+
+        if (data != valueFromEmuMem) {
+          cout << "---DIFFERS---";
+          cout << hex << "From local: " << data << " From emulator: " << valueFromEmuMem << " addr: " << addr << dec << endl;
+        }
+      }
       return NULL;
   }
 
   // Handle collisions.
-  void evict(address_t addr, address_t offset, address_t tag, address_t index,
-             address_t *value, enum HookMemory::memory_type type, address_t size)
+  uint64_t evict(address_t addr, address_t offset, address_t tag, address_t index,
+             address_t *value, enum HookMemory::memory_type type, const address_t size)
   {
-    // If needs to evict, then the misses needs to be incremented.
-    stats.incCacheMiss();
+      // If needs to evict, then the misses needs to be incremented.
+      stats.incCacheMiss();
 
-    // Get the line to be evicted using the given replacement policy.
-    CacheLine *evicted_line = nullptr;
-    address_t hashed_index;
+      // Get the line to be evicted using the given replacement policy.
+      CacheLine *evicted_line = nullptr;
+      address_t hashed_index;
 
-    // Perform the eviction based on the policy.
-    switch (policy) {
-      case LRU:
-        hashed_index = cacheHash(index, 0, SET_ASSOCIATIVE, 0);
-        evicted_line = &(*std::min_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
-        break;
-      case MRU:
-        hashed_index = cacheHash(index, 0, SET_ASSOCIATIVE, 0);
-        evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
-        break;
-      case SKEW:
-        // Perform the cuckoo hashing
-        cuckooHashing(addr, offset, tag, index, value, type, size);
-        return;
-    }
-    
-    ASSERT(evicted_line != nullptr);
-    ASSERT(evicted_line->valid == true);
-  
-    // Perform the eviction
-    if (evicted_line->dirty) {
-      if (evicted_line->possible_war || enable_pw == false)
-        createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-      else {
-        cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
-        clearBit(DIRTY, *evicted_line);
-        stats.incCacheDirtyEvictions();
+      // Perform the eviction based on the policy.
+      switch (policy) {
+          case LRU:
+            hashed_index = cacheHash(index, 0, SET_ASSOCIATIVE, 0);
+            evicted_line = &(*std::min_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
+            break;
+          case MRU:
+            hashed_index = cacheHash(index, 0, SET_ASSOCIATIVE, 0);
+            evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
+            break;
+          case SKEW:
+            // Perform the cuckoo hashing
+            return cuckooHashing(addr, offset, tag, index, value, type, size);
       }
-    } else
-      stats.incCacheCleanEvictions();
+      
+      ASSERT(evicted_line != nullptr);
+      ASSERT(evicted_line->valid == true);
+    
+      // Perform the eviction
+      if (evicted_line->dirty) {
+          if (evicted_line->possible_war || enable_pw == false)
+              createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+          else {
+              cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
+              clearBit(DIRTY, *evicted_line);
+              stats.incCacheDirtyEvictions();
+          }
+      } else
+          stats.incCacheCleanEvictions();
 
-    // Now that the eviction has been done, perform the replacement.
-    evicted_line->blocks.offset_bits = offset;
-    evicted_line->blocks.tag_bits = tag;
-    evicted_line->blocks.set_bits = index;
-    evicted_line->blocks.last_used = CurrentTime_nanoseconds();
+      // If evicted then reset all the flags (except VALID)
+      clearBit(READ_DOMINATED, *evicted_line);
+      clearBit(WRITE_DOMINATED, *evicted_line);
+      clearBit(POSSIBLE_WAR, *evicted_line);
+      clearBit(DIRTY, *evicted_line);
 
-    // If evicted then reset all the flags (except VALID)
-    clearBit(READ_DOMINATED, *evicted_line);
-    clearBit(WRITE_DOMINATED, *evicted_line);
-    clearBit(POSSIBLE_WAR, *evicted_line);
-    clearBit(DIRTY, *evicted_line);
+      // Now that the eviction has been done, perform the replacement.
+      cacheStoreAddress(*evicted_line, tag, offset, index);
+      updateCacheLastUsed(*evicted_line);
 
-    // Replace the data in the memory
-    evicted_line->blocks.data = *value;
-    evicted_line->blocks.size = size;
+      // Again the same logic. If the memory access is a READ then set the was_read
+      // flag to true.
+      cacheCreateEntry(*evicted_line, addr, type, size, *value);
 
-    // Again the same logic. If the memory access is a READ then set the was_read
-    // flag to true.
-    cacheResetEntry(*evicted_line, type, size);
+      return evicted_line->blocks.data;
   }
 
-  void cuckooHashing(address_t addr, address_t offset, address_t tag, address_t index,
+  uint64_t cuckooHashing(address_t addr, address_t offset, address_t tag, address_t index,
                      address_t *value, enum HookMemory::memory_type type, address_t size)
   {
+        uint64_t data = 0;
+
         // Algorithm based on https://ieeexplore-ieee-org.tudelft.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=9224198 (Section C)
         int line_used = 0;
         address_t cuckoo_hash;
@@ -348,13 +370,14 @@ class Cache {
 
         // This line will be cuckooed around - this is the data that has to be inserted
         setBit(VALID, cuckoo_incoming);
-        cuckoo_incoming.blocks.offset_bits = offset;
-        cuckoo_incoming.blocks.tag_bits = tag;
-        cuckoo_incoming.blocks.set_bits = index;
-        cuckoo_incoming.blocks.last_used = CurrentTime_nanoseconds();
-        cuckoo_incoming.blocks.data = *value;
-        cuckoo_incoming.blocks.size = size;
-        cacheResetEntry(cuckoo_incoming, type, size); 
+
+        // Now that the eviction has been done, perform the replacement.
+        cacheStoreAddress(cuckoo_incoming, tag, offset, index);
+        updateCacheLastUsed(cuckoo_incoming);
+        cacheCreateEntry(cuckoo_incoming, addr, type, size, *value);
+
+        // Data that needs to be retured to CPU
+        data = cuckoo_incoming.blocks.data;
 
         // cout << "Handling addr #" << hex << addr << "with data #" << *value << dec << endl;
 
@@ -392,7 +415,7 @@ class Cache {
             // If found a nice place, just put it there
             copyCacheLines(*cuckoo_cache, cuckoo_incoming);
             // eviction is done, return
-            return;
+            return data;
           }
 
           // Alternate the line use for every iteration
@@ -409,7 +432,7 @@ class Cache {
         stats.incCheckpoints();
         stats.incCheckpointsDueToWAR(); 
         
-        cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+        // cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
         cost.modifyCost(Pipeline, CHECKPOINT, 0);
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
@@ -438,7 +461,7 @@ class Cache {
  
         nvm.compareMemory();
 
-        return;
+        return data;
   }
 
   void copyCacheLines(struct CacheLine &dst, struct CacheLine &src)
@@ -519,22 +542,22 @@ class Cache {
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
 
-    cout << "Creating checkpoint #" << stats.checkpoint.checkpoints;
+    // cout << "Creating checkpoint #" << stats.checkpoint.checkpoints;
 
     // Increment based on reasons
     switch (reason)
     {
       case CHECKPOINT_DUE_TO_WAR:
         stats.incCheckpointsDueToWAR();
-        cout << " due to WAR" << endl;
+        // cout << " due to WAR" << endl;
         break;
       case CHECKPOINT_DUE_TO_DIRTY:
         stats.incCheckpointsDueToDirty();
-        cout << " due to ditry ratio" << endl;
+        // cout << " due to ditry ratio" << endl;
         break;
       case CHECKPOINT_DUE_TO_PERIOD:
         stats.incCheckpointsDueToPeriod();
-        cout << " due to period" << endl;
+        // cout << " due to period" << endl;
         break;
     }
 
@@ -570,13 +593,13 @@ class Cache {
         }
     }
 
-    for (auto &w : check_mem.writes)
-      cout << "Writes not evicted #" << hex << w << dec << endl;
+    // for (auto &w : check_mem.writes)
+    //   cout << "Writes not evicted #" << hex << w << dec << endl;
 
     // assert(check_mem.writes.size() == 0);
 
     // Sanity check - MUST pass
-    nvm.compareMemory();
+    nvm.compareMemory(false);
   }
 
   // Update the cycle count being stored in stats - callback function
@@ -698,7 +721,7 @@ class Cache {
     }
     
     check_mem.writes.erase(address);
-    nvm.shadowWrite(address, value, size);
+    nvm.localWrite(address, value, size);
   }
 
   // Increments stats as if there was no cache
@@ -716,11 +739,15 @@ class Cache {
 
   // Fill a cache entry either for the first time or after an eviction (both of these actions
   // perform the same set of steps.)
-  void cacheResetEntry(CacheLine &line, enum HookMemory::memory_type type, address_t size)
+  void cacheCreateEntry(CacheLine &line, address_t addr, enum HookMemory::memory_type type, const address_t size, address_t value)
   {
     switch (type) {
       case HookMemory::MEM_READ:
         setBit(READ_DOMINATED, line);
+      
+        // In case of a read, read the value from the local NVM copy
+        line.blocks.data = nvm.localRead(addr, size);
+        line.blocks.size = size;
         stats.incNVMReads(size);
         cost.modifyCost(Pipeline, NVM_READ, size);
         break;
@@ -728,6 +755,11 @@ class Cache {
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
         setBit(WRITE_DOMINATED, line);
+
+        // In case of a write, copy the value from the CPU to the data
+        line.blocks.data = value;
+        line.blocks.size = size;
+        
         stats.incCacheWrites(size);
         cost.modifyCost(Pipeline, CACHE_WRITE, size);
         ASSERT(line.possible_war == false);

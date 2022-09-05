@@ -28,7 +28,7 @@
 
 // Local includes
 #include "../includes/DetectWAR.h"
-#include "../includes/ShadowMemory.hpp"
+#include "../includes/LocalMemory.hpp"
 #include "../includes/Stats.hpp"
 #include "../includes/CycleCostCalculator.hpp"
 #include "../includes/Logger.hpp"
@@ -54,7 +54,7 @@ class Cache {
 
     // Helper stuffs
     Stats stats;
-    ShadowMemory nvm;
+    LocalMemory nvm;
     icemu::Memory *mem;
     CycleCost cost;
     Logger log;
@@ -207,7 +207,7 @@ class Cache {
           if (line.valid) {
               // Condition for a cache hit
               if (addr == reconstructAddress(line)) {
-                  line.blocks.last_used = CurrentTime_nanoseconds();
+                  updateCacheLastUsed(line);
                   stats.incCacheHits();
                   
                   // Perform hit actions - note that these are slightly different
@@ -242,7 +242,7 @@ class Cache {
               line.blocks.offset_bits = offset;
               line.blocks.set_bits = index;
               line.blocks.tag_bits = tag;
-              line.blocks.last_used = CurrentTime_nanoseconds();
+              updateCacheLastUsed(line);
 
               // Store the data and the size
               line.blocks.data = *value;
@@ -320,7 +320,7 @@ class Cache {
     evicted_line->blocks.offset_bits = offset;
     evicted_line->blocks.tag_bits = tag;
     evicted_line->blocks.set_bits = index;
-    evicted_line->blocks.last_used = CurrentTime_nanoseconds();
+    updateCacheLastUsed(*evicted_line);
 
     // If evicted then reset all the flags (except VALID)
     clearBit(READ_DOMINATED, *evicted_line);
@@ -588,7 +588,7 @@ class Cache {
     }
     
     check_mem.writes.erase(address);
-    nvm.shadowWrite(address, value, size);
+    nvm.localWrite(address, value, size);
   }
 
   // Increments stats as if there was no cache
