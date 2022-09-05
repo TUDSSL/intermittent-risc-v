@@ -99,15 +99,17 @@ class Cache {
     cout << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
 
-  // Size of the cache = 512 bytes
-  // Each data block size = 8 bytes
-  // So can store 512 / 8 bytes = 64 entries
-  // now no of ways = 2
-  // so no of sets = 32 - each set has 2 ways - each way has 8 bytes of data
-  // Now address = 32 or 64 bits
-  // First 3 bytes = doesn't matter becoz results in the block size
-  // Next 5 bits = determine which of the 32 sets
-  // Rest bits just used to compare
+  /**
+   * @brief Initialize the cache with required values
+   *
+   * @param size The size of the cache in bytes
+   * @param ways The number of cache ways
+   * @param p The replacement policy for cache @see enum replacement_policy
+   * @param emu_mem Pointer to the parent emulator memory
+   * @param filename Filename of the log file
+   * @param hash_method The hashing method to use @see enum CacheHashMethod
+   * @param enable_pw Enable/disable naive- version of NACHO
+   */
   void init(uint32_t size, uint32_t ways, enum replacement_policy p,
             icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method, bool enable_pw)
   {
@@ -154,60 +156,24 @@ class Cache {
     log.init(filename);
   }
 
-  address_t reconstructAddress(CacheLine &line)
-  {
-    address_t tag = line.blocks.bits.tag;
-    address_t index = line.blocks.bits.index;
-    address_t offset = line.blocks.bits.offset;
-
-    address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE)) |
-                          index << (NUM_BITS(CACHE_BLOCK_SIZE)) |
-                          offset;
-    return address;
-  }
-
-  void handleCacheMiss(CacheLine &line)
-  {
-      stats.incCacheMiss();
-
-      setBit(VALID, line);
-      cacheStoreAddress(line, req);
-      updateCacheLastUsed(line);
-      cacheCreateEntry(line, req);
-  }
-
-  void handleCacheHit(CacheLine &line)
-  {
-    updateCacheLastUsed(line);
-    stats.incCacheHits();
-    
-    // Perform hit actions - note that these are slightly different
-    // from putting a new element in an empty cache line
-    switch (req.type) {
-      // For a read hit
-      case HookMemory::MEM_READ:
-        setBit(READ_DOMINATED, line);
-        stats.incCacheReads(req.size);
-        cost.modifyCost(Pipeline, CACHE_READ, req.size);
-        break;
-      
-      // For a write hit
-      case HookMemory::MEM_WRITE:
-        setBit(DIRTY, line);
-        setBit(WRITE_DOMINATED, line);
-        setBit(POSSIBLE_WAR, line);
-
-        // In case of a write hit, the cache stores the data from the
-        // CPU cache request
-        line.blocks.data = req.value;
-        line.blocks.size = req.size;
-
-        stats.incCacheWrites(req.size);
-        cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
-        break;
-    }
-  }
-
+  /**
+   * @brief Primary function that runs when a cache request is made
+   * by the CPU. The rough flow of the function is as such
+   *      - Parse the cache req
+   *      - Check if present in cache
+   *            - Create new entry if not present
+   *            - If present then if
+   *                  - Cache hit, return data
+   *                  - Cache miss, collision
+   *      - If any collision, evict
+   *      - Shadow Memory check
+   *
+   * @param address The memory address of the access
+   * @param mem_type Memory access type - read or write
+   * @param value_req Data associated with the memory access
+   * @param size_req Size of the data associated with the access
+   * @return Data if required
+   */
   uint32_t* run(address_t address, enum HookMemory::memory_type mem_type, address_t *value_req, const address_t size_req)
   {
       // Only supports 32 bit now, will ASSERT for 64bit
@@ -277,7 +243,87 @@ class Cache {
       return NULL;
   }
 
-  // Handle collisions.
+  /**
+   * @brief Reconstruct and return the address from a cache line.
+   * The address will be the address corresponding to the
+   * main memory.
+   *
+   * @param line Cache line containing the data
+   * @return reconstructed address
+   */
+  address_t reconstructAddress(CacheLine &line)
+  {
+    address_t tag = line.blocks.bits.tag;
+    address_t index = line.blocks.bits.index;
+    address_t offset = line.blocks.bits.offset;
+
+    address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE)) |
+                          index << (NUM_BITS(CACHE_BLOCK_SIZE)) |
+                          offset;
+    return address;
+  }
+
+  /**
+   * @brief Handle cache misses. Create the cache entry and set
+   * all the metadata.
+   *
+   * @param line Cache line containing the data
+   */
+  void handleCacheMiss(CacheLine &line)
+  {
+      stats.incCacheMiss();
+
+      setBit(VALID, line);
+      cacheStoreAddress(line, req);
+      updateCacheLastUsed(line);
+      cacheCreateEntry(line, req);
+  }
+
+  /**
+   * @brief Handle cache hits. Modify the cache entry and set
+   * all the metadata.
+   *
+   * @param line Cache line containing the data
+   */
+  void handleCacheHit(CacheLine &line)
+  {
+    updateCacheLastUsed(line);
+    stats.incCacheHits();
+    
+    // Perform hit actions - note that these are slightly different
+    // from putting a new element in an empty cache line
+    switch (req.type) {
+      // For a read hit
+      case HookMemory::MEM_READ:
+        setBit(READ_DOMINATED, line);
+        stats.incCacheReads(req.size);
+        cost.modifyCost(Pipeline, CACHE_READ, req.size);
+        break;
+      
+      // For a write hit
+      case HookMemory::MEM_WRITE:
+        setBit(DIRTY, line);
+        setBit(WRITE_DOMINATED, line);
+        setBit(POSSIBLE_WAR, line);
+
+        // In case of a write hit, the cache stores the data from the
+        // CPU cache request
+        line.blocks.data = req.value;
+        line.blocks.size = req.size;
+
+        stats.incCacheWrites(req.size);
+        cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
+        break;
+    }
+  }
+
+  /**
+   * @brief Performs eviction of a cache block depending on the cache
+   * replacement policy set. On eviction, it handles and places the
+   * requested data into the cache as well. For PROWL, it handles
+   * the cuckoo hashing part separately.
+   *
+   */
   uint64_t evict()
   {
       // If needs to evict, then the misses needs to be incremented.
@@ -334,11 +380,17 @@ class Cache {
       return evicted_line->blocks.data;
   }
 
+  /**
+   * @brief Perform cuckoo hashing. This replaces and evicts
+   * as per the hash functions defined.
+   * 
+   * @see [Section C](https://ieeexplore-ieee-org.tudelft.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=9224198)
+   * 
+   * @return uint64_t data that is put in the cache
+   */
   uint64_t cuckooHashing()
   {
         uint64_t data = 0;
-
-        // Algorithm based on https://ieeexplore-ieee-org.tudelft.idm.oclc.org/stamp/stamp.jsp?tp=&arnumber=9224198 (Section C)
         int line_used = 0;
         address_t cuckoo_hash;
         CacheLine cuckoo_incoming = {}, *cuckoo_cache = nullptr, cuckoo_temp = {};
@@ -354,16 +406,12 @@ class Cache {
         // Data that needs to be retured to CPU
         data = cuckoo_incoming.blocks.data;
 
-        // cout << "Handling addr #" << hex << addr << "with data #" << *value << dec << endl;
-
         // Until we find a place or till max number of times
         for (int cuckoo_iter = 0; cuckoo_iter < CUCKOO_MAX_ITER; cuckoo_iter++) {
           // Get the line already in the cache based on the address of the incoming line
           cuckoo_hash = cacheHash(0, reconstructAddress(cuckoo_incoming), SKEW_ASSOCIATIVE, line_used);
           cuckoo_cache = &sets.at(cuckoo_hash).lines.at(line_used);
           
-          // cout << "iter #" << cuckoo_iter << endl;
-          // cout << "cuckoo_cache with index #" << cuckoo_incoming.blocks.set_bits << " line #" << line_used << " hash #" << cuckoo_hash << endl;
           stats.incCuckooIterations();
           cost.modifyCost(Pipeline, CUCKOO_ITER, 0);
 
@@ -407,22 +455,24 @@ class Cache {
         stats.incCheckpoints();
         stats.incCheckpointsDueToWAR(); 
         
-        // cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
         cost.modifyCost(Pipeline, CHECKPOINT, 0);
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
                 if (l.valid) {
                   ASSERT(l.blocks.size != 0);
-                  // This is the line that was inserted in this iteration. This should not be evicted
-                  // during the current checkpoint. The checkpoint should be placed before the write
-                  // instruction and this write should not be placed.
+                  /** 
+                   * @warning This is the line that was inserted in this iteration. This should not be evicted
+                   * during the current checkpoint. The checkpoint should be placed before the write
+                   * instruction and this write should not be placed.
+                   */
                   if (req.addr == reconstructAddress(l))
                     continue;
                   
-                  // Note: Now there is a corner case for which the above if check will not work. It is
-                  // the corner case where the cuckoo forms a circle (which should not occur IMO). For
-                  // this case, the "addr" is a valid eviction and this results in a shadowMem failure.
-
+                  /**
+                   * @note Now there is a corner case for which the above if check will not work. It is
+                   * the corner case where the cuckoo forms a circle (which should not occur IMO). For
+                   * this case, the "addr" is a valid eviction and this results in a shadowMem failure.
+                   */
                   if (l.dirty) {
                       // Perform the actual write to the memory
                       cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
@@ -439,6 +489,14 @@ class Cache {
         return data;
   }
 
+  /**
+   * @brief Perform sanity check based on shadow memory testing.
+   * A read from the CPU must fetch the same data from the cache
+   * as that from the emulator memory. The emulator memory acts as
+   * the shadow memory in this case.
+   * 
+   * @see LocalMemory.hpp
+   */
   void performShadowCheck()
   {
     uint64_t data;
@@ -449,9 +507,11 @@ class Cache {
         data = 0;
         bool foundData = false;
 
-        // Find the data associated with the current request. At this point of time
-        // the cache must have performed all eviction and replacement which means that
-        // the data has to be there in the cache.
+        /**
+         * @note Find the data associated with the current request. At this point of time
+         * the cache must have performed all eviction and replacement which means that
+         * the data has to be there in the cache.
+         */
         for (uint32_t i = 0; i < no_of_lines; i++) {
           address_t hashed_index = cacheHash(req.mem_id.index, req.addr, hash_method, i);
           CacheLine &line = sets.at(hashed_index).lines[i];
@@ -480,8 +540,12 @@ class Cache {
       }
   }
 
-
-  // Apply compiler hints
+  /**
+   * @brief Apply compiler hints when received from the compiler.
+   * Reset all the bits for that particular address.
+   * 
+   * @param address The address at which the hint has to be applied.
+   */
   void applyCompilerHints(uint32_t address)
   {
       // Offset the main memory start
@@ -491,9 +555,11 @@ class Cache {
       auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
       index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
 
-      // Search for the cache line where the hint has to be given. If found
-      // then reset the possibleWAR and the was_read flag. This will ensure that
-      // eviction of the given memory causes no checkpoint.
+      /**
+       * @note Search for the cache line where the hint has to be given. If found
+       * then reset the possibleWAR and the was_read flag. This will ensure that
+       * eviction of the given memory causes no checkpoint.
+       */
       for (CacheSet &s : sets) {
           for (CacheLine &line : s.lines) {
             if (line.valid) {
@@ -507,14 +573,23 @@ class Cache {
           }
       }
       
-      
       // Do we need this?
       stats.incHintsGiven();
       cost.modifyCost(Pipeline, HINTS, 0);
   }
 
-  // Perform the hashing which fetches the set from the cache.
-  // Note that @index is only used for SET ASSOCIATIVE and @addr is only used for SKEW ASSOCIATIVE
+  /**
+   * @brief Perform the hashing which fetches the set from the cache.
+   * 
+   * @param index The index bits from the address
+   * @param addr The full address
+   * @param type Type of memory access
+   * @param line_number Which cache line is being used
+   * 
+   * @return A hashed value that can be used to access the location in cache
+   * 
+   * @note index is only used for SET ASSOCIATIVE and addr is only used for SKEW ASSOCIATIVE
+   */
   address_t cacheHash(address_t index, address_t addr, enum CacheHashMethod type, uint32_t line_number)
   {
     switch (type) {
@@ -534,7 +609,12 @@ class Cache {
     return 0;
   }
 
-  // Create a checkpoint with proper reason
+  /**
+   * @brief Invoke checkpoint with appropriate reason. Increment
+   * required stats and write to the continuous log
+   * 
+   * @param reason The reason for which the checkpoint is created
+   */
   void createCheckpoint(enum CheckpointReason reason)
   {
     // Only place where checkpoints are incremented
@@ -573,7 +653,12 @@ class Cache {
     stats.updateLastCheckpointCycle(stats.getCurrentCycle());
   }
 
-  // Function to be called on eviction of the cache on checkpoint
+  /**
+   * @brief Carry out the actual checkpointing. Iterate through the
+   * cache and figure out which cache entry needs to be written out
+   * to the NVM based on the dirty bit. Clear all bits of all cache
+   * entries as a checkpoint means a clean slate.
+   */
   void checkpointEviction()
   {
     // Evict all the writes that are a possible war and reset the bits
@@ -599,14 +684,24 @@ class Cache {
     nvm.compareMemory(false);
   }
 
-  // Update the cycle count being stored in stats - callback function
-  // to be used in the instruction hook
+  /**
+   * @brief Update the cycle count in the stats. This will help
+   * in the continuous logging and also to see the number of
+   * cycles between two checkpoints.
+   */
   void updateCycleCount(uint64_t cycle_count)
   {
     stats.updateCurrentCycle(cycle_count);
   }
 
-  // Set the specified bit with associated conditions and actions
+  /**
+   * @brief Set the specified bit with associated conditions
+   * and actions. Update the dirty ratio if the dirty bit is
+   * modified.
+   * 
+   * @param bit The bit to be handled @see enum CacheBits
+   * @param line The line whose metadata needs to be modified
+   */
   void setBit(enum CacheBits bit, CacheLine &line)
   {
     switch (bit) {
@@ -642,7 +737,14 @@ class Cache {
     }
   }
 
-  // Clear the "bit" from "line"
+  /**
+   * @brief Clear the specified bit with associated conditions
+   * and actions. Update the dirty ratio if the dirty bit is
+   * modified.
+   * 
+   * @param bit The bit to be handled @see enum CacheBits
+   * @param line The line whose metadata needs to be modified
+   */
   void clearBit(enum CacheBits bit, CacheLine &line)
   {
     switch (bit) {
@@ -672,7 +774,10 @@ class Cache {
     }
   }
 
-  // Check and create checkpoints if dirty bit is present
+  /**
+   * @brief Check the value of the dirty ratio and invoke
+   * checkpoint if the ratio is below a certain threshold.
+   */
   bool checkDirtyRatioAndCreateCheckpoint()
   {
     stats.updateDirtyRatio(dirty_ratio);
@@ -686,7 +791,11 @@ class Cache {
     return false;
   }
 
-  // Check and create checkpoints in a period.
+  /**
+   * @brief Check the value of the dirty ratio and invoke
+   * checkpoint if the number of cycles since last
+   * checkpoint crosses a threshold.
+   */
   bool checkCycleCountAndCreateCheckpoint()
   {
     uint64_t diff = stats.getCurrentCycle() - stats.getLastCheckpointCycle();
@@ -709,7 +818,15 @@ class Cache {
       
   }
 
-  // Write back the cache content to the shadow memory with option to increase the NVM reads/writes
+  /**
+   * @brief Write back the cache content to the shadow memory
+   * with option to increase the NVM reads/writes
+   * 
+   * @param address The address to write to
+   * @param value The actual data that is being written
+   * @param size The size of the data
+   * @param doesCountForStats Can't describe better than the variable name
+   */
   void cacheNVMwrite(address_t address, address_t value, address_t size, bool doesCountForStats)
   {
     if (doesCountForStats) {
@@ -720,7 +837,12 @@ class Cache {
     nvm.localWrite(address, value, size);
   }
 
-  // Increments stats as if there was no cache
+  /**
+   * @brief Increments stats as if there was no cache
+   * 
+   * @param type The type of the memory access
+   * @param size The size of the data
+   */
   void normalNVMAccess(enum HookMemory::memory_type type, address_t size)
   {
     switch(type) {
@@ -733,8 +855,14 @@ class Cache {
     }
   }
 
-  // Fill a cache entry either for the first time or after an eviction (both of these actions
-  // perform the same set of steps.)
+  /**
+   * @brief Fill a cache entry either for the first time
+   * or after an eviction (both of these actions perform
+   * the same set of steps.)
+   * 
+   * @param line The cache line to create new block in
+   * @param req The memory request from CPU
+   */
   void cacheCreateEntry(CacheLine &line, const CacheReq req)
   {
     switch (req.type) {
