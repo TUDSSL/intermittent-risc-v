@@ -158,15 +158,6 @@ class LocalMemory{
 
         return data;
     }
-
-    bool compareReads(address_t address, address_t size) {
-        address_t valueFromLocalMem, valueFromEmuMem;
-        valueFromLocalMem = localRead(address, size);
-        valueFromEmuMem = emulatorRead(address, size);
-
-        cout << hex << "From shadow: " << valueFromLocalMem << " From real: " << valueFromEmuMem << dec << endl;
-    }
-
 };
 
 #endif /* _SHADOW_MEM */

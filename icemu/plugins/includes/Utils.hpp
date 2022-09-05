@@ -63,14 +63,32 @@ enum CacheBits {
 };
 
 /*
+ * The bits that identify the memory in a cache.
+ *
+ * @tag_bits: Bits to represent the significat memory bits
+ * @set_bits: Bits to decide which set of the cache is being used
+ * @index_bits: Bits to decide the byte/word being referred to inside a set
+ */
+struct MemId {
+  address_t tag;
+  address_t index;
+  address_t offset;
+};
+
+struct CacheReq {
+  MemId mem_id;
+  address_t addr;
+  enum HookMemory::memory_type type;
+  address_t value;
+  address_t size;
+};
+
+/*
  * The smallest unit of a cache that stores the data.
  * A group of blocks form a cache line (or way)
  * A group of cache lines form a cache set
  * A group of cache sets form a cache
  *
- * @tag_bits: Bits to represent the significat memory bits
- * @set_bits: Bits to decide which set of the cache is being used
- * @offset_bits: Bits to decide the byte/word being referred to inside a set
  * @data: The block of data to be stored
  * @last_used: Time it was last used
  * @addr: Store the actual address - for easy reference
@@ -78,18 +96,16 @@ enum CacheBits {
  * SUM_OF_BITS(tag_bits, set_bits, offset_bits) = Memory address lines. (32 bit in this case)
  */
 struct CacheBlock {
-  address_t tag_bits;
-  address_t set_bits;
-  address_t offset_bits;
   address_t data; // actually store the data in blocks of bytes
   address_t last_used;
   address_t size;
+  MemId bits;
 
   // Overload the = operator to compare evicted blocks
   bool operator==(const CacheBlock &other) const {
-    return (tag_bits == other.tag_bits &&
-           set_bits == other.set_bits &&
-           offset_bits == other.offset_bits);
+    return (bits.tag == other.bits.tag &&
+           bits.index == other.bits.index &&
+           bits.offset == other.bits.offset);
   }
 
 };
@@ -99,9 +115,9 @@ struct hash_fn
 {
     size_t operator()(const CacheBlock &block) const
     {
-        std::size_t h1 = std::hash<address_t>()(block.offset_bits);
-        std::size_t h2 = std::hash<address_t>()(block.set_bits);
-        std::size_t h3 = std::hash<address_t>()(block.tag_bits);
+        std::size_t h1 = std::hash<address_t>()(block.bits.offset);
+        std::size_t h2 = std::hash<address_t>()(block.bits.index);
+        std::size_t h3 = std::hash<address_t>()(block.bits.tag);
  
         return h1 ^ h2 ^ h3;
     }
@@ -164,18 +180,18 @@ void print_trace (void)
   free (strings);
 }
 
-static inline void cacheStoreAddress(CacheLine &line, address_t tag, address_t offset, address_t index) {
-  line.blocks.tag_bits = tag;
-  line.blocks.offset_bits = offset;
-  line.blocks.set_bits = index;
+static inline void cacheStoreAddress(CacheLine &line, const CacheReq req) {
+  line.blocks.bits.tag = req.mem_id.tag;
+  line.blocks.bits.offset = req.mem_id.offset;
+  line.blocks.bits.index = req.mem_id.index;
 }
 
 void copyCacheLines(struct CacheLine &dst, struct CacheLine &src)
 {
   dst.blocks.data = src.blocks.data;
-  dst.blocks.set_bits = src.blocks.set_bits;
-  dst.blocks.tag_bits = src.blocks.tag_bits;
-  dst.blocks.offset_bits = src.blocks.offset_bits;
+  dst.blocks.bits.index = src.blocks.bits.index;
+  dst.blocks.bits.tag = src.blocks.bits.tag;
+  dst.blocks.bits.offset = src.blocks.bits.offset;
   dst.blocks.size = src.blocks.size;
   dst.blocks.last_used = src.blocks.last_used;
   dst.valid = src.valid;

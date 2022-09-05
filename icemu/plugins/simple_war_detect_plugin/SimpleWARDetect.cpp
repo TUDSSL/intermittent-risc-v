@@ -97,7 +97,7 @@ class MemoryAccess : public HookMemory {
       if (arg1_val.size())
         filename = arg1_val[0];
     
-    log.init(filename, SET_ASSOCIATIVE);
+    log.init(filename);
     nvm.initMem(&getEmulator().getMemory());
   }
 

@@ -22,7 +22,7 @@ class Logger {
     Logger() = default;
     ~Logger() = default;
     
-    void init(string filename, enum CacheHashMethod hash)
+    void init(string filename)
     {
         continuous_logging_filename = filename + "-cont";
         final_logging_filename = filename + "-final";
