@@ -59,7 +59,6 @@ class Cache {
     CycleCost cost;
     Logger log;
     uint64_t last_checkpoint_cycle;
-    MemChecker check_mem;
     bool enable_pw;
 
   public:
@@ -190,10 +189,6 @@ class Cache {
 
       // stats for normal nvm
       normalNVMAccess(type, size);
-
-      // Extra checks for the shadow memory
-      if (type == HookMemory::MEM_WRITE)
-        check_mem.writes.insert(addr);
 
       // Checks if there are any collisions. If yes, then something has to be
       // evicted before putting in the current mem access.
@@ -464,21 +459,6 @@ class Cache {
         return data;
   }
 
-  void copyCacheLines(struct CacheLine &dst, struct CacheLine &src)
-  {
-    dst.blocks.data = src.blocks.data;
-    dst.blocks.set_bits = src.blocks.set_bits;
-    dst.blocks.tag_bits = src.blocks.tag_bits;
-    dst.blocks.offset_bits = src.blocks.offset_bits;
-    dst.blocks.size = src.blocks.size;
-    dst.blocks.last_used = src.blocks.last_used;
-    dst.valid = src.valid;
-    dst.dirty = src.dirty;
-    dst.possible_war = src.possible_war;
-    dst.read_dominated = src.read_dominated;
-    dst.write_dominated = src.write_dominated;
-  }
-
   // Apply compiler hints
   void applyCompilerHints(uint32_t address)
   {
@@ -592,11 +572,6 @@ class Cache {
             }
         }
     }
-
-    // for (auto &w : check_mem.writes)
-    //   cout << "Writes not evicted #" << hex << w << dec << endl;
-
-    // assert(check_mem.writes.size() == 0);
 
     // Sanity check - MUST pass
     nvm.compareMemory(false);
@@ -719,8 +694,7 @@ class Cache {
       stats.incNVMWrites(size);
       cost.modifyCost(Pipeline, NVM_WRITE, size);
     }
-    
-    check_mem.writes.erase(address);
+
     nvm.localWrite(address, value, size);
   }
 
