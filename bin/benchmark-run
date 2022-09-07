@@ -23,7 +23,7 @@ function nacho-naive() {
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
-        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho-naive \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_naive \
         -a enable-pw-bit=0 \
         $elf
 
@@ -37,7 +37,7 @@ function nacho-pw() {
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
-        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho-pw \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw \
         -a enable-pw-bit=0 \
         $elf
 }
@@ -50,7 +50,7 @@ function nacho-clank() {
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
-        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho-clank \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_clank \
         $elf
 }
 
