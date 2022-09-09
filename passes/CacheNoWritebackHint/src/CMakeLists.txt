@@ -29,6 +29,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${COMMON_DIR}/PassUtils/include
     ${COMMON_DIR}/DependencyAnalysis/include
+    ${COMMON_DIR}/DataFlowEngineExt/include
 )
 
 # Declare the LLVM pass to compile

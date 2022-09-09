@@ -52,14 +52,17 @@ llc -filetype=obj $OPT -O=3 -o $in.obj $in
 # Compile checkpoint.c
 clang -c $CFLAGS $TOOLCHAIN_DIR/checkpoint/checkpoint.c -o checkpoint.obj
 
+# Compile cache_hint.c
+clang -c -O3 $CFLAGS $TOOLCHAIN_DIR/cache_hint.c -o cache_hint.obj
+
 # Compile startup.c
-clang -c $CFLAGS $TOOLCHAIN_DIR/startup.c -o startup.obj
+#clang -c $CFLAGS $TOOLCHAIN_DIR/startup.c -o startup.obj
 
 # Link
-clang $LDFLAGS $LIBLOCS -T $LINKERSCRIPT -lc -lm $in.obj startup.obj checkpoint.obj -o $out
+clang $LDFLAGS $LIBLOCS -T $LINKERSCRIPT -lc -lm $in.obj checkpoint.obj cache_hint.obj -o $out
 
 # Disassemble
 arm-none-eabi-objdump -d $out > $in.s
 
 # Cleanup
-rm -rf $in.obj checkpoint.obj startup.obj
+rm -rf $in.obj checkpoint.obj startup.obj cache_hint.obj

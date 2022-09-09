@@ -3,6 +3,8 @@
 #include "noelle/core/Noelle.hpp"
 #include "DependencyAnalysis.hpp"
 
+#include "WPA/WPAPass.h"
+
 namespace CacheNoWritebackHintNS {
 
 class CacheNoWritebackHint : public ModulePass {
@@ -36,10 +38,10 @@ private:
     llvm::Instruction *Write;
   };
 
-  bool run(Noelle &N, Module &M);
+  bool run(Noelle &N, WPAPass &WPA, Module &M);
 
   //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
-  CandidatesTy analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F);
+  CandidatesTy analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysis &DA, Function &F);
   std::tuple<bool, CandidateTy> analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, DomTreeSummary &DT, Instruction &I);
 
   void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);

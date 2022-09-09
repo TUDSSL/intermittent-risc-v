@@ -1,3 +1,5 @@
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
@@ -8,7 +10,14 @@
 #include "Configurations.hpp"
 #include "PassUtils.hpp"
 
-#include "SetManipulation.hpp"
+#include "WarReachDFA.hpp"
+
+#  include "WPA/WPAPass.h"
+#  include "Util/SVFModule.h"
+#  include "Util/PTACallGraph.h"
+#  include "WPA/Andersen.h"
+#  include "MemoryModel/PointerAnalysis.h"
+#  include "MSSA/MemSSA.h"
 
 using namespace llvm::noelle;
 
@@ -22,7 +31,7 @@ CacheNoWritebackHint::CacheNoWritebackHint() :
 }
 
 CacheNoWritebackHint::CandidatesTy
-CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F) {
+CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysis &DA, Function &F) {
   CandidatesTy Candidates;
 
   if (F.isIntrinsic())
@@ -51,20 +60,18 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
   // Get the Dominator Tree analysis
   auto DT = N.getDominators(&F)->DT;
 
-  //struct WAR {
-  //  Instruction *Read;
-  //  Instruction *Write;
-  //};
+  auto NDFA = N.getDataFlowAnalyses();
+  auto RA = NDFA.runReachableAnalysis(&F);
 
   // Get all the WAR violations in the function
-  vector<WAR> WARs;
+  vector<WarReachDFA::WAR> WARs;
   for (auto &I : instructions(F)) {
     auto WARDeps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
     if (WARDeps == nullptr) continue;
     set<Instruction *> WARWrites;
     for (auto &WARDep : *WARDeps) {
       if (WARDep.IsMust) {
-        WARs.push_back(WAR{.Read = &I, .Write = WARDep.Instruction});
+        WARs.push_back(WarReachDFA::WAR{.Read = &I, .Write = WARDep.Instruction});
       }
     }
   }
@@ -74,25 +81,226 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
     dbgs() << "WAR:\n  read: " << *WAR.Read << "\n  write: " << *WAR.Write << "\n";
   }
 
-  // Create the DFA
-  auto DFE = N.getDataFlowEngine();
-  
-  auto CustomDFA = writeAfterReadReachDFA(DFE, F, WARs);
+  /*
+   * Run the WarReachDFA
+   *    Finds all chains that end in a Write.
+   *    Meaning that, in those paths, we can forget the value from memory, as it MUST
+   *    be written before being read (again, all paths end in a MUST write).
+   *
+   */
 
-  dbgs() << "\n";
+  // Create the data flow engine
+  auto DFE = DataFlowEngineExt(); // Modified version that allows for intersections
+
+  // Run the custom DFA
+  auto warReachDFA = WarReachDFA();
+  //auto CustomDFA = warReachDFA.apply(DFE, F, WARs);
+  auto warReachDFAResult = warReachDFA.apply(DFE, F, DA);
+
+  // Print the DFA output for debugging
   for (auto &I : instructions(F)) {
+    auto IIN = warReachDFAResult->IN(&I);
+    auto IOUT = warReachDFAResult->OUT(&I);
+
+    // Add debug data to the instruction
+    if (IIN.size()) {
+      std::string in_string = "";
+      for (auto &II : IIN) in_string += PassUtils::GetOperandString(*II) + " ";
+
+      // Attach the metadata if it's not empty
+      in_string.pop_back(); // Remove the last space if it's not empty
+      PassUtils::SetInstrumentationMetadata(&I, in_string, "war-reach-dfa-IN");
+    }
+
+    // Printing
     dbgs() << "Instruction: " << I << "\n";
-    auto IOUT = CustomDFA->OUT(&I);
+    dbgs() << " IN:\n";
+    for (auto &II : IIN) dbgs() << "  " << *II << "\n";
     dbgs() << " OUT:\n";
-    for (auto &II : IOUT) {
-      dbgs() << "  " << *II << "\n";
+    for (auto &II : IOUT) dbgs() << "  " << *II << "\n";
+  }
+
+  std::map<Instruction *, std::set<Value *>> instructionWarReachMap;
+  std::map<Instruction *, std::set<Value *>> instructionReachableWarReachMap;
+  std::map<Instruction *, std::set<Value *>> instructionHintMap;
+  std::map<Instruction *, std::set<Value *>> noAliasInstructionHintMap;
+
+  /*
+   * Convert the DFA result to a map (to keep handling the same)
+   * Also remove debug/intrinsic instructions
+   */
+  for (auto &I : instructions(F)) {
+    if (isa<IntrinsicInst>(I)) continue;
+    auto in_i = warReachDFAResult->IN(&I);
+    instructionWarReachMap[&I].insert(in_i.begin(), in_i.end());
+  }
+
+  /*
+   * Remove hint locations where the hint can not reach the hint location
+   * i.e., the hint location if before the WAR read
+   * (can happen with loop edges combined with the backwards WarReach DFA)
+   */
+  for (const auto & [I, hints] : instructionWarReachMap) {
+    for (const auto &hint : hints) {
+      // Can hint (i.e., WAR read) reach the hint location (i.e., I)
+      auto hint_reach = RA->OUT(dyn_cast<Instruction>(hint));
+      if (hint_reach.find(I) != hint_reach.end()) {
+        // Hint location I is reachable from WAR Read, so we keep it
+        instructionReachableWarReachMap[I].insert(hint);
+      }
     }
   }
+
+  /*
+   * Select the best hint locations
+   */
+  for (const auto & [I, hints] : instructionReachableWarReachMap) {
+    auto in_i = instructionWarReachMap[I];
+
+    dbgs() << "I = " << *I << "\n";
+
+    // Go through the hints for i
+    for (const auto &hint : in_i) {
+      bool best_hint = true;
+
+      dbgs() << "  checking hint = " << *hint << "\n";
+      // Go through the other instructions
+      for (const auto & [II, _] : instructionWarReachMap) {
+        if (I == II) continue; // Skip self compare
+        dbgs() << "     checking in instruction = " << *II << "\n";
+
+        auto other_hints = warReachDFAResult->IN(II);
+        for (auto &other_hint : other_hints) {
+          if (hint == other_hint) {
+            dbgs() << "     found matching hint\n";
+            // Found another location with the same hint
+            // If our candidate hint is dominated by the other hint location
+            // then there is a better hint, so we ignore this one
+            if (DT.dominates(II, I)) {
+              dbgs() << "     hint in:" << *II << " is better\n";
+              //dbgs() << "II: " << II << " dominates I: " << I << "\n";
+              best_hint = false;
+            }
+          }
+        }
+      }
+
+      if (best_hint) {
+        dbgs() << "Instruction: " << *I << "\n   has the best hint location for: " << *hint << "\n";
+        instructionHintMap[I].insert(hint);
+      }
+    }
+  }
+
+  // Remove hints on the same line that MUST alias
+  // Best would be to pick the closest one, but for now just pick one
+  for (const auto & [inst, hints] : instructionHintMap) {
+    if (hints.size() == 0) continue;
+
+    std::vector<Value *> possible_hints(hints.begin(), hints.end());
+    while (possible_hints.size()) {
+
+      Value *hint = possible_hints.back();
+      possible_hints.pop_back();
+
+      // Add the hint to the map without aliases
+      noAliasInstructionHintMap[inst].insert(hint);
+
+      // Check if the selected hint aliases with any other hint
+      // if so, we can also remove that hint
+      auto mem_hint = MemoryLocation::get(dyn_cast<Instruction>(hint));
+
+      auto it = possible_hints.begin();
+      while (it != possible_hints.end()) {
+
+        auto mem_other_hint = MemoryLocation::get(dyn_cast<Instruction>(*it));
+        auto alias_res = WPA.alias(mem_hint, mem_other_hint);
+
+        // If it MUST alias we know for sure we don't need the other hint
+        // TODO: We can choose to also remove on May and see how if affects the result
+        if (alias_res == AliasResult::MustAlias) {
+          it = possible_hints.erase(it); // remove this element
+        } else {
+          ++it; // Next element
+        }
+      }
+    }
+  }
+
+  // Add metadata for instructionHintMap
+  for (const auto & [inst, hints] : instructionHintMap) {
+    if (hints.size()) {
+      std::string debug_string = "";
+      for (const auto &hint : hints) debug_string += PassUtils::GetOperandString(*hint) + " ";
+
+      // Attach the metadata
+      debug_string.pop_back();
+      PassUtils::SetInstrumentationMetadata(inst, debug_string, "hint-location");
+    }
+  }
+
+  // Add metadata for noAliasInstructionHintMap
+  for (const auto & [inst, hints] : noAliasInstructionHintMap) {
+    if (hints.size()) {
+      std::string debug_string = "";
+      for (const auto &hint : hints) debug_string += PassUtils::GetOperandString(*hint) + " ";
+
+      // Attach the metadata
+      debug_string.pop_back();
+      PassUtils::SetInstrumentationMetadata(inst, debug_string, "no-alias-hint-location");
+    }
+  }
+
+ 
+  //dbgs() << "Instructions with hint locations:\n";
+  //for (const auto & [inst, hints] : noAliasInstructionHintMap) {
+  //  // Printing
+  //  dbgs() << *inst << " has hints:\n";
+  //  for (const auto &hint : hints) {
+  //    dbgs() << "    " << *hint << "\n";
+  //  }
+  //}
+
+
+
+#if 0
+  dbgs() << "\n\n";
+  for (auto &I : instructions(F)) {
+    if (!isa<LoadInst>(I)) continue;
+
+    dbgs() << "Instruction: " << I << " has aliases:\n";
+    for (auto &II : instructions(F)) {
+      if (!isa<LoadInst>(II)) continue;
+      if (&I == &II) continue;
+      dbgs() << "Checking against " << II << "\n";
+
+      auto memI = MemoryLocation::get(&I);
+      auto memII = MemoryLocation::get(&II);
+
+      //dbgs() << "Mem I: " << memI << "\n";
+
+      //if (&I == &II) continue;
+      AliasResult ar = WPA.alias(memI, memII);
+
+      if (ar == AliasResult::MayAlias) dbgs() << " May alias: " << II << "\n";
+      if (ar == AliasResult::MustAlias) dbgs() << " Must alias: " << II << "\n";
+      if (ar == AliasResult::PartialAlias) dbgs() << " Partial alias: " << II << "\n";
+    }
+  }
+#endif
+
+  /*
+   * Find possible hint locations
+   *    Now we have the DFA results with instructions from which the flow WILL
+   *    end up at a write, we can use this information to select instructions where
+   *    we are able to place hints.
+   *
+   */
 
   return Candidates;
 }
 
-
+#if 0
 void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
                                                   std::string FunctionName,
                                                   Instruction *I, Instruction *HintLocation) {
@@ -134,7 +342,9 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
       Builder.CreateCall(InsertFunctionValue, InsertFunctionArgs); // Create the function call
   CI->setCallingConv(F->getCallingConv());
 }
+#endif
 
+#if 0
 void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
   // Iterate over all the candidates
   for (auto &C : Candidates) {
@@ -147,8 +357,9 @@ void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candid
     }
   }
 }
+#endif
 
-bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
+bool CacheNoWritebackHint::run(Noelle &N, WPAPass &WPA, Module &M) {
   auto FM = N.getFunctionsManager();
   auto PCF = FM->getProgramCallGraph();
 
@@ -166,7 +377,7 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
       continue;
 
     // Analyze the function
-    CandidatesTy Candidates = analyzeFunction(N, DA, *F);
+    CandidatesTy Candidates = analyzeFunction(N, WPA, DA, *F);
 
     // Print the candidates and possible locations
     dbgs() << "CacheNoWritebackHint candidates for function: " << F->getName() << "\n";
@@ -183,7 +394,7 @@ bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
     }
 
     // Instrument the 
-    Instrument(N, M, Candidates);
+    //Instrument(N, M, Candidates);
   }
 
   return true;
@@ -209,13 +420,24 @@ bool CacheNoWritebackHint::runOnModule(Module &M) {
   errs() << prefixString << "The program has "
          << N.numberOfProgramInstructions() << " instructions\n";
 
+  /*
+   * Fetch WPA
+   */
+  auto &WPA = getAnalysis<WPAPass>();
+
+  //SVFModule svfModule{ M };
+  //auto pta = new AndersenWaveDiff();
+  //pta->analyze(svfModule);
+  //auto svfCallGraph = pta->getPTACallGraph();
+  //auto mssa = new MemSSA((BVDataPTAImpl *)pta, false);
+
   // For unit tests
   dbgs() << "#instructions: " << N.numberOfProgramInstructions() << "\n";
 
   /*
    * Apply the transformation
    */
-  auto modified = this->run(N, M);
+  auto modified = this->run(N, WPA, M);
 
   /*
    * Verify
@@ -231,6 +453,8 @@ void CacheNoWritebackHint::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfoWrapperPass>();
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<Noelle>();
+
+  AU.addRequired<WPAPass>();
 }
 
 // Next there is code to register your pass to "opt"
