@@ -55,39 +55,8 @@ class LocalMemory{
 
         // Populate the shadow memory
         memcpy(LocalMem, MainMemSegment->data, MainMemSegment->length);
-    }
 
-    // Compare the full memory
-    bool compareMemory()
-    {
-        // First do a fast memcmp (assume it's optimized)
-        int compareValue = memcmp(LocalMem, MainMemSegment->data, MainMemSegment->length);
-        if (compareValue == 0) {
-            // Memory is the same
-            return true;
-        }
-
-        cout << "\tCompare value: " << (int)compareValue << endl;
-
-        // Something is different according to `memcmp`, check byte-per-byte
-        bool same = true;
-        for (size_t i = 0; i < MainMemSegment->length; i++) {
-            if (LocalMem[i] != MainMemSegment->data[i]) {
-                // Memory is different
-                same = false;
-
-                if (PRINT_MEMORY_DIFF) {
-                    address_t addr = MainMemSegment->origin + i;
-                    address_t emu_val = MainMemSegment->data[i];
-                    address_t shadow_val = LocalMem[i];
-                    cerr << "[mem] memory location at 0x" << hex << addr
-                        << " differ - Emulator: 0x" << emu_val << " Shadow: 0x"
-                        << shadow_val << dec << endl;
-                }
-            }
-        }
-
-        return same;
+        compareMemory(true);
     }
 
     bool compareMemory(bool assert)
@@ -132,7 +101,7 @@ class LocalMemory{
             uint64_t byte = (value >> (8 * i)) & 0xFF; // Get the bytes
             LocalMem[address_idx + i] = byte;
         }
-        // cout << "[shadow write] wrote " << (address_t)LocalMem[address_idx] << " to mem: " << hex << address_idx + MainMemSegment->origin << dec << endl;
+        // cout << "[shadow write] wrote " << hex << (address_t)LocalMem[address_idx] << " to mem: " << hex << address_idx + MainMemSegment->origin << dec << endl;
     }
 
     // Read the local memory copy from the address specified

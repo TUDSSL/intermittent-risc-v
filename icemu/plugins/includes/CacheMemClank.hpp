@@ -86,7 +86,7 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(); 
+    nvm.compareMemory(true); 
 
     // Do any logging/printing
     stats.printStats();
@@ -455,7 +455,7 @@ class Cache {
     // assert(check_mem.writes.size() == 0);
 
     // Sanity check - MUST pass
-    nvm.compareMemory();
+    nvm.compareMemory(true);
   }
 
   // Update the cycle count being stored in stats - callback function
