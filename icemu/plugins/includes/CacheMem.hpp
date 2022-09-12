@@ -86,7 +86,7 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(true); 
+    nvm.compareMemory(true && hash_method == 0); 
 
     // Do any logging/printing
     stats.printStats();
@@ -96,7 +96,7 @@ class Cache {
     ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
     ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
 
-    cout << "Cache lines not used: " << non_used_cache_blocks << endl;
+    p_debug << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
 
   /**
@@ -119,7 +119,7 @@ class Cache {
     no_of_lines = ways;
     policy = p;
     dirty_ratio = 0;
-    cout << "Hash method: " << hash_method << endl;
+    p_debug << "Hash method: " << hash_method << endl;
     this->hash_method = hash_method;
     this->enable_pw = enable_pw;
 
@@ -131,9 +131,9 @@ class Cache {
 
     // Initialize the cache
     sets.resize(no_of_sets);
-    cout << "CAPACITY: " << capacity << endl;
-    cout << "SETS: " << no_of_sets << endl;
-    cout << "Lines: " << no_of_lines << endl;
+    p_debug << "CAPACITY: " << capacity << endl;
+    p_debug << "SETS: " << no_of_sets << endl;
+    p_debug << "Lines: " << no_of_lines << endl;
 
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
@@ -191,8 +191,7 @@ class Cache {
                                    & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE))))
                                    >> NUM_BITS(CACHE_BLOCK_SIZE);
 
-      cout << "---------------------------------------------" << endl;
-      cout << "REQ: " << hex << req.addr << " VALUE: " << req.value << dec << " OFFSET: " << req.mem_id.offset << " SIZE: " << req.size << endl;
+      p_debug << "REQ: " << hex << req.addr << " VALUE: " << req.value << dec << " OFFSET: " << req.mem_id.offset << " SIZE: " << req.size << endl;
 
       // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
@@ -217,18 +216,16 @@ class Cache {
 
           // New cache entry for the line.
           if (line.valid == false) {
-              cout << "CACHE CREATE" << endl;
               handleCacheMiss(line);
-              cout << "STORED AT IDX: " << hashed_index << " WAY: " << i << endl;
+              p_debug << "Cache create, stored at IDX: " << hashed_index << " WAY: " << i << endl;
               break;
           }
           // Data is already present in the cache so there might
           // be either hit or collision.
           else {
               if (reconstructAddress(line) == reconstructAddress(req.mem_id.tag, req.mem_id.index)) {
-                cout << "CACHE HIT" << endl;
                 handleCacheHit(line);
-                cout << "STORED AT IDX: " << hashed_index << " WAY: " << i << endl;
+                p_debug << "Cache hit, stored at IDX: " << hashed_index << " WAY: " << i << endl;
                 break;
               }
               else {
@@ -243,13 +240,13 @@ class Cache {
 
       // Handle the collisions if any
       if (collisions == no_of_lines) {
-          cout << "CACHE EVICT" << endl;
+          p_debug << "Cache eviction" << endl;
           evict();
       }
 
       // If it is a read, then see if our implementation provides same as emulator NVM
       performShadowCheck();
-      return NULL;
+      return nullptr;
   }
 
   /**
@@ -266,7 +263,7 @@ class Cache {
     address_t index = line.blocks.bits.index;
 
     address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE)) |
-                          index << (NUM_BITS(CACHE_BLOCK_SIZE));// | offset;
+                          index << (NUM_BITS(CACHE_BLOCK_SIZE));
     return address;
   }
 
@@ -281,7 +278,7 @@ class Cache {
   address_t reconstructAddress(address_t tag, address_t index)
   {
     address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE)) |
-                          index << (NUM_BITS(CACHE_BLOCK_SIZE));// | offset;
+                          index << (NUM_BITS(CACHE_BLOCK_SIZE));
     return address;
   }
 
@@ -320,7 +317,7 @@ class Cache {
         setBit(READ_DOMINATED, line);
         stats.incCacheReads(req.size);
         cost.modifyCost(Pipeline, CACHE_READ, req.size);
-        cout << "READING CACHE: " << line.blocks.data << endl;
+        p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
       
       // For a write hit
@@ -329,25 +326,11 @@ class Cache {
         setBit(WRITE_DOMINATED, line);
         setBit(POSSIBLE_WAR, line);
 
-        uint32_t *dd = (uint32_t *) &line.blocks.data;
-        uint8_t *d = (uint8_t *) &dd[0];
-        cout << "BYTES NORMAL: " << hex << line.blocks.data << endl;
-        cout << "BYTES LOOP  : ";
-        for (int i = 0; i < sizeof(uint32_t); i++)
-        {
-          cout << (int) d[i] << " ";
-        }
-        cout << endl;
-
-        // line.blocks.data = nvm.localRead(reconstructAddress(line), 4);
-        cout << "REQ MEM: " << hex << req.addr << dec << endl;
-        cout << "LOCALREAD: " << hex << nvm.localRead(reconstructAddress(line), 4) <<
-                " EMULATOR READ: " << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl; 
         writeToCache(line);
 
-        cout << "SHOULD STORE: " << hex << req.value << dec << " OFFSET: "  << req.mem_id.offset << " SIZE: " << req.size << endl;
-        cout << "STORING DATA: " << hex << line.blocks.data << dec << endl;
-        line.blocks.size = 4;//req.size;
+        p_debug << "Cache write req, written DATA: " << hex << line.blocks.data << dec << endl;
+        p_debug << "Data at NVM: " << hex << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
+        p_debug << "Data at EMULATOR: " << hex << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
         stats.incCacheWrites(req.size);
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
@@ -374,33 +357,19 @@ class Cache {
         line.blocks.size = 4;//req.size;
         stats.incNVMReads(req.size);
         cost.modifyCost(Pipeline, NVM_READ, req.size);
+        p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
 
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
         setBit(WRITE_DOMINATED, line);
 
-        uint32_t *dd = (uint32_t *) &line.blocks.data;
-        uint8_t *d = (uint8_t *) &dd[0];
-        cout << "BYTES NORMAL: " << hex << line.blocks.data << endl;
-        cout << "BYTES LOOP  : ";
-        for (int i = 0; i < sizeof(uint32_t); i++)
-        {
-          cout << (int) d[i] << " ";
-        }
-        cout << endl;
-
-
         // In case of a write, copy the value from the CPU to the data
-        // line.blocks.data = nvm.localRead(reconstructAddress(line), 4);
-        cout << "LOCALREAD: " << hex << nvm.localRead(reconstructAddress(line), 4) <<
-                " EMULATOR READ: " << nvm.emulatorRead(reconstructAddress(line), 4) << endl;
         writeToCache(line);
 
-        cout << "SHOULD STORE: " << hex << req.value << dec << " OFFSET: "  << req.mem_id.offset << " SIZE: " << req.size << endl;
-        cout << "STORING DATA: " << hex << line.blocks.data << dec << endl;
-        line.blocks.size = 4;//req.size;
-        
+        p_debug << "Cache write req, written DATA: " << hex << line.blocks.data << dec << endl;
+        p_debug << "Data at NVM: " << hex << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
+        p_debug << "Data at EMULATOR: " << hex << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
         stats.incCacheWrites(req.size);
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
@@ -410,33 +379,6 @@ class Cache {
     }
   }
 
-  // /**
-  //  * @brief Write the value received from the CPU to the cache.
-  //  * This has to be done taking into account the offset and the
-  //  * size of the data received.
-  //  */
-  // void writeToCache(CacheLine &line)
-  // {
-  //     uint8_t *d = (uint8_t *) &line.blocks.data;
-  //     cout << "BYTES ORIGINAL : " << hex << (int) d[0] << " " << (int) d[1] << " " << (int) d[2] << " " << (int) d[3] << dec << endl;
-
-  //     // Go to the offset in the cache block
-  //     d += req.mem_id.offset;
-  //     cout << "BYTES OFFSET : " << hex << (int) d[0] << " " << (int) d[1] << " " << (int) d[2] << " " << (int) d[3] << dec << endl;
-
-  //     // Clear the bits which need to be updated
-  //     memset(d, 0, req.size);
-  //     cout << "BYTES MEMSET : " << hex << (int) d[0] << " " << (int) d[1] << " " << (int) d[2] << " " << (int) d[3] << dec << endl;
-
-  //     // Copy the new data into respective bits
-  //     memcpy(d, &req.value, req.size);
-
-  //     d = (uint8_t *) &line.blocks.data;
-  //     cout << "BYTES MEMCPY : " << hex << (int) d[0] << " " << (int) d[1] << " " << (int) d[2] << " " << (int) d[3] << dec << endl;
-  //     cout << "After memcpy : " << hex << (address_t) *d << endl;
-  // }
-
-
   /**
    * @brief Write the value received from the CPU to the cache.
    * This has to be done taking into account the offset and the
@@ -444,18 +386,19 @@ class Cache {
    */
   void writeToCache(CacheLine &line)
   {
-      cout << "Before memcpy : " << hex << line.blocks.data << endl;
+      // The destination is the data in the cache
       uint8_t *d = (uint8_t *) &line.blocks.data;
+
+      // The source is the data from the request
       uint8_t *s = (uint8_t *) &req.value;
-      for (int i = 0; i < req.size; i++)
-      {
-        cout << "COPY: d[" << i + req.mem_id.offset << "]: " << (int) d[i + req.mem_id.offset] << "= s[" << i << "]: " <<  (int) s[i] << endl;
+
+      // Copy the data from the request to the cache
+      for (size_t i = 0; i < req.size; i++) {
         d[i + req.mem_id.offset] = s[i];
       }
-      cout << "BYTES REQ VAL : " << hex << (int) s[0] << " " << (int) s[1] << " " << (int) s[2] << " " << (int) s[3] << dec << endl;
-      cout << "BYTES LINE VAL : " << hex << (int) d[0] << " " << (int) d[1] << " " << (int) d[2] << " " << (int) d[3] << dec << endl;
-      cout << "After memcpy : " << hex << line.blocks.data << endl;
 
+      // The size of the value stored in data is always 4 bytes
+      line.blocks.size = CACHE_BLOCK_SIZE;
   }
 
   /**
@@ -466,7 +409,8 @@ class Cache {
   uint32_t readFromCache(uint64_t dataToRead, address_t offset, address_t size)
   {
       uint32_t data = 0;
-      uint8_t *d = (uint8_t *) &((uint32_t *) &dataToRead)[0];
+      uint32_t *_data_half = ((uint32_t *) &dataToRead);
+      uint8_t *d = (uint8_t *) &_data_half[0];
 
       // Go to the offset in the cache block
       d += offset;
@@ -515,7 +459,7 @@ class Cache {
       if (evicted_line->dirty) {
           if (evicted_line->possible_war || enable_pw == false)
               createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-          else {
+          else { // This is the case where there is no need for checkpoint but still needs to be evicted
               cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
               clearBit(DIRTY, *evicted_line);
               stats.incCacheDirtyEvictions();
@@ -578,7 +522,7 @@ class Cache {
           stats.incCuckooIterations();
           cost.modifyCost(Pipeline, CUCKOO_ITER, 0);
 
-          cout << "Cuckoo iter : " << cuckoo_iter << hex << " Addr: " << reconstructAddress(*cuckoo_cache) << endl;
+          p_debug << "Cuckoo iter : " << cuckoo_iter << hex << " Addr: " << reconstructAddress(*cuckoo_cache) << endl;
 
           // If the current line is dirty, then we need to move around stuff
           if (cuckoo_cache->valid && cuckoo_cache->dirty) {
@@ -689,27 +633,25 @@ class Cache {
                 foundData = true;
 
                 // Debug prints
-                cout << "MAPPED | Indx: " << hashed_index << " Line: " << i << " OFFSET: " << req.mem_id.offset << " SIZE: " << req.size << endl; 
-                cout << "RECVED | Addr: " << hex << req.addr << " Data: " << req.value << dec <<endl;
-                cout << "EMUMEM | Addr: " << hex << req.addr << " Data: " << valueFromEmuMem << dec <<endl;
-                cout << "CACHEM | Addr: " << hex << req.addr << " Data: " << data << dec << endl;
-                cout << "LOCALM | Addr: " << hex << req.addr << " Data: " << nvm.localRead(reconstructAddress(line), 4) << dec << endl << endl;
+                p_debug << "Data from emulator memory, at ADDR: " << hex << req.addr << " DATA: " << valueFromEmuMem << dec <<endl;
+                p_debug << "Data stored in cache, at ADDR: " << hex << req.addr << " DATA: " << data << dec << endl;
+                p_debug << "Data from local NVM memory, at ADDR: " << hex << req.addr << " DATA: " << nvm.localRead(reconstructAddress(line), 4) << dec << endl << endl;
                 break;
               }
           }
         }
 
         // If this fails then something is really wrong with the code, like reaaaaaaaaaally
-        ASSERT(foundData == true);
+        ASSERT(foundData == true || hash_method == 1);
 
         // If the data from the cache and the value from Emulator memory is not
         // same then there is a fault somewhere
         if (data != valueFromEmuMem) {
-          cout << hex << "From local: " << data <<
+          p_debug << hex << "From local: " << data <<
                         " From emulator: " << valueFromEmuMem <<
                         " at addr: " << req.addr << dec <<
                         " size:" << req.size << endl;
-          ASSERT(false);
+          ASSERT(false || hash_method == 1);
         }
       }
   }
@@ -773,9 +715,9 @@ class Cache {
         // Only support 2-way skew associative as of now
         ASSERT(no_of_lines == 2);
         if (line_number == 0)
-          return ((2 * addr) % 103) % no_of_sets;
+          return ((2 * addr) % 524309) % no_of_sets;
         else
-          return ((9 * addr + 3) % 103) % no_of_sets;
+          return ((9 * addr + 3) % 524309) % no_of_sets;
     }
 
     // No no, you should not come here
@@ -798,22 +740,22 @@ class Cache {
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
 
-    // cout << "Creating checkpoint #" << stats.checkpoint.checkpoints;
+    // p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints;
 
     // Increment based on reasons
     switch (reason)
     {
       case CHECKPOINT_DUE_TO_WAR:
         stats.incCheckpointsDueToWAR();
-        // cout << " due to WAR" << endl;
+        // p_debug << " due to WAR" << endl;
         break;
       case CHECKPOINT_DUE_TO_DIRTY:
         stats.incCheckpointsDueToDirty();
-        // cout << " due to ditry ratio" << endl;
+        // p_debug << " due to ditry ratio" << endl;
         break;
       case CHECKPOINT_DUE_TO_PERIOD:
         stats.incCheckpointsDueToPeriod();
-        // cout << " due to period" << endl;
+        // p_debug << " due to period" << endl;
         break;
     }
 
@@ -906,7 +848,7 @@ class Cache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) / (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio <= 1.0);
         }
-        // cout << "Setting dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
+        // p_debug << "Setting dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
         break;
     }
   }
@@ -943,7 +885,7 @@ class Cache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) / (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio >= 0.0);
         }
-        // cout << "Clearing dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
+        // p_debug << "Clearing dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
         break;
     }
   }

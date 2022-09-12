@@ -3,6 +3,7 @@
 
 #include <string>
 #include <chrono>
+#include <iostream>
 #include <execinfo.h>
 
 #include "icemu/emu/Emulator.h"
@@ -10,6 +11,7 @@
 
 using namespace std;
 
+// #define PRINT_DEBUG
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
 static const float DIRTY_RATIO_THRESHOLD = 1.1;
 static const bool NVM_STATS_PER_BYTE = true;
@@ -18,12 +20,18 @@ static const uint8_t CUCKOO_MAX_ITER = 6;
 static const double FREQ = 50 * 1000 * 1000; // MHz
 static const double TIME_FOR_CHECKPOINT_THRESHOLD = 20.0 / 1000.0; // in ms
 static const double CYCLE_COUNT_CHECKPOINT_THRESHOLD = TIME_FOR_CHECKPOINT_THRESHOLD * FREQ; // checkpoint after these cycles
+static const int NO_OF_CACHE_BLOCKS = 4;
 
-// The cache block size in number of bytes
-#define NO_OF_CACHE_BLOCKS 4 // Equates to the cache block size of 4 bytes
 #define CACHE_BLOCK_SIZE NO_OF_CACHE_BLOCKS
 #define NUM_BITS(_n) ((uint32_t)log2(_n))
 #define GET_MASK(_n) ((uint32_t) ((uint64_t)1 << (_n)) - 1)
+
+#define p_err cerr
+#ifdef PRINT_DEBUG
+#define p_debug cout
+#else
+std::ofstream p_debug("/dev/null");;
+#endif
 
 enum replacement_policy {
   LRU,
@@ -167,26 +175,25 @@ void print_trace (void)
   void *array[10];
   size_t size;
   char **strings;
-  size_t i;
 
-  size = backtrace (array, 10);
-  strings = backtrace_symbols (array, size);
+  size = backtrace(array, 10);
+  strings = backtrace_symbols(array, size);
 
   printf ("Obtained %zd stack frames.\n", size);
 
-  for (i = 0; i < size; i++)
-     printf ("%s\n", strings[i]);
+  for (size_t i = 0; i < size; i++)
+     printf("%s\n", strings[i]);
 
-  free (strings);
+  free(strings);
 }
 
-static inline void cacheStoreAddress(CacheLine &line, const CacheReq req) {
+static inline void cacheStoreAddress(CacheLine &line, const CacheReq &req) {
   line.blocks.bits.tag = req.mem_id.tag;
   line.blocks.bits.offset = req.mem_id.offset;
   line.blocks.bits.index = req.mem_id.index;
 }
 
-void copyCacheLines(struct CacheLine &dst, struct CacheLine &src)
+void copyCacheLines(struct CacheLine &dst, const struct CacheLine &src)
 {
   dst.blocks.data = src.blocks.data;
   dst.blocks.bits.index = src.blocks.bits.index;

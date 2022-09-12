@@ -16,6 +16,7 @@
 
 #include "icemu/emu/Emulator.h"
 #include "icemu/emu/Memory.h"
+#include "../includes/Utils.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -68,8 +69,6 @@ class LocalMemory{
             return true;
         }
 
-        // cout << "\tCompare value: " << (int)compareValue << endl;
-
         // Something is different according to `memcmp`, check byte-per-byte
         bool same = true;
         for (size_t i = 0; i < MainMemSegment->length; i++) {
@@ -81,7 +80,7 @@ class LocalMemory{
                     address_t addr = MainMemSegment->origin + i;
                     address_t emu_val = MainMemSegment->data[i];
                     address_t shadow_val = LocalMem[i];
-                    cerr << "[mem] memory location at 0x" << hex << addr
+                    p_err << "[mem] memory location at 0x" << hex << addr
                         << " differ - Emulator: 0x" << emu_val << " Shadow: 0x"
                         << shadow_val << dec << endl;
                 }
