@@ -114,8 +114,6 @@ class MemoryAccess : public HookMemory {
     if (!((address >= main_memory_start)))
         return;
 
-    // cout  << "Memory type: " << arg->mem_type << "\t size: " << arg->size << hex << "\t address: " << arg->address << "\tData: " << arg->value << dec << endl;
-    // return;
 
     // Call the cache
     CacheObj.run(address, mem_type, &value, arg->size);
@@ -148,7 +146,7 @@ class MemoryAccess : public HookMemory {
 
       filename += "-" + std::to_string(size) + "-" + std::to_string(lines);
       cout << "Lines from outside " << lines << endl;
-      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method);
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method, 0);
   }
 };
 
