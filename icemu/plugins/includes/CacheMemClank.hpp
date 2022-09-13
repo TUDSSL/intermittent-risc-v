@@ -28,7 +28,7 @@
 
 // Local includes
 #include "../includes/DetectWAR.h"
-#include "../includes/ShadowMemory.hpp"
+#include "../includes/LocalMemory.hpp"
 #include "../includes/Stats.hpp"
 #include "../includes/CycleCostCalculator.hpp"
 #include "../includes/Logger.hpp"
@@ -54,7 +54,7 @@ class Cache {
 
     // Helper stuffs
     Stats stats;
-    ShadowMemory nvm;
+    LocalMemory nvm;
     icemu::Memory *mem;
     CycleCost cost;
     Logger log;
@@ -86,7 +86,7 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(); 
+    nvm.compareMemory(true); 
 
     // Do any logging/printing
     stats.printStats();
@@ -147,14 +147,14 @@ class Cache {
     nvm.initMem(mem);
 
     // Initialize the logger
-    log.init(filename, hash_method);
+    log.init(filename);
   }
 
   address_t reconstructAddress(CacheLine &line)
   {
-    address_t tag = line.blocks.tag_bits;
-    address_t index = line.blocks.set_bits;
-    address_t offset = line.blocks.offset_bits;
+    address_t tag = line.blocks.bits.tag;
+    address_t index = line.blocks.bits.index;
+    address_t offset = line.blocks.bits.offset;
 
     address_t address =   tag << (NUM_BITS(no_of_sets) + NUM_BITS(CACHE_BLOCK_SIZE))
                         | index << (NUM_BITS(CACHE_BLOCK_SIZE))
@@ -207,7 +207,7 @@ class Cache {
           if (line.valid) {
               // Condition for a cache hit
               if (addr == reconstructAddress(line)) {
-                  line.blocks.last_used = CurrentTime_nanoseconds();
+                  updateCacheLastUsed(line);
                   stats.incCacheHits();
                   
                   // Perform hit actions - note that these are slightly different
@@ -239,10 +239,10 @@ class Cache {
 
               // Store the values. Only place where valid is set true
               setBit(VALID, line);
-              line.blocks.offset_bits = offset;
-              line.blocks.set_bits = index;
-              line.blocks.tag_bits = tag;
-              line.blocks.last_used = CurrentTime_nanoseconds();
+              line.blocks.bits.offset = offset;
+              line.blocks.bits.index = index;
+              line.blocks.bits.tag = tag;
+              updateCacheLastUsed(line);
 
               // Store the data and the size
               line.blocks.data = *value;
@@ -260,19 +260,14 @@ class Cache {
 
       // Handle the collisions if any
       if (collisions == no_of_lines)
-          evict(addr, offset, tag, index, value, type, size);
-
-      // cout << "Cache content: set 0 line 0 data: " << sets.at(0).lines[0].blocks.data  << " size: " << sets.at(0).lines[0].blocks.size
-      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[0]) << dec << endl;
-      // cout << "Cache content: set 0 line 1 data: " << sets.at(0).lines[1].blocks.data  << " size: " << sets.at(0).lines[1].blocks.size
-      //          << hex << " addr: " << reconstructAddress(sets.at(0).lines[1]) << dec << endl;
+          evict(offset, tag, index, value, type, size);
 
       // Return NULL as of now; can be extended to return the data when needed.
       return NULL;
   }
 
   // Handle collisions.
-  void evict(address_t addr, address_t offset, address_t tag, address_t index,
+  void evict(address_t offset, address_t tag, address_t index,
              address_t *value, enum HookMemory::memory_type type, address_t size)
   {
     // If needs to evict, then the misses needs to be incremented.
@@ -293,8 +288,8 @@ class Cache {
         evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
         break;
       case SKEW:
-        // Perform the cuckoo hashing
-        cuckooHashing(addr, offset, tag, index, value, type, size);
+        // Clank should not run with SKEW associative so please die here
+        ASSERT(false);
         return;
     }
     
@@ -317,10 +312,10 @@ class Cache {
     }
 
     // Now that the eviction has been done, perform the replacement.
-    evicted_line->blocks.offset_bits = offset;
-    evicted_line->blocks.tag_bits = tag;
-    evicted_line->blocks.set_bits = index;
-    evicted_line->blocks.last_used = CurrentTime_nanoseconds();
+    evicted_line->blocks.bits.offset = offset;
+    evicted_line->blocks.bits.tag = tag;
+    evicted_line->blocks.bits.index = index;
+    updateCacheLastUsed(*evicted_line);
 
     // If evicted then reset all the flags (except VALID)
     clearBit(READ_DOMINATED, *evicted_line);
@@ -335,12 +330,6 @@ class Cache {
     // Again the same logic. If the memory access is a READ then set the was_read
     // flag to true.
     cacheResetEntry(*evicted_line, type, size);
-  }
-
-  void cuckooHashing(address_t addr, address_t offset, address_t tag, address_t index,
-                     address_t *value, enum HookMemory::memory_type type, address_t size)
-  {
-        return;
   }
 
   // Apply compiler hints
@@ -466,7 +455,7 @@ class Cache {
     // assert(check_mem.writes.size() == 0);
 
     // Sanity check - MUST pass
-    nvm.compareMemory();
+    nvm.compareMemory(true);
   }
 
   // Update the cycle count being stored in stats - callback function
@@ -588,7 +577,7 @@ class Cache {
     }
     
     check_mem.writes.erase(address);
-    nvm.shadowWrite(address, value, size);
+    nvm.localWrite(address, value, size);
   }
 
   // Increments stats as if there was no cache

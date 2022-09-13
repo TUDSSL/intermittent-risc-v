@@ -115,8 +115,10 @@ class MemoryAccess : public HookMemory {
     if (!((address >= main_memory_start)))
         return;
 
-    // cout  << "Memory type: " << arg->mem_type << "\t size: " << arg->size << hex << "\t address: " << arg->address << "\tData: " << arg->value << dec << endl;
-    // return;
+    // if (address == 0x80070634) {
+    //   auto PC = getEmulator().getArchitecture().registerGet(icemu::Architecture::REG_PC);
+    //   cout  << "PC: " << hex << PC << dec << " Memory type: " << arg->mem_type << "\t size: " << arg->size << hex << "\t address: " << arg->address << "\tData: " << value << dec << endl;
+    // }
 
     // Call the cache
     CacheObj.run(address, mem_type, &value, arg->size);

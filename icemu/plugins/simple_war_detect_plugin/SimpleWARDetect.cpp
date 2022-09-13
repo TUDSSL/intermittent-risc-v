@@ -47,7 +47,7 @@
 #include "../includes/Logger.hpp"
 #include "PluginArgumentParsing.h"
 #include "Riscv32E21Pipeline.hpp"
-#include "../includes/ShadowMemory.hpp"
+#include "../includes/LocalMemory.hpp"
 #include "../includes/CycleCostCalculator.hpp"
 #include "../includes/Utils.hpp"
 
@@ -83,7 +83,7 @@ class MemoryAccess : public HookMemory {
   DetectWAR war;
   Logger log;
   Stats stats;
-  ShadowMemory nvm;
+  LocalMemory nvm;
   CycleCost cost;
   address_t last_chp = 0;
   
@@ -97,7 +97,7 @@ class MemoryAccess : public HookMemory {
       if (arg1_val.size())
         filename = arg1_val[0];
     
-    log.init(filename, SET_ASSOCIATIVE);
+    log.init(filename);
     nvm.initMem(&getEmulator().getMemory());
   }
 
@@ -127,23 +127,38 @@ class MemoryAccess : public HookMemory {
         // Nothing
         break;
       case MEM_WRITE:
-        nvm.shadowWrite(arg->address, arg->value, arg->size);
+        nvm.localWrite(arg->address, arg->value, arg->size);
         break;
     }
 
     if (hook_instr_cnt->Pipeline.getTotalCycles() - last_chp > CYCLE_COUNT_CHECKPOINT_THRESHOLD) {
       stats.incCheckpoints();
       stats.incCheckpointsDueToPeriod();
+      cost.modifyCost(&hook_instr_cnt->Pipeline, CHECKPOINT, 0);
+      
       cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      
       war.reset();
       last_chp = hook_instr_cnt->Pipeline.getTotalCycles();
+
+      log.printCheckpointStats(stats);
+      stats.updateLastCheckpointCycle(last_chp);
     } else if (war.isWAR(address, mem_type)) {
       stats.incCheckpoints();
-      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
       stats.incCheckpointsDueToWAR();
+      cost.modifyCost(&hook_instr_cnt->Pipeline, CHECKPOINT, 0);
+      
+      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      
       war.reset();
       last_chp = hook_instr_cnt->Pipeline.getTotalCycles();
+
+      log.printCheckpointStats(stats);
+      stats.updateLastCheckpointCycle(last_chp);
     }
+
+    stats.updateCurrentCycle(hook_instr_cnt->Pipeline.getTotalCycles());
+    
   }
 };
 

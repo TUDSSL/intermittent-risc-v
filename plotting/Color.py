@@ -21,4 +21,51 @@ StackedBarColors = [
     ['#9FA8DA', '#7986CB', '#5C6BC0', '#3F51B5']
 ]
 
-patterns = ('/', '\\', '.', '*', 'x', 'O')
+ColorWheel = [
+    ['#BFC0C0'], # Silver - Clank
+    ['#4F5D75'], # Coral - Prowl
+    ['#85BAA1'], # Teal - Nacho
+    ['#2D3142'], # Deep grey - Nacho
+    ['#EF8354'], # Mandarin
+]
+
+ColorName = {
+    'Silver' : '#BFC0C0',
+    'Coral' : '#4F5D75',
+    'Teal' : '#85BAA1',
+    'Deep grey' : '#2D3142',
+    'Mandarin' : '#EF8354',
+    'Purple' : '#571F4E',
+    'Pink' : '#F7AEF8'
+}
+
+ColorShades = [
+    ['#fca17d'], 
+    ['#f9dbbd'], 
+    ['#52b788'],
+    ['#b7e4c7'],
+    ['#468faf'],
+    ['#89c2d9'],
+]
+
+ColorPalette = {
+    "Matte" : {'silver':"#cad2c5",
+               'orange':"#e07a5f",
+               'blue':"#3d405b",
+               'teal':"#81b29a",
+               'yellow':"#f1c40f",
+               'brown':"#a98467",
+               'green':"#40916c",
+               'coral' :'#4F5D75',
+               }
+}
+
+ColorScheme = {
+    "clank" : ColorPalette['Matte']["blue"], # Silver 
+    "prowl" : ColorPalette['Matte']["teal"], # Coral 
+    "nacho-pw" : ColorPalette['Matte']["orange"], # Teal 
+    "nacho-naive" : ColorPalette['Matte']["brown"], # Deep grey
+    "nacho-clank" : ColorPalette['Matte']["coral"], # Blue
+}
+
+patterns = ('', '\\', 'x', '-', 'x', '/')

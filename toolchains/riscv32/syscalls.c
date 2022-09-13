@@ -10,6 +10,9 @@
 
 #define SYS_write 64
 
+// Enable waiting for syscall processing
+//#define SYSCALL_FROMHOST_WAIT
+
 #undef strcmp
 
 extern volatile uint32_t tohost;
@@ -25,9 +28,12 @@ static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t
   __sync_synchronize();
 
   tohost = (uintptr_t)magic_mem;
+  
+#ifdef SYSCALL_FROMHOST_WAIT
   while (fromhost == 0)
     ;
   fromhost = 0;
+#endif
 
   __sync_synchronize();
   return magic_mem[0];
