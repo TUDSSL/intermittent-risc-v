@@ -63,9 +63,9 @@ ColorPalette = {
 ColorScheme = {
     "clank" : ColorPalette['Matte']["blue"], # Silver 
     "prowl" : ColorPalette['Matte']["teal"], # Coral 
-    "nacho-pw" : ColorPalette['Matte']["orange"], # Teal 
-    "nacho-naive" : ColorPalette['Matte']["brown"], # Deep grey
-    "nacho-clank" : ColorPalette['Matte']["coral"], # Blue
+    "nacho_pw" : ColorPalette['Matte']["orange"], # Teal 
+    "nacho_naive" : ColorPalette['Matte']["brown"], # Deep grey
+    "nacho_clank" : ColorPalette['Matte']["coral"], # Blue
 }
 
 patterns = ('', '\\', 'x', '-', 'x', '/')
