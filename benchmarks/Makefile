@@ -8,6 +8,6 @@ run:
 
 analyze:
 	@echo "Analyzing results"
-	# TODO
+	cd ../plotting && ./build.sh
 
 .PHONY: build run analyze
