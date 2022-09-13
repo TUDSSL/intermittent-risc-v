@@ -92,7 +92,6 @@ class MemoryAccess : public HookMemory {
     hook_instr_cnt = new HookInstructionCount(emu);
     string filename;
     
-
     auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), "clank-log-file=");
       if (arg1_val.size())
         filename = arg1_val[0];
@@ -136,19 +135,20 @@ class MemoryAccess : public HookMemory {
       stats.incCheckpointsDueToPeriod();
       cost.modifyCost(&hook_instr_cnt->Pipeline, CHECKPOINT, 0);
       
-      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
       
       war.reset();
       last_chp = hook_instr_cnt->Pipeline.getTotalCycles();
 
       log.printCheckpointStats(stats);
       stats.updateLastCheckpointCycle(last_chp);
-    } else if (war.isWAR(address, mem_type)) {
+    } else
+    if (war.isWAR(address, mem_type)) {
       stats.incCheckpoints();
       stats.incCheckpointsDueToWAR();
       cost.modifyCost(&hook_instr_cnt->Pipeline, CHECKPOINT, 0);
       
-      cout << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
       
       war.reset();
       last_chp = hook_instr_cnt->Pipeline.getTotalCycles();

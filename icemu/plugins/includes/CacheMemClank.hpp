@@ -96,7 +96,7 @@ class Cache {
     ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
     ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
 
-    cout << "Cache lines not used: " << non_used_cache_blocks << endl;
+    p_debug << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
 
   // Size of the cache = 512 bytes
@@ -118,16 +118,16 @@ class Cache {
     policy = p;
     dirty_ratio = 0;
     this->hash_method = SET_ASSOCIATIVE;
-    cout << "Hash method: " << hash_method << endl;
+    p_debug << "Hash method: " << hash_method << endl;
 
     // Number of cache sets = capacity / (ways * block size)
     no_of_sets = capacity / (no_of_lines * NO_OF_CACHE_BLOCKS);
 
     // Initialize the cache
     sets.resize(no_of_sets);
-    cout << "CAPACITY: " << capacity << endl;
-    cout << "SETS: " << no_of_sets << endl;
-    cout << "Lines: " << no_of_lines << endl;
+    p_debug << "CAPACITY: " << capacity << endl;
+    p_debug << "SETS: " << no_of_sets << endl;
+    p_debug << "Lines: " << no_of_lines << endl;
 
     for (uint32_t i = 0; i < no_of_sets; i++) {
       sets[i].lines.resize(no_of_lines);
@@ -176,9 +176,9 @@ class Cache {
       address_t tag = addr >> (address_t)(log2(CACHE_BLOCK_SIZE) + log2(no_of_sets));
 
       ASSERT(index <= no_of_sets);
-      // cout << "Address: " << std::bitset<32>(addr) << "\tTag: " << std::bitset<25>(tag) << "\tIndex: " << std::bitset<5>(index) << "\tOffset: " << std::bitset<2>(offset) << endl;
-      // cout << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
-      // cout << "Dirty ratio: " << dirty_ratio << endl;
+      // p_debug << "Address: " << std::bitset<32>(addr) << "\tTag: " << std::bitset<25>(tag) << "\tIndex: " << std::bitset<5>(index) << "\tOffset: " << std::bitset<2>(offset) << endl;
+      // p_debug << "Memory type: " << type << "\t size: " << size << hex << "\t address: " << address << dec << "\tData: " << *value;
+      // p_debug << "Dirty ratio: " << dirty_ratio << endl;
 
       // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
@@ -395,22 +395,22 @@ class Cache {
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
 
-    cout << "Creating checkpoint #" << stats.checkpoint.checkpoints;
+    p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints;
 
     // Increment based on reasons
     switch (reason)
     {
       case CHECKPOINT_DUE_TO_WAR:
         stats.incCheckpointsDueToWAR();
-        cout << " due to WAR" << endl;
+        p_debug << " due to WAR" << endl;
         break;
       case CHECKPOINT_DUE_TO_DIRTY:
         stats.incCheckpointsDueToDirty();
-        cout << " due to ditry ratio" << endl;
+        p_debug << " due to ditry ratio" << endl;
         break;
       case CHECKPOINT_DUE_TO_PERIOD:
         stats.incCheckpointsDueToPeriod();
-        cout << " due to period" << endl;
+        p_debug << " due to period" << endl;
         break;
     }
 
@@ -450,7 +450,7 @@ class Cache {
     }
 
     for (auto &w : check_mem.writes)
-      cout << "Writes not evicted #" << hex << w << dec << endl;
+      p_debug << "Writes not evicted #" << hex << w << dec << endl;
 
     // assert(check_mem.writes.size() == 0);
 
@@ -496,7 +496,7 @@ class Cache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) / (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio <= 1.0);
         }
-        // cout << "Setting dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
+        // p_debug << "Setting dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
         break;
     }
   }
@@ -526,7 +526,7 @@ class Cache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) / (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio >= 0.0);
         }
-        // cout << "Clearing dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
+        // p_debug << "Clearing dirty bit: " << line.blocks.set_bits << " to " << dirty_ratio << endl;
         break;
     }
   }

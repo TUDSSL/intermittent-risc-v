@@ -11,7 +11,7 @@
 
 using namespace std;
 
-// #define PRINT_DEBUG
+#define PRINT_DEBUG
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
 static const float DIRTY_RATIO_THRESHOLD = 1.1;
 static const bool NVM_STATS_PER_BYTE = true;
@@ -70,8 +70,8 @@ enum CacheBits {
   DIRTY
 };
 
-/*
- * The bits that identify the memory in a cache.
+/**
+ * @brief The bits that identify the memory in a cache.
  *
  * @tag_bits: Bits to represent the significat memory bits
  * @set_bits: Bits to decide which set of the cache is being used
@@ -91,8 +91,8 @@ struct CacheReq {
   address_t size;
 };
 
-/*
- * The smallest unit of a cache that stores the data.
+/**
+ * @brief The smallest unit of a cache that stores the data.
  * A group of blocks form a cache line (or way)
  * A group of cache lines form a cache set
  * A group of cache sets form a cache
@@ -131,8 +131,8 @@ struct hash_fn
     }
 };
 
-/* 
- * A cache line that consists of blocks. A 2-way set associative cache will have
+/**
+ * @brief A cache line that consists of blocks. A 2-way set associative cache will have
  * 2 blocks. Each block will be then CACHE_BLOCK_SIZE big
  */
 struct CacheLine {
@@ -179,7 +179,7 @@ void print_trace (void)
   size = backtrace(array, 10);
   strings = backtrace_symbols(array, size);
 
-  printf ("Obtained %zd stack frames.\n", size);
+  printf("Obtained %zd stack frames.\n", size);
 
   for (size_t i = 0; i < size; i++)
      printf("%s\n", strings[i]);
