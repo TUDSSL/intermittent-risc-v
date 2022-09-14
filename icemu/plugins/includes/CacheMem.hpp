@@ -8,6 +8,7 @@
 #ifndef _CACHE_MEM_HPP_
 #define _CACHE_MEM_HPP_
 
+#include <cwchar>
 #include <map>
 #include <unordered_map>
 #include <iostream>
@@ -35,12 +36,14 @@
 #include "../includes/Utils.hpp"
 #include "Riscv32E21Pipeline.hpp"
 #include "../includes/MemChecker.hpp"
+#include "../includes/StackTracker.hpp"
 
 using namespace std;
 using namespace icemu;
 
 class Cache {
   private:    
+    Emulator &_emu;
     // Cache metadata
     enum replacement_policy policy;
     enum CacheHashMethod hash_method;
@@ -62,10 +65,27 @@ class Cache {
     uint64_t last_checkpoint_cycle;
     bool enable_pw;
 
+    // Config
+    enum StackTrackConfig {
+      STACK_TRACK_NONE,
+      STACK_TRACK_CHECKPOINT,
+      STACK_TRACK_CONTINUOUS,
+    };
+    enum StackTrackConfig stackTrackConfig;
+
+
   public:
+    // StackPointer tracker
+    StackTracker stackTracker;
+
     RiscvE21Pipeline *Pipeline;
-  // No need for constructor now
-  Cache() = default;
+
+    Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu) {
+      // Default options TODO: move to dynamic option
+      //stackTrackConfig = STACK_TRACK_NONE;
+      //stackTrackConfig = STACK_TRACK_CHECKPOINT;
+      stackTrackConfig = STACK_TRACK_CONTINUOUS;
+    }
 
   ~Cache()
   {
@@ -86,7 +106,8 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(true && hash_method == 0); 
+    //nvm.compareMemory(true && hash_method == 0); 
+    nvm.compareMemory(false && hash_method == 0); 
 
     // Do any logging/printing
     stats.printStats();
@@ -457,12 +478,34 @@ class Cache {
     
       // Perform the eviction
       if (evicted_line->dirty) {
-          if (evicted_line->possible_war || enable_pw == false)
-              createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-          else { // This is the case where there is no need for checkpoint but still needs to be evicted
-              cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
-              clearBit(DIRTY, *evicted_line);
-              stats.incCacheDirtyEvictions();
+          if (stackTrackConfig == STACK_TRACK_CONTINUOUS) {
+              // Check if the memory is needed
+              auto evict_address = reconstructAddress(*evicted_line) | evicted_line->blocks.bits.offset; // TODO: make function
+              if (stackTracker.isMemoryWriteNeeded(evict_address)) {
+                  // Normal eviction
+                  if (evicted_line->possible_war || enable_pw == false)
+                      createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+                  else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                      cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
+                      clearBit(DIRTY, *evicted_line);
+                      stats.incCacheDirtyEvictions();
+                  }
+              } else {
+                  p_err << "No need to check memory\n";
+                  // We don't need the memory, clear the bits
+                  clearBit(DIRTY, *evicted_line);
+                  stats.incCacheDirtyEvictions();
+              }
+          
+          } else {
+              // Normal eviction
+              if (evicted_line->possible_war || enable_pw == false)
+                  createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+              else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                  cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
+                  clearBit(DIRTY, *evicted_line);
+                  stats.incCacheDirtyEvictions();
+              }
           }
       } else
           stats.incCacheCleanEvictions();
@@ -647,7 +690,7 @@ class Cache {
         // If the data from the cache and the value from Emulator memory is not
         // same then there is a fault somewhere
         if (data != valueFromEmuMem) {
-          p_debug << hex << "From local: " << data <<
+          p_err << hex << "From local: " << data <<
                         " From emulator: " << valueFromEmuMem <<
                         " at addr: " << req.addr << dec <<
                         " size:" << req.size << endl;
@@ -782,9 +825,23 @@ class Cache {
         for (CacheLine &l : s.lines) {
             if (l.valid) {
               if (l.dirty) {
+                if (stackTrackConfig == STACK_TRACK_NONE) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
                   stats.incCacheCheckpoint(l.blocks.size);
+                } else {
+                  // Check if we need to write (depends on if the stack is still in use)
+                  auto evict_address = reconstructAddress(l) | l.blocks.bits.offset; // TODO: make function
+                  //auto evict_address = reconstructAddress(l); // TODO: make function
+
+                  if (stackTracker.isMemoryWriteNeeded(evict_address)) {
+                    // Outside of the region, we evict
+                    // Perform the actual write to the memory
+                    cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                    stats.incCacheCheckpoint(l.blocks.size);
+                      //p_err << "\n";
+                  }
+                }
               }
               
               // Reset all bits
@@ -795,6 +852,9 @@ class Cache {
             }
         }
     }
+
+    // Reset the stack tracker
+    stackTracker.resetMinStackAddress();
 
     // Sanity check - MUST pass
     nvm.compareMemory(false);

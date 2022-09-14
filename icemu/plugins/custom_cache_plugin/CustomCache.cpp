@@ -70,6 +70,9 @@ class HookInstructionCount : public HookCode {
     (void)arg;
     Pipeline.add(arg->address, arg->size);
     obj->updateCycleCount(Pipeline.getTotalCycles());
+
+    // Track the stack pointer
+    obj->stackTracker.run();
   }
 
 };
@@ -80,11 +83,11 @@ class MemoryAccess : public HookMemory {
     HookInstructionCount *hook_instr_cnt;
 
     // Create cache object
-    Cache CacheObj = Cache();
+    Cache CacheObj;
 
     string filename = "log/default_log";
 
-  MemoryAccess(Emulator &emu) : HookMemory(emu, "cache-lru") {
+  MemoryAccess(Emulator &emu) : HookMemory(emu, "cache-lru"), CacheObj(emu) {
     hook_instr_cnt = new HookInstructionCount(emu);
 
     // Register the cache object - could be done with OOPs but I like C style :(
