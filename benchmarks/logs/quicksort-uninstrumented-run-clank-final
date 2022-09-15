@@ -17,3 +17,4 @@ checkpoint_max_cycles: 0
 hints_given:0
 max_dirty_ratio:0
 cuckoo_iter:0
+cycle:8353

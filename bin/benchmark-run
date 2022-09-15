@@ -26,7 +26,6 @@ function nacho-naive() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_naive \
         -a enable-pw-bit=0 \
         $elf
-
 }
 
 function nacho-pw() {
@@ -38,7 +37,7 @@ function nacho-pw() {
         -a cache-size=$cache \
         -a cache-lines=$lines \
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw \
-        -a enable-pw-bit=0 \
+        -a enable-pw-bit=1 \
         $elf
 }
 
