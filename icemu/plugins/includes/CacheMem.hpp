@@ -649,13 +649,22 @@ class Cache {
         }
 
         // If this fails then something is really wrong with the code, like reaaaaaaaaaally
-        // PROWL does not need to end up with a read in the cache if it has a cycle
+        // PROWL does not need to end up with a read in the cache if it has a cycle (see comment below)
         ASSERT(foundData == true || hash_method == 1);
 
         // If the data from the cache and the value from Emulator memory is not
         // same then there is a fault somewhere
         if (data != valueFromEmuMem) {
           if (hash_method == 1) {
+            // For PRWOL the algorithm the data might not actually end up in the cache
+            // IF the access is a Read, and the cuckooing forms a cycle back to this Read,
+            // then PROWL might evict the cache entry corresponding to this Read, as it's not Dirty.
+            // And PROWL simply looks for the first non-dirty entry to kick out.
+            // In the PROWL paper, Algorithm 1, line 28 to 33.
+            //
+            // Therefore, for PROWL, we also check the Memory to compare the value to if the value
+            // was not found in the cache.
+
             // Fetch from local memory
             address_t mem_data = readFromCache(nvm.localRead(
                   reconstructAddress(req.mem_id.tag, req.mem_id.index), 4), req.mem_id.offset, req.size);
@@ -741,9 +750,17 @@ class Cache {
         break;
       case SKEW_ASSOCIATIVE:
         // Only support 2-way skew associative as of now
+        // PROWL uses a different random hash every time in the form of:
+        //  hash(x) = ((a*x + b) mod p) mod n    where
+        //      a and b are random, chosen at boot
+        //      p is a prime number > the memory size (here total address, so base + size)
+        //      n is the number of sets in the cache
+        //
+        //  In PROWL a and b are randomly generated every run, here we have set them constant
+        //  for repeatability.
         ASSERT(no_of_lines == 2);
         if (line_number == 0)
-          hash = ((3 * hash_addr) % PRIME_MOD) % no_of_sets;
+          hash = ((3 * hash_addr + 0) % PRIME_MOD) % no_of_sets;
         else
           hash = ((9 * hash_addr + 3) % PRIME_MOD) % no_of_sets;
         break;
