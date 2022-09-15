@@ -211,13 +211,15 @@ class Cache {
       // Look for any entry in the Cache line marked by "index"
       for (uint32_t i = 0; i < no_of_lines; i++) {
           // Based on the type of hashing, fetch the location of the line
-          address_t hashed_index = cacheHash(req.mem_id.index, req.addr, hash_method, i);
+          address_t hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, hash_method, i);
           CacheLine &line = sets.at(hashed_index).lines[i];
+
+          p_debug << "Checking IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
 
           // New cache entry for the line.
           if (line.valid == false) {
               handleCacheMiss(line);
-              p_debug << "Cache create, stored at IDX: " << hashed_index << " WAY: " << i << endl;
+              p_debug << "Cache create, stored at IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
               break;
           }
           // Data is already present in the cache so there might
@@ -225,10 +227,11 @@ class Cache {
           else {
               if (reconstructAddress(line) == reconstructAddress(req.mem_id.tag, req.mem_id.index)) {
                 handleCacheHit(line);
-                p_debug << "Cache hit, stored at IDX: " << hashed_index << " WAY: " << i << endl;
+                p_debug << "Cache hit, stored at IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
                 break;
               }
               else {
+                p_debug << "Cache miss for Addr: " << hex << req.addr << dec << endl;
                 collisions++;
               }
           }
@@ -440,11 +443,11 @@ class Cache {
       // Perform the eviction based on the policy.
       switch (policy) {
           case LRU:
-            hashed_index = cacheHash(req.mem_id.index, 0, SET_ASSOCIATIVE, 0);
+            hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, SET_ASSOCIATIVE, 0);
             evicted_line = &(*std::min_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
             break;
           case MRU:
-            hashed_index = cacheHash(req.mem_id.index, 0, SET_ASSOCIATIVE, 0);
+            hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, SET_ASSOCIATIVE, 0);
             evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(), sets.at(hashed_index).lines.end()));
             break;
           case SKEW:
@@ -504,7 +507,6 @@ class Cache {
         // This line will be cuckooed around - this is the data that has to be inserted
         setBit(VALID, cuckoo_incoming);
 
-        // Now that the eviction has been done, perform the replacement.
         cuckoo_incoming.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
         cacheStoreAddress(cuckoo_incoming, req);
         updateCacheLastUsed(cuckoo_incoming);
@@ -516,13 +518,16 @@ class Cache {
         // Until we find a place or till max number of times
         for (int cuckoo_iter = 0; cuckoo_iter < CUCKOO_MAX_ITER; cuckoo_iter++) {
           // Get the line already in the cache based on the address of the incoming line
-          cuckoo_hash = cacheHash(0, reconstructAddress(cuckoo_incoming), SKEW_ASSOCIATIVE, line_used);
+          cuckoo_hash = cacheHash(cuckoo_incoming.blocks.bits.tag, cuckoo_incoming.blocks.bits.index, SKEW_ASSOCIATIVE, line_used);
           cuckoo_cache = &sets.at(cuckoo_hash).lines.at(line_used);
           
           stats.incCuckooIterations();
           cost.modifyCost(Pipeline, CUCKOO_ITER, 0);
 
-          p_debug << "Cuckoo iter : " << cuckoo_iter << hex << " Addr: " << reconstructAddress(*cuckoo_cache) << endl;
+          p_debug << "Cuckoo iter : " << cuckoo_iter << hex 
+                << " Addr: " << reconstructAddress(*cuckoo_cache) 
+                << " Hash: " << cuckoo_hash 
+                << dec << " Line: " << line_used << endl;
 
           // If the current line is dirty, then we need to move around stuff
           if (cuckoo_cache->valid && cuckoo_cache->dirty) {
@@ -613,13 +618,16 @@ class Cache {
         bool foundData = false;
         uint64_t data = 0;
 
+        valueFromEmuMem = readFromCache(nvm.emulatorRead(
+              reconstructAddress(req.mem_id.tag, req.mem_id.index), 4), req.mem_id.offset, req.size);
+
         /**
          * @note Find the data associated with the current request. At this point of time
          * the cache must have performed all eviction and replacement which means that
          * the data has to be there in the cache.
          */
         for (uint32_t i = 0; i < no_of_lines; i++) {
-          address_t hashed_index = cacheHash(req.mem_id.index, req.addr, hash_method, i);
+          address_t hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, hash_method, i);
           CacheLine &line = sets.at(hashed_index).lines[i];
 
           if (line.valid) {
@@ -629,7 +637,6 @@ class Cache {
 
                 // This is the actual data from emulator memory which is the shadow
                 // memory conceptually.
-                valueFromEmuMem = readFromCache(nvm.emulatorRead(reconstructAddress(line), 4), req.mem_id.offset, req.size);
                 foundData = true;
 
                 // Debug prints
@@ -642,16 +649,31 @@ class Cache {
         }
 
         // If this fails then something is really wrong with the code, like reaaaaaaaaaally
+        // PROWL does not need to end up with a read in the cache if it has a cycle
         ASSERT(foundData == true || hash_method == 1);
 
         // If the data from the cache and the value from Emulator memory is not
         // same then there is a fault somewhere
         if (data != valueFromEmuMem) {
-          p_debug << hex << "From local: " << data <<
-                        " From emulator: " << valueFromEmuMem <<
-                        " at addr: " << req.addr << dec <<
-                        " size:" << req.size << endl;
-          ASSERT(false || hash_method == 1);
+          if (hash_method == 1) {
+            // Fetch from local memory
+            address_t mem_data = readFromCache(nvm.localRead(
+                  reconstructAddress(req.mem_id.tag, req.mem_id.index), 4), req.mem_id.offset, req.size);
+
+            if (mem_data != valueFromEmuMem) {
+              p_err << hex << "From local: " << mem_data <<
+                            " From emulator: " << valueFromEmuMem <<
+                            " at addr: " << req.addr << dec <<
+                            " size:" << req.size << endl;
+              ASSERT(false);
+            }
+          } else {
+            p_err << hex << "From local: " << data <<
+                          " From emulator: " << valueFromEmuMem <<
+                          " at addr: " << req.addr << dec <<
+                          " size:" << req.size << endl;
+            ASSERT(false);
+          }
         }
       }
   }
@@ -706,23 +728,31 @@ class Cache {
    * 
    * @note index is only used for SET ASSOCIATIVE and addr is only used for SKEW ASSOCIATIVE
    */
-  address_t cacheHash(address_t index, address_t addr, enum CacheHashMethod type, uint32_t line_number)
+//#define PRIME_MOD 524309UL
+#define PRIME_MOD 2148007997UL
+  address_t cacheHash(address_t tag, address_t index, enum CacheHashMethod type, uint32_t line_number)
   {
+    uint64_t hash;
+    address_t hash_addr = reconstructAddress(tag, index);
+
     switch (type) {
       case SET_ASSOCIATIVE:
-        return index;
+        hash = index;
+        break;
       case SKEW_ASSOCIATIVE:
         // Only support 2-way skew associative as of now
         ASSERT(no_of_lines == 2);
         if (line_number == 0)
-          return ((2 * addr) % 524309) % no_of_sets;
+          hash = ((3 * hash_addr) % PRIME_MOD) % no_of_sets;
         else
-          return ((9 * addr + 3) % 524309) % no_of_sets;
+          hash = ((9 * hash_addr + 3) % PRIME_MOD) % no_of_sets;
+        break;
+      default:
+        // No no, you should not come here
+        ASSERT(false);
     }
 
-    // No no, you should not come here
-    ASSERT(false);
-    return 0;
+    return hash;
   }
 
   /**
