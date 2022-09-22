@@ -218,7 +218,8 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysi
 
         // If it MUST alias we know for sure we don't need the other hint
         // TODO: We can choose to also remove on May and see how if affects the result
-        if (alias_res == AliasResult::MustAlias) {
+        //if (alias_res == AliasResult::MustAlias) {
+        if (alias_res == AliasResult::MustAlias || alias_res == AliasResult::MayAlias) {
           it = possible_hints.erase(it); // remove this element
         } else {
           ++it; // Next element
