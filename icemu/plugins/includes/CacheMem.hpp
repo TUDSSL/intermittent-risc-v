@@ -63,15 +63,16 @@ class Cache {
     CycleCost cost;
     Logger log;
     uint64_t last_checkpoint_cycle;
+
+    // Settings
     bool enable_pw;
 
-    // Config
     enum StackTrackConfig {
       STACK_TRACK_NONE,
       STACK_TRACK_CHECKPOINT,
       STACK_TRACK_CONTINUOUS,
     };
-    enum StackTrackConfig stackTrackConfig;
+    enum StackTrackConfig stackTrackConfig = STACK_TRACK_NONE;
 
 
   public:
@@ -81,10 +82,6 @@ class Cache {
     RiscvE21Pipeline *Pipeline;
 
     Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu) {
-      // Default options TODO: move to dynamic option
-      //stackTrackConfig = STACK_TRACK_NONE;
-      //stackTrackConfig = STACK_TRACK_CHECKPOINT;
-      stackTrackConfig = STACK_TRACK_CONTINUOUS;
     }
 
   ~Cache()
@@ -132,7 +129,8 @@ class Cache {
    * @param enable_pw Enable/disable naive- version of NACHO
    */
   void init(uint32_t size, uint32_t ways, enum replacement_policy p,
-            icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method, bool enable_pw)
+            icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method,
+            bool enable_pw, int enable_stack_tracking)
   {
     // Initialize meta stuffs
     EmuMem = &emu_mem;
@@ -143,6 +141,23 @@ class Cache {
     p_debug << "Hash method: " << hash_method << endl;
     this->hash_method = hash_method;
     this->enable_pw = enable_pw;
+
+    switch (enable_stack_tracking) {
+      case 0:
+        this->stackTrackConfig = STACK_TRACK_NONE;
+        p_debug << "STACK_TRACK_NONE" << endl;
+        break;
+      case 1:
+        this->stackTrackConfig = STACK_TRACK_CHECKPOINT;
+        p_debug << "STACK_TRACK_CHECKPOINT" << endl;
+        break;
+      case 2:
+        this->stackTrackConfig = STACK_TRACK_CONTINUOUS;
+        p_debug << "STACK_TRACK_CONTINUOUS" << endl;
+        break;
+      default:
+        assert(false && "Unknown stack tracking level");
+    }
 
     if (hash_method == SKEW_ASSOCIATIVE)
       policy = SKEW;
@@ -494,7 +509,7 @@ class Cache {
                       stats.incCacheDirtyEvictions();
                   }
               } else {
-                  p_err << "No need to check memory\n";
+                  p_debug << "No need to check memory\n";
                   // We don't need the memory, clear the bits
                   clearBit(DIRTY, *evicted_line);
                   stats.incCacheDirtyEvictions();
