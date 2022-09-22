@@ -498,7 +498,7 @@ class Cache {
       if (evicted_line->dirty) {
           if (stackTrackConfig == STACK_TRACK_CONTINUOUS) {
               // Check if the memory is needed
-              auto evict_address = reconstructAddress(*evicted_line) | evicted_line->blocks.bits.offset; // TODO: make function
+              auto evict_address = reconstructAddress(*evicted_line) | evicted_line->blocks.bits.offset;
               if (stackTracker.isMemoryWriteNeeded(evict_address)) {
                   // Normal eviction
                   if (evicted_line->possible_war || enable_pw == false)
@@ -893,8 +893,7 @@ class Cache {
                   stats.incCacheCheckpoint(l.blocks.size);
                 } else {
                   // Check if we need to write (depends on if the stack is still in use)
-                  auto evict_address = reconstructAddress(l) | l.blocks.bits.offset; // TODO: make function
-                  //auto evict_address = reconstructAddress(l); // TODO: make function
+                  auto evict_address = reconstructAddress(l) | l.blocks.bits.offset;
 
                   if (stackTracker.isMemoryWriteNeeded(evict_address)) {
                     // Outside of the region, we evict
