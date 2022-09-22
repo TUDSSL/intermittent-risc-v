@@ -1,9 +1,13 @@
+build:
+	@echo "Building all benchmarks"
+	OPT_LEVEL="-O3" $(MAKE) -f make-build.mk all
 
-all: benchmarks
-		@echo "Done building all benchmarks"
+run:
+	@echo "Running all benchmarks using all configurations"
+	$(MAKE) -f make-run.mk all
 
-benchmarks:
-		@echo "Building all generic benchmarks"
-		OPT_LEVEL="-O3" $(MAKE) -f make-benchmarks.mk all
+analyze:
+	@echo "Analyzing results"
+	cd ../plotting && ./build.sh
 
-.PHONY: all benchmarks
+.PHONY: build run analyze

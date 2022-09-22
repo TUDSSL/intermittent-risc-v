@@ -16,6 +16,9 @@ function download_extract {
     mv "$fn" "$1"
 }
 
+# File that marks that we downloaded and extracted all components
+rm -f .download_llvm
+
 pushd "$LLVM_SRC_DIR/tools"
 download_extract "clang"
 # Add the ability to specify ld.lld as the linker using -fuse-ld=lld
@@ -42,3 +45,5 @@ patch -p0 -i compiler-rt-glibc.patch
 rm ./compiler-rt-glibc.patch
 
 popd
+
+echo "Downloaded llvm components @$(date)" > .download_llvm

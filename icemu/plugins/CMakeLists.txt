@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ICEmuPlugins LANGUAGES CXX)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 #Include Unicorn
 include_directories(${CMAKE_SOURCE_DIR}/../icemu/lib/unicorn/include)
 link_directories(${CMAKE_SOURCE_DIR}/../icemu/lib/unicorn)

@@ -1,84 +1,152 @@
 #!/bin/bash
 
-# Run specified benchmark, or if the argument is "all, find all the benchmark
-# build directory
+# TODO: add benchmark specific options here
+#ELF="$1"
+#
+#run-elf $ELF
+
+# benchmark-run target elf cache-size lines
 
 set -e
 
-target="$1"
-if [ -z "$1" ]; then
-    target="all"
-fi
+LOGDIR="$ICLANG_ROOT/benchmarks/logs"
+mkdir -p $LOGDIR
+mkdir -p $LOGDIR/binaries
 
-function find_elf() {
-    ELF_FILE=""
-
-    local build_dir="$1"
-    for i in $(find ./$build_dir -type f \( -iname "*.elf" ! -iname "*.uninstr.elf" ! -iname "*.gclang.elf" \)); do
-    #for i in $(find ./build-opt-all -type f \( -iname "*.elf" ! -iname "*.uninstr.elf"  \)); do
-        if [[ ! -z $ELF_FILE ]]; then
-            echo "Multiple .elf files found in $build_dir. Update the find command"
-            exit -1
-        fi
-        ELF_FILE="$i"
-    done
-
-    if [[ -z "$ELF_FILE" ]]; then
-        echo "No elf file found in $build_dir"
-        exit -1
-    fi
+# Uninstrumented
+# Does not perform any transformations but does go trough the pipeline
+function nacho-naive() {
+    cache=$1
+    lines=$2
+	run-elf \
+        -p custom_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_naive \
+        -a enable-pw-bit=0 \
+        -a enable-stack-tracking=0 \
+        $elf
 }
 
-function print_help() {
+function nacho-pw() {
+    cache=$1
+    lines=$2
+	run-elf \
+        -p custom_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw \
+        -a enable-pw-bit=1 \
+        -a enable-stack-tracking=0 \
+        $elf
+}
+
+# Stack tracking only at checkpoint
+function nacho-pw-st() {
+    cache=$1
+    lines=$2
+	run-elf \
+        -p custom_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw_st \
+        -a enable-pw-bit=1 \
+        -a enable-stack-tracking=1 \
+        $elf
+}
+
+
+# Continious stack tracking
+function nacho-pw-stcont() {
+    cache=$1
+    lines=$2
+	run-elf \
+        -p custom_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw_stcont \
+        -a enable-pw-bit=1 \
+        -a enable-stack-tracking=2 \
+        $elf
+}
+
+function nacho-clank() {
+    cache=$1
+    lines=$2
+	run-elf \
+        -p clank_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_clank \
+        $elf
+}
+
+function clank() {
+	run-elf \
+        -p simple_war_detect_plugin.so \
+        -a clank-log-file=$LOGDIR/$name-$compile_config-run-clank \
+        $elf
+}
+
+
+function prowl() {
+    cache=$1
+	run-elf -p custom_cache_plugin.so \
+        -a hash-method=1 \
+        -a cache-size=$cache \
+        -a cache-lines=2 \
+        -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-prowl \
+        $elf
+}
+
+function help() {
     echo "Usage: benchmark-run [target]"
     echo ""
-    echo "benchmark-run will try to find all the targets in the directory"
-    echo "assuming they start with 'build-' the build- does not have to be"
-    echo "included in the target"
+
+    # Other
     echo ""
-    echo "special targets:"
-    echo "  all (default)  - finds all targets starting with 'build-'"
-    echo "  all-parallel   - same as the 'all' target but run in parallel"
-    exit 0
+    echo "other:"
+    echo "  help       print this help message"
 }
 
-# Print the help
-[[ "$target" == "help" ]] && print_help
-[[ "$target" == "--help" ]] && print_help
-[[ "$target" == "-h" ]] && print_help
+# Arguments
+target="$1"
+elf="$2"
+compile_config="$3"
 
-parralel="false"
-
-# Run all the benchmarks we can find
-if [[ "$target" == "all" ]]; then
-    echo "Running all the benchmarks"
-    target="build-*"
+if [ -z "$compile_config" ]; then
+    compile_config="unknown"
 fi
 
-# Run all the benchmarks we can find
-if [[ "$target" == "all-parallel" ]]; then
-    echo "Running all the benchmarks in parallel (output hidden)"
-    parralel="true"
-    target="build-*"
+# Vars
+name=$(basename $elf .elf)
+
+# Check for all the arguments
+if [ "$#" -lt 2 ]; then
+    echo "Please provide all arguments"
+    help
+    exit 1
 fi
 
-function run_elf() {
-    find_elf "$1"
-    echo "Running benchmark: $ELF_FILE"
-    run-elf "$ELF_FILE"
-    echo ""
-}
+# Run a composit target with arguemts
+# Replace + with space should be the correct argument
+comp_target=${target//"+"/" "}
 
-# Run the benchmarks
-for i in $(find . -type d \( -iname "$target" -or -iname "build-$target" \)); do
-    if [[ $parralel == "true" ]]; then
-        run_elf $i >/dev/null 2>&1 &
-    else
-        run_elf $i
-    fi
-done
+echo "Running target: $comp_target"
+$comp_target $elf $bench_name
 
-# Wait for the emulations to end
-wait
-echo "Done"
+# Copy the elf file to the binaries directory
+cp "$elf" "$LOGDIR/binaries/$compile_config-$elf"
+
+exit 0
+
+# Not a target
+echo "Target '$target' does not exist"
+help
+exit 1
 

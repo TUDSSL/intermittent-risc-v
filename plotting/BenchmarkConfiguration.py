@@ -2,15 +2,17 @@ from Color import *
 
 # Configurations in order of use and with the name to use
 ConfigurationNameMap = {
-    'clank': 'Clank',
-    'prowl': 'Prowl',
-    'nacho': r'\textbf{Nacho}',
+    'nacho-naive': 'Naive Nacho',
+    'nacho-pw'   : 'Nacho',
+    'nacho-clank': 'Ideal Nacho',
+    'prowl'      : 'PROWL'
 }
 
 ConfigurationColorMap = {
-    'clank': Color['darkgrey'],
-    'prowl': Color['grey'],
-    'nacho': Color['teal'],
+    'nacho-naive': '#FFCCBC',
+    'nacho-pw': '#B3E5FC',
+    'nacho-clank': '#A5D6A7',
+    'prowl'      : '#BDBDBD'
 }
 
 BenchmarkNameMap = {
