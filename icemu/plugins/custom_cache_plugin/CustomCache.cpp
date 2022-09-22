@@ -65,7 +65,7 @@ class HookInstructionCount : public HookCode {
     obj->Pipeline = &Pipeline;
   }
 
-  void run(hook_arg_t *arg)
+  void run(hook_arg_t *arg) override
   {
     (void)arg;
     Pipeline.add(arg->address, arg->size);
