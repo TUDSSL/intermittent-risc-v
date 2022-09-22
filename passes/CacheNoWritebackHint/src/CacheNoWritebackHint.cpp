@@ -30,9 +30,9 @@ CacheNoWritebackHint::CacheNoWritebackHint() :
   return ;
 }
 
-CacheNoWritebackHint::CandidatesTy
+CacheNoWritebackHint::InstructionHintsMapTy
 CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysis &DA, Function &F) {
-  CandidatesTy Candidates;
+  InstructionHintsMapTy Candidates;
 
   if (F.isIntrinsic())
     return Candidates;
@@ -251,59 +251,16 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysi
     }
   }
 
- 
-  //dbgs() << "Instructions with hint locations:\n";
-  //for (const auto & [inst, hints] : noAliasInstructionHintMap) {
-  //  // Printing
-  //  dbgs() << *inst << " has hints:\n";
-  //  for (const auto &hint : hints) {
-  //    dbgs() << "    " << *hint << "\n";
-  //  }
-  //}
-
-
-
-#if 0
-  dbgs() << "\n\n";
-  for (auto &I : instructions(F)) {
-    if (!isa<LoadInst>(I)) continue;
-
-    dbgs() << "Instruction: " << I << " has aliases:\n";
-    for (auto &II : instructions(F)) {
-      if (!isa<LoadInst>(II)) continue;
-      if (&I == &II) continue;
-      dbgs() << "Checking against " << II << "\n";
-
-      auto memI = MemoryLocation::get(&I);
-      auto memII = MemoryLocation::get(&II);
-
-      //dbgs() << "Mem I: " << memI << "\n";
-
-      //if (&I == &II) continue;
-      AliasResult ar = WPA.alias(memI, memII);
-
-      if (ar == AliasResult::MayAlias) dbgs() << " May alias: " << II << "\n";
-      if (ar == AliasResult::MustAlias) dbgs() << " Must alias: " << II << "\n";
-      if (ar == AliasResult::PartialAlias) dbgs() << " Partial alias: " << II << "\n";
-    }
-  }
-#endif
-
-  /*
-   * Find possible hint locations
-   *    Now we have the DFA results with instructions from which the flow WILL
-   *    end up at a write, we can use this information to select instructions where
-   *    we are able to place hints.
-   *
-   */
+  // Store the final candidates
+  Candidates = noAliasInstructionHintMap;
 
   return Candidates;
 }
 
-#if 0
-void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
-                                                  std::string FunctionName,
-                                                  Instruction *I, Instruction *HintLocation) {
+void CacheNoWritebackHint::insertHintFunctionCall(Module &M, Instruction *I, Instruction *HintLocation) {
+
+  assert((I != nullptr) && "insertHintFunctionCall: hint Load is nullptr");
+  assert((HintLocation != nullptr) && "insertHintFunctionCall: hint location is nullptr");
 
   // Greate the builder
   auto *BB = I->getParent();
@@ -314,19 +271,10 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   // Get the context
   LLVMContext &Ctx = F->getContext();
 
+  // Get the function
   FunctionCallee InsertFunctionCallee =
     M.getOrInsertFunction("__cache_hint", Type::getVoidTy(Ctx), Type::getInt8PtrTy(Ctx));
-
-  // Get the function
-  //Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
-  //assert(!!InsertFunction &&
-  //       "CacheNoWritebackHint: Can't find function");
-  //FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
-
-  //FunctionCallee InsertFunctionCallee =
-  //    M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
   Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
-
 
   // Get the Load source address
   LoadInst *Load = dyn_cast<LoadInst>(I);
@@ -342,22 +290,17 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
       Builder.CreateCall(InsertFunctionValue, InsertFunctionArgs); // Create the function call
   CI->setCallingConv(F->getCallingConv());
 }
-#endif
 
-#if 0
-void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
+void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, InstructionHintsMapTy &Candidates) {
   // Iterate over all the candidates
-  for (auto &C : Candidates) {
-    dbg() << "Instrumenting candidate: " << *C.I << "\n";
-
-    for (auto &H : C.SelectedHintLocations) {
-      dbg() << "  Inserting hint before: " << *H << "\n";
-      // Insert the call
-      insertHintFunctionCall(N, M, "__cache_hint", C.I, H);
+  // Add hints to the code by calling _cache_hint(load_source_address) at the hint locations
+  for (const auto & [inst, hints] : Candidates) {
+    for (const auto &hint : hints) {
+      dbgs() << "Adding hint call at:\n" << *inst << "\n  for:\n" << *hint << "\n";
+      insertHintFunctionCall(M, dyn_cast<Instruction>(hint), inst);
     }
   }
 }
-#endif
 
 bool CacheNoWritebackHint::run(Noelle &N, WPAPass &WPA, Module &M) {
   auto FM = N.getFunctionsManager();
@@ -377,24 +320,19 @@ bool CacheNoWritebackHint::run(Noelle &N, WPAPass &WPA, Module &M) {
       continue;
 
     // Analyze the function
-    CandidatesTy Candidates = analyzeFunction(N, WPA, DA, *F);
-
-    // Print the candidates and possible locations
-    dbgs() << "CacheNoWritebackHint candidates for function: " << F->getName() << "\n";
-    for (auto &C : Candidates) {
-      dbgs() << "  Candidate instruction: " << *C.I << "\n";
-      dbgs() << "    Possible hint locations: \n";
-      for (auto &PHL : C.PossibleHintLocations) {
-        dbgs() << "    " << *PHL << "\n";
-      }
-      dbgs() << "    Selected hint locations: \n";
-      for (auto &SHL : C.SelectedHintLocations) {
-        dbgs() << "    " << *SHL << "\n";
+    auto Candidates = analyzeFunction(N, WPA, DA, *F);
+ 
+    dbgs() << "Instructions with hint locations:\n";
+    for (const auto & [inst, hints] : Candidates) {
+      // Printing
+      dbgs() << *inst << " has hints:\n";
+      for (const auto &hint : hints) {
+        dbgs() << "    " << *hint << "\n";
       }
     }
 
     // Instrument the 
-    //Instrument(N, M, Candidates);
+    Instrument(N, M, Candidates);
   }
 
   return true;
