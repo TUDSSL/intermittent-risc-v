@@ -8,6 +8,7 @@
 #ifndef _CACHE_MEM_HPP_
 #define _CACHE_MEM_HPP_
 
+#include <cwchar>
 #include <map>
 #include <unordered_map>
 #include <iostream>
@@ -35,12 +36,14 @@
 #include "../includes/Utils.hpp"
 #include "Riscv32E21Pipeline.hpp"
 #include "../includes/MemChecker.hpp"
+#include "../includes/StackTracker.hpp"
 
 using namespace std;
 using namespace icemu;
 
 class Cache {
   private:    
+    Emulator &_emu;
     // Cache metadata
     enum replacement_policy policy;
     enum CacheHashMethod hash_method;
@@ -60,12 +63,26 @@ class Cache {
     CycleCost cost;
     Logger log;
     uint64_t last_checkpoint_cycle;
+
+    // Settings
     bool enable_pw;
 
+    enum StackTrackConfig {
+      STACK_TRACK_NONE,
+      STACK_TRACK_CHECKPOINT,
+      STACK_TRACK_CONTINUOUS,
+    };
+    enum StackTrackConfig stackTrackConfig = STACK_TRACK_NONE;
+
+
   public:
+    // StackPointer tracker
+    StackTracker stackTracker;
+
     RiscvE21Pipeline *Pipeline;
-  // No need for constructor now
-  Cache() = default;
+
+    Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu) {
+    }
 
   ~Cache()
   {
@@ -86,7 +103,8 @@ class Cache {
     }
 
     // This needs to pass
-    nvm.compareMemory(true && hash_method == 0); 
+    //nvm.compareMemory(true && hash_method == 0); 
+    nvm.compareMemory(false && hash_method == 0); 
 
     // Do any logging/printing
     stats.printStats();
@@ -111,7 +129,8 @@ class Cache {
    * @param enable_pw Enable/disable naive- version of NACHO
    */
   void init(uint32_t size, uint32_t ways, enum replacement_policy p,
-            icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method, bool enable_pw)
+            icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method,
+            bool enable_pw, int enable_stack_tracking)
   {
     // Initialize meta stuffs
     EmuMem = &emu_mem;
@@ -122,6 +141,23 @@ class Cache {
     p_debug << "Hash method: " << hash_method << endl;
     this->hash_method = hash_method;
     this->enable_pw = enable_pw;
+
+    switch (enable_stack_tracking) {
+      case 0:
+        this->stackTrackConfig = STACK_TRACK_NONE;
+        p_debug << "STACK_TRACK_NONE" << endl;
+        break;
+      case 1:
+        this->stackTrackConfig = STACK_TRACK_CHECKPOINT;
+        p_debug << "STACK_TRACK_CHECKPOINT" << endl;
+        break;
+      case 2:
+        this->stackTrackConfig = STACK_TRACK_CONTINUOUS;
+        p_debug << "STACK_TRACK_CONTINUOUS" << endl;
+        break;
+      default:
+        assert(false && "Unknown stack tracking level");
+    }
 
     if (hash_method == SKEW_ASSOCIATIVE)
       policy = SKEW;
@@ -460,12 +496,34 @@ class Cache {
     
       // Perform the eviction
       if (evicted_line->dirty) {
-          if (evicted_line->possible_war || enable_pw == false)
-              createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-          else { // This is the case where there is no need for checkpoint but still needs to be evicted
-              cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
-              clearBit(DIRTY, *evicted_line);
-              stats.incCacheDirtyEvictions();
+          if (stackTrackConfig == STACK_TRACK_CONTINUOUS) {
+              // Check if the memory is needed
+              auto evict_address = reconstructAddress(*evicted_line) | evicted_line->blocks.bits.offset;
+              if (stackTracker.isMemoryWriteNeeded(evict_address)) {
+                  // Normal eviction
+                  if (evicted_line->possible_war || enable_pw == false)
+                      createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+                  else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                      cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
+                      clearBit(DIRTY, *evicted_line);
+                      stats.incCacheDirtyEvictions();
+                  }
+              } else {
+                  p_debug << "No need to check memory\n";
+                  // We don't need the memory, clear the bits
+                  clearBit(DIRTY, *evicted_line);
+                  stats.incCacheDirtyEvictions();
+              }
+          
+          } else {
+              // Normal eviction
+              if (evicted_line->possible_war || enable_pw == false)
+                  createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+              else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                  cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
+                  clearBit(DIRTY, *evicted_line);
+                  stats.incCacheDirtyEvictions();
+              }
           }
       } else
           stats.incCacheCleanEvictions();
@@ -829,9 +887,22 @@ class Cache {
         for (CacheLine &l : s.lines) {
             if (l.valid) {
               if (l.dirty) {
+                if (stackTrackConfig == STACK_TRACK_NONE) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
                   stats.incCacheCheckpoint(l.blocks.size);
+                } else {
+                  // Check if we need to write (depends on if the stack is still in use)
+                  auto evict_address = reconstructAddress(l) | l.blocks.bits.offset;
+
+                  if (stackTracker.isMemoryWriteNeeded(evict_address)) {
+                    // Outside of the region, we evict
+                    // Perform the actual write to the memory
+                    cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                    stats.incCacheCheckpoint(l.blocks.size);
+                      //p_err << "\n";
+                  }
+                }
               }
               
               // Reset all bits
@@ -842,6 +913,9 @@ class Cache {
             }
         }
     }
+
+    // Reset the stack tracker
+    stackTracker.resetMinStackAddress();
 
     // Sanity check - MUST pass
     nvm.compareMemory(false);

@@ -65,11 +65,14 @@ class HookInstructionCount : public HookCode {
     obj->Pipeline = &Pipeline;
   }
 
-  void run(hook_arg_t *arg)
+  void run(hook_arg_t *arg) override
   {
     (void)arg;
     Pipeline.add(arg->address, arg->size);
     obj->updateCycleCount(Pipeline.getTotalCycles());
+
+    // Track the stack pointer
+    obj->stackTracker.run();
   }
 
 };
@@ -80,11 +83,11 @@ class MemoryAccess : public HookMemory {
     HookInstructionCount *hook_instr_cnt;
 
     // Create cache object
-    Cache CacheObj = Cache();
+    Cache CacheObj;
 
     string filename = "log/default_log";
 
-  MemoryAccess(Emulator &emu) : HookMemory(emu, "cache-lru") {
+  MemoryAccess(Emulator &emu) : HookMemory(emu, "cache-lru"), CacheObj(emu) {
     hook_instr_cnt = new HookInstructionCount(emu);
 
     // Register the cache object - could be done with OOPs but I like C style :(
@@ -136,7 +139,8 @@ class MemoryAccess : public HookMemory {
       // Default values
       uint32_t size = 512, lines = 2, hash_method = 0;
       bool enable_pw = false;
-      string arg1 = "cache-size=", arg2 = "cache-lines=", arg3 = "hash-method=", arg4="enable-pw-bit=";
+      int enable_stack_tracking = 0;
+      string arg1 = "cache-size=", arg2 = "cache-lines=", arg3 = "hash-method=", arg4="enable-pw-bit=", arg5="enable-stack-tracking=";
       
       auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), arg1);
       if (arg1_val.size())
@@ -154,9 +158,13 @@ class MemoryAccess : public HookMemory {
       if (arg4_val.size())
         enable_pw = !!(std::stoul(arg4_val[0]));
 
+      auto arg5_val = PluginArgumentParsing::GetArguments(getEmulator(), arg5);
+      if (arg5_val.size())
+        enable_stack_tracking = std::stoul(arg5_val[0]);
+
       filename += "-" + std::to_string(size) + "-" + std::to_string(lines);
       cout << "Lines from outside " << lines << endl;
-      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method, enable_pw);
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method, enable_pw, enable_stack_tracking);
   }
 };
 
