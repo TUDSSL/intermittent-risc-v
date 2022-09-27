@@ -113,11 +113,13 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysi
     }
 
     // Printing
+#if 0
     dbgs() << "Instruction: " << I << "\n";
     dbgs() << " IN:\n";
     for (auto &II : IIN) dbgs() << "  " << *II << "\n";
     dbgs() << " OUT:\n";
     for (auto &II : IOUT) dbgs() << "  " << *II << "\n";
+#endif
   }
 
   std::map<Instruction *, std::set<Value *>> instructionWarReachMap;
@@ -131,6 +133,7 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysi
    */
   for (auto &I : instructions(F)) {
     if (isa<IntrinsicInst>(I)) continue;
+    if (isa<PHINode>(I)) continue;
     auto in_i = warReachDFAResult->IN(&I);
     instructionWarReachMap[&I].insert(in_i.begin(), in_i.end());
   }
@@ -163,22 +166,26 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysi
     for (const auto &hint : in_i) {
       bool best_hint = true;
 
+      // If our hint is not dominated by the definition (load)
+      // it's not a valid location
+      //if (!DT.dominates(I, dyn_cast<Instruction>(hint))) continue;
+
       dbgs() << "  checking hint = " << *hint << "\n";
       // Go through the other instructions
       for (const auto & [II, _] : instructionWarReachMap) {
         if (I == II) continue; // Skip self compare
-        dbgs() << "     checking in instruction = " << *II << "\n";
+        //dbgs() << "     checking in instruction = " << *II << "\n";
 
         auto other_hints = warReachDFAResult->IN(II);
         for (auto &other_hint : other_hints) {
           if (hint == other_hint) {
-            dbgs() << "     found matching hint\n";
+            dbgs() << "     found matching hint in II: " << *II << "\n";
             // Found another location with the same hint
             // If our candidate hint is dominated by the other hint location
             // then there is a better hint, so we ignore this one
             if (DT.dominates(II, I)) {
               dbgs() << "     hint in:" << *II << " is better\n";
-              //dbgs() << "II: " << II << " dominates I: " << I << "\n";
+              dbgs() << "II: " << II << " dominates I: " << I << "\n";
               best_hint = false;
             }
           }
@@ -317,7 +324,9 @@ bool CacheNoWritebackHint::run(Noelle &N, WPAPass &WPA, Module &M) {
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
-    if (F->isIntrinsic())
+    //if (F->isIntrinsic())
+    //  continue;
+    if (F->getInstructionCount() == 0)
       continue;
 
     // Analyze the function
