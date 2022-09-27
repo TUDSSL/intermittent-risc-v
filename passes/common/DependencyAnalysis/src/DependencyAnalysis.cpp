@@ -20,8 +20,8 @@ void DependencyAnalysis::analyzeModule() {
     Function *F = Node->getFunction();
     assert(F != nullptr);
 
-    if (F->isIntrinsic())
-      continue;
+    //if (F->isIntrinsic())
+    //  continue;
 
     if (F->getInstructionCount() == 0)
       continue;
