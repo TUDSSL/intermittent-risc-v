@@ -26,9 +26,15 @@ BASE_ICLANG_CODEGEN_FLAGS=""
 # Does not perform any transformations but does go trough the pipeline
 function uninstrumented() {
     # Configure the benchmark
-
     export ICLANG_NO_PASSES="YES"
 
+    # Build the benchmark
+    build_benchmark "${FUNCNAME[0]}"
+}
+
+# Cache Hint
+# Applies the cache hint transformations
+function cachehints() {
     # Build the benchmark
     build_benchmark "${FUNCNAME[0]}"
 }
