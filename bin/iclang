@@ -8,54 +8,47 @@
 #   ICLANG_VERBOSE="yes"
 
 # Environment variables that should be set:
-#   ICLANG_PASS_IDEMP_FLAGS=""
-#   ICLANG_PASS_LOOP_UNROLL_FLAGS=""
-#   ICLANG_PASS_LOOP_CLUSTER_FLAGS=""
-#   ICLANG_PASS_WRITE_BUFFER_FLAGS=""
-#   ICLANG_PASS_EXPANDER_FLAGS=""
+#   ICLANG_PASS_FLAGS=""
 #   ICLANG_CODEGEN_FLAGS=""
 
-set -e
-
-PROG="iclang"
-
 # Setup the environment
-CC="gclang"
-GET_BC="get-bc"
+CC="clang"
+WP_CC="gclang"
+WP_GET_BC="get-bc"
 LLVM_DIS="llvm-dis"
 
 NOELLE_NORM="noelle-norm"
 NOELLE_LOAD="noelle-load"
 
-export GLLVM_OBJCOPY=arm-none-eabi-objcopy
-OBJDUMP=arm-none-eabi-objdump
+export GLLVM_OBJCOPY=llvm-objcopy
+OBJDUMP=llvm-objdump
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ROOT=$(realpath "$DIR/..")
 
-# Set checkpoint library locations
-#WAR_PASS_LIB="$DIR/../passes/idempotent-regions/build/idemp-regions.so"
+# Cache hint support library location
+CACHEHINT_ARCH_SRC="$ROOT/toolchains/riscv32/cache_hint.c"
 
-CHECKPOINT_ARCH_SRC="$DIR/../toolchains/arm/checkpoint/checkpoint.c"
+# Set the common flags
+ICLANG_PASS_COMMON_FLAGS=""
 
-# Enable debug flag for all the passes
-ICLANG_PASS_COMMON_FLAGS="-debug"
+# Directory holding all custom compiler passes
+PASS_LIB_DIR="$ROOT/passes/install/lib"
 
+# Collect all the pass libraries
+PASS_LIBS=""
+for i in $PASS_LIB_DIR/*.so; do
+    [ -f "$i" ] || break
+    PASS_LIBS="$PASS_LIBS -load $(realpath $i)"
+done
+
+# Configure output
 if [[ ! -z "${ICLANG_VERBOSE}" ]]; then
     # Output all pass output to stdout
     ICLANG_PASS_STDOUT=""
 
-    # Enable debug flag for all the passes
-    #ICLANG_PASS_COMMON_FLAGS="-debug"
-
-    # Set debug for the codegen pass
-    ICLANG_CODEGEN_FLAGS="$ICLANG_CODEGEN_FLAGS -mllvm --idemp-debug"
-
     # With verbose output
-    echo "ICLANG_PASS_IDEMP_FLAGS: ${ICLANG_PASS_IDEMP_FLAGS}"
-    echo "ICLANG_PASS_LOOP_UNROLL_FLAGS: ${ICLANG_PASS_LOOP_UNROLL_FLAGS}"
-    echo "ICLANG_PASS_LOOP_CLUSTER_FLAGS: ${ICLANG_PASS_LOOP_CLUSTER_FLAGS}"
-    echo "ICLANG_PASS_WRITE_BUFFER_FLAGS: ${ICLANG_PASS_WRITE_BUFFER_FLAGS}"
-    echo "ICLANG_PASS_EXPANDER_FLAGS: ${ICLANG_PASS_EXPANDER_FLAGS}"
+    echo "ICLANG_PASS_FLAGS: ${ICLANG_PASS_FLAGS}"
     echo "ICLANG_CODEGEN_FLAGS: ${ICLANG_CODEGEN_FLAGS}"
 else
     # Disable noelle print output
@@ -70,6 +63,7 @@ function exit_on_error() {
     exit -1
 }
 
+PROG="iclang"
 function pecho() {
     if [[ ! -z "${ICLANG_VERBOSE}" ]]; then
       echo "${PROG}: $1"
@@ -82,26 +76,24 @@ function run() {
     eval "$cmd" || exit_on_error "An error occured running: $cmd"
 }
 
-# $1 - pass-lib
-# $2 - passname
-# $3 - basename
-# $4 - input-llvmir
-# $5 - pass-args
+# $1 - passname
+# $2 - basename
+# $3 - input-llvmir
+# $4 - pass-args
 # return output-llvmir
 function apply_pass() {
-    local passlib="$1"
-    local passname="$2"
-    local basename="$3"
-    local input_ir="$4"
-    local passargs="$5"
+    local passname="$1"
+    local basename="$2"
+    local input_ir="$3"
+    local passargs="$4"
 
     # Normalize
     run "$NOELLE_NORM -S $input_ir -o $basename-$passname-input.ll $ICLANG_PASS_STDOUT"
 
     # Apply the pass
-    run "$NOELLE_LOAD -load $passlib $passargs $ICLANG_PASS_COMMON_FLAGS \
- -S $basename-$passname-input.ll -o $basename-$passname.ll 2>&1 | \
- tee $basename-$passname.txt | grep -v XAN: $ICLANG_PASS_STDOUT"
+    run "$NOELLE_LOAD $PASS_LIBS $passargs $ICLANG_PASS_COMMON_FLAGS $ICLANG_PASS_FLAGS \
+        -S $basename-$passname-input.ll -o $basename-$passname.ll 2>&1 \
+        | tee $basename-$passname.txt | grep -v XAN: $ICLANG_PASS_STDOUT"
 
     # Set the return
     apply_pass_output="$basename-$passname.ll"
@@ -135,16 +127,15 @@ function apply_passes() {
     apply_opt "opt-pre-war" "$basename" "$ir" "$opt_level"
     local ir="$apply_opt_output"
 
-    # WAR step
-    #apply_pass $WAR_PASS_LIB "idemp" "$basename" "$ir" "$ICLANG_PASS_IDEMP_FLAGS"
-    #local ir="$apply_pass_output"
+    # Cache hint step
+    apply_pass "cachehints" "$basename" "$ir" "--cache-no-writeback-hint --cache-no-writeback-hint-debug"
+    local ir="$apply_pass_output"
 
     # Return
     apply_passes_output="$ir"
 }
 
-
-function compile_intermittent() {
+function compile_with_passes() {
     local bitcode_input="$1"
     local basename="$obj_dir/$obj_filename"
 
@@ -166,9 +157,9 @@ function compile_intermittent() {
     compile_args_with_includes="$compile_args"
     compile_args=$(echo "${compile_args}" | sed -E 's/-I\S+//g')
 
-
     # If we want to run the passes
     if [[ -z "${ICLANG_NO_PASSES}" ]]; then
+        pecho "applying passes"
         local ir="$bitcode_input"
 
         # Apply all the passes
@@ -176,30 +167,33 @@ function compile_intermittent() {
         local ir="$apply_passes_output"
 
         # Compile the instrumented IR file
-        run "clang $compile_args -mllvm -no-stack-slot-sharing $ICLANG_CODEGEN_FLAGS -c $ir -o $obj_pass"
+        run "$CC $compile_args $ICLANG_CODEGEN_FLAGS -c $ir -o $obj_pass"
 
-        # Compile the checkpoint library
-        run "clang $compile_args_with_includes -c $CHECKPOINT_ARCH_SRC -o libcp.obj"
+        # Compile the cache hint library
+        run "$CC $compile_args_with_includes -c $CACHEHINT_ARCH_SRC -o libcachehint.obj"
 
         # Link the intrumented object
-        run "clang $link_args $obj_pass libcp.obj -o $output_file"
+        run "$CC $link_args $obj_pass libcachehint.obj -o $output_file"
 
         ## Debug output
         # Output the dissasembly
         $OBJDUMP -S "$output_file" >> "$output_file.S"
 
-        # Compile the uninstrumented IR file with the same arguments
+        # Prepare to compile the uninstrumented IR file with the same arguments
         local obj_orig="$obj_dir/$obj_filename-orig.obj"
         local output_orig="$obj_dir/$obj_filename.uninstr.$obj_extension"
 
+    # If we don't want to run the passes
     else
-        # Compile the uninstrumented IR file with the same arguments
+        pecho "no-passes mode"
+        # Prepare to compile the uninstrumented IR file with the same arguments
         local obj_orig="$obj_dir/$obj_filename.obj"
         local output_orig="$obj_dir/$obj_filename.$obj_extension"
     fi
 
-    run "clang $compile_args -c $bitcode_input -o $obj_orig"
-    run "clang $link_args $obj_orig -o $output_orig"
+    # Compile the uninstrumented IR file with the same arguments
+    run "$CC $compile_args -c $bitcode_input -o $obj_orig"
+    run "$CC $link_args $obj_orig -o $output_orig"
     $OBJDUMP -S "$output_orig" >> "$output_orig.S"
 }
 
@@ -259,30 +253,31 @@ if [ -n "$output_file" ]; then
         # Remove the opt flag
         pecho "Pass args: $pass_args"
         pass_args=$(echo "${pass_args}" | sed -E 's/-O\S?//g')
-        run "$CC $pass_args -O1 -Xclang -disable-llvm-passes"
 
+        # Compile without any transformations
+        run "$WP_CC $pass_args -O1 -Xclang -disable-llvm-passes"
 
     else
         pecho "linking"
 
         # Create the original elf file where we will extract the LLVM bitcode from
         orig_elf_file="$obj_filename.gclang.elf"
-        run "$CC $other_args -o ${obj_dir}/${orig_elf_file}"
+        run "$WP_CC $other_args -o ${obj_dir}/${orig_elf_file}"
 
         # Extract the bitcode
         bc_file="${obj_filename}.bc"
-        run "$GET_BC -m -S -o ${obj_dir}/${bc_file} ${obj_dir}/${orig_elf_file} $ICLANG_PASS_STDOUT"
+        run "$WP_GET_BC -m -S -o ${obj_dir}/${bc_file} ${obj_dir}/${orig_elf_file} $ICLANG_PASS_STDOUT"
 
         # Convert it to human readable
         $LLVM_DIS "${obj_dir}/${bc_file}"
 
         # Apply the pass
         # Directly writes the elf file
-        compile_intermittent "${obj_dir}/${bc_file}"
+        compile_with_passes "${obj_dir}/${bc_file}"
     fi
 else
     # Just pass
-    run "$CC $pass_args"
+    run "$WP_CC $pass_args"
 fi
 
 exit 0
