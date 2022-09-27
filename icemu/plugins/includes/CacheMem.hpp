@@ -37,6 +37,7 @@
 #include "Riscv32E21Pipeline.hpp"
 #include "../includes/MemChecker.hpp"
 #include "../includes/StackTracker.hpp"
+#include "../includes/CacheHints.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -78,10 +79,11 @@ class Cache {
   public:
     // StackPointer tracker
     StackTracker stackTracker;
+    CacheHints cacheHints;
 
     RiscvE21Pipeline *Pipeline;
 
-    Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu) {
+    Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu), cacheHints(emu) {
     }
 
   ~Cache()
@@ -757,26 +759,31 @@ class Cache {
       auto addr = address;
 
       // Fetch the tag, set and offset from the mem address
-      auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
-      index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
+      //auto index = addr & GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE) + NUM_BITS(no_of_sets)) & ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)));
+      //index = index >> NUM_BITS(CACHE_BLOCK_SIZE);
+
+	  
 
       /**
        * @note Search for the cache line where the hint has to be given. If found
        * then reset the possibleWAR and the was_read flag. This will ensure that
        * eviction of the given memory causes no checkpoint.
        */
-      for (CacheSet &s : sets) {
-          for (CacheLine &line : s.lines) {
-            if (line.valid) {
-                if (addr == reconstructAddress(line)) {
-                  clearBit(READ_DOMINATED, line);
-                  clearBit(WRITE_DOMINATED, line);
-                  clearBit(POSSIBLE_WAR, line);
-                  clearBit(DIRTY, line);
-                }
-            }
-          }
-      }
+	  for (CacheSet &s : sets) {
+		for (CacheLine &line : s.lines) {
+		  if (line.valid) {
+            if (line.dirty) {
+			  if (addr == (reconstructAddress(line) | line.blocks.bits.offset)) {
+                std::cout << "Clearing a hint!\n";
+			    clearBit(READ_DOMINATED, line);
+			    clearBit(WRITE_DOMINATED, line);
+			    clearBit(POSSIBLE_WAR, line);
+			    clearBit(DIRTY, line);
+              }
+			}
+		  }
+		}
+	  }
       
       // Do we need this?
       stats.incHintsGiven();

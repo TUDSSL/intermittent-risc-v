@@ -73,6 +73,14 @@ class HookInstructionCount : public HookCode {
 
     // Track the stack pointer
     obj->stackTracker.run();
+
+    // Detect cache hints
+    address_t hint_memory = 0;
+    bool is_hint = obj->cacheHints.run(arg->address, &hint_memory);
+    if (is_hint) {
+      // Apply the hint
+      obj->applyCompilerHints(hint_memory);
+    }
   }
 
 };
