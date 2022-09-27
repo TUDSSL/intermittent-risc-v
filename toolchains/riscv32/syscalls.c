@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <sys/signal.h>
 #include "util.h"
+#include "encoding.h"
 
 #define SYS_write 64
 
@@ -15,8 +16,8 @@
 
 #undef strcmp
 
-extern volatile uint32_t tohost;
-extern volatile uint32_t fromhost;
+volatile uint32_t tohost;
+volatile uint32_t fromhost;
 
 static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t arg2)
 {
@@ -39,28 +40,9 @@ static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t
   return magic_mem[0];
 }
 
-#define NUM_COUNTERS 2
-static uintptr_t counters[NUM_COUNTERS];
-static char* counter_names[NUM_COUNTERS];
-
-void setStats(int enable)
-{
-  int i = 0;
-#define READ_CTR(name) do { \
-    while (i >= NUM_COUNTERS) ; \
-    uintptr_t csr = read_csr(name); \
-    if (!enable) { csr -= counters[i]; counter_names[i] = #name; } \
-    counters[i++] = csr; \
-  } while (0)
-
-  READ_CTR(mcycle);
-  READ_CTR(minstret);
-
-#undef READ_CTR
-}
-
-__attribute__ ((optnone))
-void __attribute__((noreturn)) tohost_exit(uintptr_t code)
+__attribute__((noreturn)) 
+__attribute__((noinline)) 
+void tohost_exit(uintptr_t code)
 {
   tohost = (code << 1) | 1;
   while (1);
@@ -81,56 +63,80 @@ void abort()
   exit(128 + SIGABRT);
 }
 
-void __attribute__((weak)) thread_entry(int cid, int nc)
-{
-  // multi-threaded programs override this function.
-  // for the case of single-threaded programs, only let core 0 proceed.
-  while (cid != 0);
-}
-
 void printstr(const char* str)
 {
   syscall(SYS_write, 1, (uintptr_t)str, strlen(str));
 }
 
+int main(void);
 
-int __attribute__((weak)) main(int argc, char** argv)
-{
-  // single-threaded programs override this function.
-  printstr("Implement main(), foo!\n");
-  return -1;
-}
+__attribute ((naked))
+void _start(void) {
+  __asm(""
+  "li  x1, 0\n"
+  "li  x2, 0\n"
+  "li  x3, 0\n"
+  "li  x4, 0\n"
+  "li  x5, 0\n"
+  "li  x6, 0\n"
+  "li  x7, 0\n"
+  "li  x8, 0\n"
+  "li  x9, 0\n"
+  "li  x10,0\n"
+  "li  x11,0\n"
+  "li  x12,0\n"
+  "li  x13,0\n"
+  "li  x14,0\n"
+  "li  x15,0\n"
+  "li  x16,0\n"
+  "li  x17,0\n"
+  "li  x18,0\n"
+  "li  x19,0\n"
+  "li  x20,0\n"
+  "li  x21,0\n"
+  "li  x22,0\n"
+  "li  x23,0\n"
+  "li  x24,0\n"
+  "li  x25,0\n"
+  "li  x26,0\n"
+  "li  x27,0\n"
+  "li  x28,0\n"
+  "li  x29,0\n"
+  "li  x30,0\n"
+  "li  x31,0\n"
 
-#ifdef INIT_TLS
-static void init_tls()
-{
-  register void* thread_pointer __asm__("tp");
-  extern char _tdata_begin, _tdata_end, _tbss_end;
-  size_t tdata_size = &_tdata_end - &_tdata_begin;
-  memcpy(thread_pointer, &_tdata_begin, tdata_size);
-  size_t tbss_size = &_tbss_end - &_tdata_end;
-  memset(thread_pointer + tdata_size, 0, tbss_size);
+  //"li t0, MSTATUS_FS | MSTATUS_XS\n"
+  //"csrs mstatus, t0\n"
+
+  //"la t0, trap_entry\n"
+  //"csrw mtvec, t0\n"
+
+  ".option push\n"
+  ".option norelax\n"
+  "la gp, __global_pointer$\n"
+  ".option pop\n"
+
+  "la  tp, _end + 63\n"
+  "and tp, tp, -64\n"
+
+  "csrr a0, mhartid\n"
+  "li a1, 1\n"
+  "1:bgeu a0, a1, 1b\n"
+
+  "add sp, a0, 1\n"
+  "sll sp, sp, 17\n"
+  "add sp, sp, tp\n"
+  "sll a2, a0, 17\n"
+  "add tp, tp, a2\n"
+
+  "j _init\n"
+  );
 }
-#endif
 
 void _init(int cid, int nc)
 {
-#ifdef INIT_TLS
-  init_tls();
-  thread_entry(cid, nc);
-#endif
-
   // only single-threaded programs should ever get here.
-  int ret = main(0, 0);
-
-  char buf[NUM_COUNTERS * 32] __attribute__((aligned(64)));
-  char* pbuf = buf;
-  for (int i = 0; i < NUM_COUNTERS; i++)
-    if (counters[i])
-      pbuf += sprintf(pbuf, "%s = %d\n", counter_names[i], (int)counters[i]);
-  if (pbuf != buf)
-    printstr(buf);
-
+  int ret = main();
   exit(ret);
 }
 
