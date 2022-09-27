@@ -85,10 +85,10 @@ struct WarReachDFA {
         }
       }
 
-      errs() << "KILL for instruction: " << *i << "\n";
-      for (const auto &k : kill) {
-        errs() << "  " << *k << "\n";
-      }
+      //errs() << "KILL for instruction: " << *i << "\n";
+      //for (const auto &k : kill) {
+      //  errs() << "  " << *k << "\n";
+      //}
     };
 
     // Compute out:
