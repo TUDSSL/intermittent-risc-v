@@ -19,8 +19,8 @@ set(ALL_TOOLCHAIN_CODE
     "${PRINTF_CODE}"
     )
 
-set(CMAKE_C_COMPILER    "iclang") # Special compiler wrapper
-#set(CMAKE_C_COMPILER    "clang")
+#set(CMAKE_C_COMPILER    "iclang") # Special compiler wrapper
+set(CMAKE_C_COMPILER    "clang")
 #set(CMAKE_CXX_COMPILER  "clang++")
 set(CMAKE_AR            "llvm-ar")
 set(CMAKE_LINKER        "ld.lld")
