@@ -79,7 +79,7 @@ class MemoryStats : public HookMemory {
 
     // Print the stats
 
-    cout << printLeader() << "Memory statistics:" << endl;
+    cout << printLeader() << " memory statistics:" << endl;
     cout << "mem_reads:" << bytes_read << endl;
     cout << "mem_writes:" << bytes_written << endl;
     cout << "cycles:" << CC.getCycleCount() << endl;
