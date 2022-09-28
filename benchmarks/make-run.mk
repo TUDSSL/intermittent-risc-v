@@ -51,13 +51,17 @@ PROWL_CONFIGURATIONS += \
 CLANK_CONFIGURATIONS += \
   		clank
 
+PLAINC_CONFIGURATIONS += \
+  		plain-c
+
 ALL_CONFIGURATIONS += \
 		$(NACHO_NAIVE_OPTIONS) \
 		$(NACHO_PW_CONFIGURATIONS) \
 		$(NACHO_PW_ST_CONFIGURATIONS) \
 		$(NACHO_CLANK_CONFIGURATIONS) \
 		$(PROWL_CONFIGURATIONS) \
-		$(CLANK_CONFIGURATIONS)
+		$(CLANK_CONFIGURATIONS) \
+		$(PLAINC_CONFIGURATIONS)
 
 
 #generate_target_with_options(uninstrumented, NACHO_NAIVE_OPTIONS)
@@ -101,6 +105,9 @@ $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(PROWL_CONFIGURATIONS), \
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
 $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(CLANK_CONFIGURATIONS), \
+	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
+
+$(foreach bench,$(BENCHMARKS), $(foreach run-config, $(PLAINC_CONFIGURATIONS), \
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
 endef
@@ -165,6 +172,8 @@ run-targets-prowl: $(TARGETS-prowl)
 #$(foreach target, $(CLANK_CONFIGURATIONS), $(eval $(call generate_target_group,clank,$(target))))
 #show-targets-clank:
 #	@echo "$(TARGETS-clank)"
+#
+# PlainC has only one config called 'plainc' which is already a target
 
 
 all: $(TARGETS)
@@ -184,6 +193,6 @@ clean:
 
 .PHONY: all clean \
 	show-targets show-benchmarks \
-	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-prowl \
-	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-prowl \
+	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-plain-c show-targets-prowl \
+	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-plain-c run-targets-prowl \
 	$(TARGETS)

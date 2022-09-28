@@ -104,6 +104,13 @@ function prowl() {
         $elf
 }
 
+function plain-c() {
+	run-elf \
+        -p memory_stats_plugin.so \
+        -a memory-stats-log-file=$LOGDIR/$name-$compile_config-run-plain_c \
+        $elf
+}
+
 function help() {
     echo "Usage: benchmark-run [target]"
     echo ""
