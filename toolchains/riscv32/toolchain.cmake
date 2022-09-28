@@ -11,12 +11,10 @@ set(CONFIG_DIR "$ENV{ICLANG_ROOT}/toolchains/riscv32")
 set(OUTPUT_SUFFIX ".elf" CACHE STRING "")
 set(LINKER_SCRIPT "${CONFIG_DIR}/linkerscript.ld")
 
-#set(STARTUP_CODE "${CONFIG_DIR}/crt.S")
 set(SYSCALL_CODE "${CONFIG_DIR}/syscalls.c")
 set(PRINTF_CODE "${CONFIG_DIR}/printf.c")
 
 set(ALL_TOOLCHAIN_CODE 
-  #"${STARTUP_CODE}"
     "${SYSCALL_CODE}"
     "${PRINTF_CODE}"
     )
