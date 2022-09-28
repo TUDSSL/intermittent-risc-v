@@ -11,17 +11,18 @@ set(CONFIG_DIR "$ENV{ICLANG_ROOT}/toolchains/riscv32")
 set(OUTPUT_SUFFIX ".elf" CACHE STRING "")
 set(LINKER_SCRIPT "${CONFIG_DIR}/linkerscript.ld")
 
-set(STARTUP_CODE "${CONFIG_DIR}/crt.S")
+#set(STARTUP_CODE "${CONFIG_DIR}/crt.S")
 set(SYSCALL_CODE "${CONFIG_DIR}/syscalls.c")
 set(PRINTF_CODE "${CONFIG_DIR}/printf.c")
 
 set(ALL_TOOLCHAIN_CODE 
-    "${STARTUP_CODE}"
+  #"${STARTUP_CODE}"
     "${SYSCALL_CODE}"
     "${PRINTF_CODE}"
     )
 
-set(CMAKE_C_COMPILER    "clang")
+set(CMAKE_C_COMPILER    "iclang") # Special compiler wrapper
+#set(CMAKE_C_COMPILER    "clang")
 #set(CMAKE_CXX_COMPILER  "clang++")
 set(CMAKE_AR            "llvm-ar")
 set(CMAKE_LINKER        "ld.lld")
@@ -39,9 +40,9 @@ add_compile_options(
     -mcmodel=medium
     -I${CONFIG_DIR}
     -I${CONFIG_DIR}/lib/include
-    -fno-common
-    -ffunction-sections
-    -fdata-sections
+    #-fno-common
+    #-ffunction-sections
+    #-fdata-sections
     )
 
 # Toolchain include directories
@@ -68,7 +69,7 @@ add_link_options(
     -L${CONFIG_DIR}/lib/libc
 
     # Remove unused functions
-    -Wl,--gc-sections
+    #-Wl,--gc-sections
 
     # Link libraries
     -Wl,--Bstatic

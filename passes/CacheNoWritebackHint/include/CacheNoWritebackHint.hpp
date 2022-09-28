@@ -3,20 +3,13 @@
 #include "noelle/core/Noelle.hpp"
 #include "DependencyAnalysis.hpp"
 
+#include "WPA/WPAPass.h"
+
 namespace CacheNoWritebackHintNS {
 
 class CacheNoWritebackHint : public ModulePass {
 public:
-
-  typedef std::set<Instruction *> HintLocationsTy;
-
-  struct CandidateTy {
-    Instruction *I = nullptr;
-    HintLocationsTy PossibleHintLocations;
-    HintLocationsTy SelectedHintLocations;
-  };
-
-  typedef std::vector<CandidateTy> CandidatesTy;
+  typedef std::map<Instruction *, std::set<Value *>> InstructionHintsMapTy;
 
   static char ID;
 
@@ -31,20 +24,20 @@ public:
 private:
   std::string prefixString;
 
-  bool run(Noelle &N, Module &M);
+  struct WAR {
+    llvm::Instruction *Read;
+    llvm::Instruction *Write;
+  };
 
-  //CandidatesTy analyze(Noelle &N, DependencyAnalysis &DA, Module &M);
-  CandidatesTy analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F);
-  std::tuple<bool, CandidateTy> analyzeInstruction(Noelle &N, DependencyAnalysis &DA, DataFlowResult & DFReach, DomTreeSummary &DT, Instruction &I);
+  bool run(Noelle &N, WPAPass &WPA, Module &M);
 
-  void Instrument(Noelle &N, Module &M, CandidatesTy &Candidates);
+  InstructionHintsMapTy analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysis &DA, Function &F);
 
-  void insertHintFunctionCall(Noelle &N, Module &M, std::string FunctionName, Instruction *I, Instruction *HintLocation);
+  void Instrument(Noelle &N, Module &M, InstructionHintsMapTy &Candidates);
 
-  void selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+  void insertHintFunctionCall(Module &M, Instruction *I, Instruction *HintLocation);
 
-  //CandidatesTy analyzeCandidates(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
-  //void analyzeCandidate(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates);
+  DataFlowResult *writeAfterReadReachDFA(DataFlowEngine &DFE, Function &F, std::vector<WAR> &WARs);
 
 };
 

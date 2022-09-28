@@ -1,0 +1,16 @@
+#!/bin/bash
+# Pass the .elf file (and optional extra arguments) to this script
+
+# Run the ICEmu emulator with the appropriate flags
+icemu \
+    -p mock_clockfunc_plugin.so \
+    -p riscv32_rocketchip_syscall_plugin.so \
+    -p custom_cache_plugin.so \
+    -a hash-method=0 \
+    -a cache-size=256 \
+    -a cache-lines=2 \
+    -a custom-cache-log-file=./log \
+    -a enable-pw-bit=0 \
+    -a enable-stack-tracking=0 \
+    "$@"
+

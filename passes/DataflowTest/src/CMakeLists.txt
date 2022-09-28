@@ -3,7 +3,7 @@ set(LIB_INSTALL_DIR "${PROJECT_SOURCE_DIR}/../install/lib")
 
 # Sources
 set(PASS_SRC
-    CacheNoWritebackHint.cpp
+    DataflowTest.cpp
     Configurations.cpp
 )
 
@@ -28,7 +28,6 @@ include_directories(
     $ENV{NOELLE}/include/svf
     ${CMAKE_SOURCE_DIR}/include
     ${COMMON_DIR}/PassUtils/include
-    ${COMMON_DIR}/DependencyAnalysis/include
     ${COMMON_DIR}/DataFlowEngineExt/include
 )
 

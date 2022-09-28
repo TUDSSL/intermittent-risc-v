@@ -1,3 +1,5 @@
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/raw_ostream.h"
@@ -7,6 +9,15 @@
 #include "CacheNoWritebackHint.hpp"
 #include "Configurations.hpp"
 #include "PassUtils.hpp"
+
+#include "WarReachDFA.hpp"
+
+#  include "WPA/WPAPass.h"
+#  include "Util/SVFModule.h"
+#  include "Util/PTACallGraph.h"
+#  include "WPA/Andersen.h"
+#  include "MemoryModel/PointerAnalysis.h"
+#  include "MSSA/MemSSA.h"
 
 using namespace llvm::noelle;
 
@@ -19,31 +30,28 @@ CacheNoWritebackHint::CacheNoWritebackHint() :
   return ;
 }
 
-CacheNoWritebackHint::CandidatesTy
-CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Function &F) {
-  CandidatesTy Candidates;
+CacheNoWritebackHint::InstructionHintsMapTy
+CacheNoWritebackHint::analyzeFunction(Noelle &N, WPAPass &WPA, DependencyAnalysis &DA, Function &F) {
+  InstructionHintsMapTy Candidates;
 
   if (F.isIntrinsic())
     return Candidates;
 
-  if (F.hasExternalLinkage()) {
-    return Candidates;
-  }
-
   auto FunctionName = F.getName();
-  dbg() << "Analyzing function: " << FunctionName << "\n";
+  dbgs() << "Analyzing function: " << FunctionName << "\n";
+
+  if (F.getInstructionCount() == 0)
+    return Candidates;
+
+  //if (F.hasExternalLinkage()) {
+  //  dbgs() << "External\n";
+  //  return Candidates;
+  //}
 
   if (FunctionName == "__cache_hint") {
-    dbg() << "Skipping function\n";
+    dbgs() << "Skipping function\n";
     return Candidates;
   }
-
-#if 0
-  if (FunctionName != "main") {
-    dbg() << "Skipping function\n";
-    return Candidates;
-  }
-#endif
 
   // Get the Reach analysis for the function
   auto DFA = N.getDataFlowAnalyses();
@@ -52,202 +60,215 @@ CacheNoWritebackHint::analyzeFunction(Noelle &N, DependencyAnalysis &DA, Functio
   // Get the Dominator Tree analysis
   auto DT = N.getDominators(&F)->DT;
 
-  // Find all the read instructions
-  for (auto &BB : F) {
-    for (auto &I : BB) {
-      auto [IsCandidate, Candidate] = analyzeInstruction(N, DA, *DFR, DT, I);
-      if (IsCandidate) {
-        Candidates.push_back(Candidate);
+  auto NDFA = N.getDataFlowAnalyses();
+  auto RA = NDFA.runReachableAnalysis(&F);
+
+  // Get all the WAR violations in the function
+  vector<WarReachDFA::WAR> WARs;
+  for (auto &I : instructions(F)) {
+    auto WARDeps = DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
+    if (WARDeps == nullptr) continue;
+    set<Instruction *> WARWrites;
+    for (auto &WARDep : *WARDeps) {
+      if (WARDep.IsMust) {
+        WARs.push_back(WarReachDFA::WAR{.Read = &I, .Write = WARDep.Instruction});
       }
     }
   }
+
+  dbgs() << "WARs in function:\n";
+  for (auto &WAR : WARs) {
+    dbgs() << "WAR:\n  read: " << *WAR.Read << "\n  write: " << *WAR.Write << "\n";
+  }
+
+  /*
+   * Run the WarReachDFA
+   *    Finds all chains that end in a Write.
+   *    Meaning that, in those paths, we can forget the value from memory, as it MUST
+   *    be written before being read (again, all paths end in a MUST write).
+   *
+   */
+
+  // Create the data flow engine
+  auto DFE = DataFlowEngineExt(); // Modified version that allows for intersections
+
+  // Run the custom DFA
+  auto warReachDFA = WarReachDFA();
+  //auto CustomDFA = warReachDFA.apply(DFE, F, WARs);
+  auto warReachDFAResult = warReachDFA.apply(DFE, F, DA);
+
+  // Print the DFA output for debugging
+  for (auto &I : instructions(F)) {
+    auto IIN = warReachDFAResult->IN(&I);
+    auto IOUT = warReachDFAResult->OUT(&I);
+
+    // Add debug data to the instruction
+    if (IIN.size()) {
+      std::string in_string = "";
+      for (auto &II : IIN) in_string += PassUtils::GetOperandString(*II) + " ";
+
+      // Attach the metadata if it's not empty
+      in_string.pop_back(); // Remove the last space if it's not empty
+      PassUtils::SetInstrumentationMetadata(&I, in_string, "war-reach-dfa-IN");
+    }
+
+    // Printing
+#if 0
+    dbgs() << "Instruction: " << I << "\n";
+    dbgs() << " IN:\n";
+    for (auto &II : IIN) dbgs() << "  " << *II << "\n";
+    dbgs() << " OUT:\n";
+    for (auto &II : IOUT) dbgs() << "  " << *II << "\n";
+#endif
+  }
+
+  std::map<Instruction *, std::set<Value *>> instructionWarReachMap;
+  std::map<Instruction *, std::set<Value *>> instructionReachableWarReachMap;
+  std::map<Instruction *, std::set<Value *>> instructionHintMap;
+  std::map<Instruction *, std::set<Value *>> noAliasInstructionHintMap;
+
+  /*
+   * Convert the DFA result to a map (to keep handling the same)
+   * Also remove debug/intrinsic instructions
+   */
+  for (auto &I : instructions(F)) {
+    if (isa<IntrinsicInst>(I)) continue;
+    if (isa<PHINode>(I)) continue;
+    auto in_i = warReachDFAResult->IN(&I);
+    instructionWarReachMap[&I].insert(in_i.begin(), in_i.end());
+  }
+
+  /*
+   * Remove hint locations where the hint can not reach the hint location
+   * i.e., the hint location if before the WAR read
+   * (can happen with loop edges combined with the backwards WarReach DFA)
+   */
+  for (const auto & [I, hints] : instructionWarReachMap) {
+    for (const auto &hint : hints) {
+      // Can hint (i.e., WAR read) reach the hint location (i.e., I)
+      auto hint_reach = RA->OUT(dyn_cast<Instruction>(hint));
+      if (hint_reach.find(I) != hint_reach.end()) {
+        // Hint location I is reachable from WAR Read, so we keep it
+        instructionReachableWarReachMap[I].insert(hint);
+      }
+    }
+  }
+
+  /*
+   * Select the best hint locations
+   */
+  for (const auto & [I, hints] : instructionReachableWarReachMap) {
+    auto in_i = instructionWarReachMap[I];
+
+    dbgs() << "I = " << *I << "\n";
+
+    // Go through the hints for i
+    for (const auto &hint : in_i) {
+      bool best_hint = true;
+
+      // If our hint is not dominated by the definition (load)
+      // it's not a valid location
+      //if (!DT.dominates(I, dyn_cast<Instruction>(hint))) continue;
+
+      dbgs() << "  checking hint = " << *hint << "\n";
+      // Go through the other instructions
+      for (const auto & [II, _] : instructionWarReachMap) {
+        if (I == II) continue; // Skip self compare
+        //dbgs() << "     checking in instruction = " << *II << "\n";
+
+        auto other_hints = warReachDFAResult->IN(II);
+        for (auto &other_hint : other_hints) {
+          if (hint == other_hint) {
+            dbgs() << "     found matching hint in II: " << *II << "\n";
+            // Found another location with the same hint
+            // If our candidate hint is dominated by the other hint location
+            // then there is a better hint, so we ignore this one
+            if (DT.dominates(II, I)) {
+              dbgs() << "     hint in:" << *II << " is better\n";
+              dbgs() << "II: " << II << " dominates I: " << I << "\n";
+              best_hint = false;
+            }
+          }
+        }
+      }
+
+      if (best_hint) {
+        dbgs() << "Instruction: " << *I << "\n   has the best hint location for: " << *hint << "\n";
+        instructionHintMap[I].insert(hint);
+      }
+    }
+  }
+
+  // Remove hints on the same line that MUST alias
+  // Best would be to pick the closest one, but for now just pick one
+  for (const auto & [inst, hints] : instructionHintMap) {
+    if (hints.size() == 0) continue;
+
+    std::vector<Value *> possible_hints(hints.begin(), hints.end());
+    while (possible_hints.size()) {
+
+      Value *hint = possible_hints.back();
+      possible_hints.pop_back();
+
+      // Add the hint to the map without aliases
+      noAliasInstructionHintMap[inst].insert(hint);
+
+      // Check if the selected hint aliases with any other hint
+      // if so, we can also remove that hint
+      auto mem_hint = MemoryLocation::get(dyn_cast<Instruction>(hint));
+
+      auto it = possible_hints.begin();
+      while (it != possible_hints.end()) {
+
+        auto mem_other_hint = MemoryLocation::get(dyn_cast<Instruction>(*it));
+        auto alias_res = WPA.alias(mem_hint, mem_other_hint);
+
+        // If it MUST alias we know for sure we don't need the other hint
+        // TODO: We can choose to also remove on May and see how if affects the result
+        //if (alias_res == AliasResult::MustAlias) {
+        if (alias_res == AliasResult::MustAlias || alias_res == AliasResult::MayAlias) {
+          it = possible_hints.erase(it); // remove this element
+        } else {
+          ++it; // Next element
+        }
+      }
+    }
+  }
+
+  // Add metadata for instructionHintMap
+  for (const auto & [inst, hints] : instructionHintMap) {
+    if (hints.size()) {
+      std::string debug_string = "";
+      for (const auto &hint : hints) debug_string += PassUtils::GetOperandString(*hint) + " ";
+
+      // Attach the metadata
+      debug_string.pop_back();
+      PassUtils::SetInstrumentationMetadata(inst, debug_string, "hint-location");
+    }
+  }
+
+  // Add metadata for noAliasInstructionHintMap
+  for (const auto & [inst, hints] : noAliasInstructionHintMap) {
+    if (hints.size()) {
+      std::string debug_string = "";
+      for (const auto &hint : hints) debug_string += PassUtils::GetOperandString(*hint) + " ";
+
+      // Attach the metadata
+      debug_string.pop_back();
+      PassUtils::SetInstrumentationMetadata(inst, debug_string, "no-alias-hint-location");
+    }
+  }
+
+  // Store the final candidates
+  Candidates = noAliasInstructionHintMap;
 
   return Candidates;
 }
 
-std::tuple<bool, CacheNoWritebackHint::CandidateTy>
-CacheNoWritebackHint::analyzeInstruction(Noelle &N, DependencyAnalysis &DA,
-                                         DataFlowResult &DFReach, DomTreeSummary &DT,
-                                         Instruction &I) {
+void CacheNoWritebackHint::insertHintFunctionCall(Module &M, Instruction *I, Instruction *HintLocation) {
 
-  // Only Load instructions can be a candidate
-  if (!isa<LoadInst>(&I))
-    return {false, CandidateTy{}};
-
-  // Load instruction
-  dbgs() << "Analyzing possible candidate instruction: " << I << "\n";
-
-  // Get the candidate RAR dependencies
-  set<Instruction *> RARs;
-  auto RARDeps =
-      DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_RAR, &I);
-  if (RARDeps != nullptr) {
-    dbgs() << "  Candidate RAR dependencies:\n";
-    for (auto Dep : *RARDeps) {
-      dbgs() << "    " << Dep << "\n";
-
-      // If MAY or MUST we add it to the candidate
-      RARs.insert(Dep.Instruction);
-    }
-  } else {
-    dbgs() << "  Candidate has no RAR dependencies\n";
-  }
-
-  // Get the candidate WAR dependencies
-  set<Instruction *> WARs;
-  auto WARDeps =
-      DA.getInstructionDependenciesFrom(DependencyAnalysis::DEPTYPE_WAR, &I);
-  if (WARDeps != nullptr) {
-    dbgs() << "  candidate WAR dependencies:\n";
-    for (auto Dep : *WARDeps) {
-      dbgs() << "    " << Dep << "\n";
-
-      // If MUST we add it to the candidate
-      if (Dep.IsMust)
-        WARs.insert(Dep.Instruction);
-    }
-  } else {
-    dbgs() << "  Candidate has no WAR dependencies\n";
-  }
-
-  // Instructions reachable by the WAR writes
-  set<Value *> WARWritesReach;
-  for (auto &Store : WARs) {
-    auto &ReachedByWarWrite = DFReach.OUT(Store);
-    for (auto R : ReachedByWarWrite) {
-      WARWritesReach.insert(R);
-    }
-  }
-
-  // Instructions reachable by the RAR reads
-  set<Value *> RARReadsReach;
-  for (auto &Load : RARs) {
-    auto &ReachedByRarRead = DFReach.OUT(Load);
-    for (auto R : ReachedByRarRead) {
-      RARReadsReach.insert(R);
-    }
-  }
-
-  // Instructions reachable by the Candidate instruction (Load)
-  auto &CandidateReach = DFReach.OUT(&I);
-
-  // Instructions that are candidates (a subset of CandidateReach)
-  set<Instruction *> CandidateHintLocations;
-
-  // Contains helper
-  auto contains = [](set<Value *> ValueSet, Value *InstrValue) {
-    if (ValueSet.find(InstrValue) != ValueSet.end()) {
-      return true;
-    } else {
-      return false;
-    }
-  };
-
-  // The VALID possible hint locations
-  HintLocationsTy PossibleHintLocations;
-
-  // Go through the possible hint locations for the candidate
-  dbgs() << "  Finding hint locations for candidate\n";
-  for (auto &PossibleHintLocation : CandidateReach) {
-
-    // Skip debug insructions
-    if (isa<IntrinsicInst>(PossibleHintLocation))
-      continue;
-
-    // Skip PHI nodes
-    if (isa<PHINode>(PossibleHintLocation))
-      continue;
-
-    dbgs() << "    Analyzing possible hint location: " << *PossibleHintLocation
-           << "\n";
-
-    // The read MUST dominate the candidate (otherwise the read might not have happened)
-    if (!DT.dominates(&I, dyn_cast<Instruction>(PossibleHintLocation))) {
-      dbgs() << "      INVALID - Candidate does not Dominate possible hint location\n";
-      continue;
-    }
-
-    // If it is a RAR read, then it's not a candidate
-    bool IsRARRead = false;
-    for (auto &Load : RARs) {
-      if (Load == PossibleHintLocation) {
-        IsRARRead = true;
-        break;
-      }
-    }
-    if (IsRARRead) {
-      dbgs() << "      INVALID - Possible hint location is RAR read\n";
-      continue;
-    }
-
-    // If it is in the RARReadReach, then it's not a candidate (it's after a RAR
-    // read)
-    if (contains(RARReadsReach, PossibleHintLocation)) {
-      dbgs() << "      INVALID - Possible hint location is in the RARReachReads\n";
-      continue;
-    }
-
-    // If it is in the WARWriteReach, then it's not a candidate (it's after a
-    // WAR write)
-    if (contains(WARWritesReach, PossibleHintLocation)) {
-      dbgs() << "      INVALID - Possible hint location is in the WARWriteReach\n";
-      continue;
-    }
-
-    // If ANY reachable instructions FROM THIS CANDIDATE can reach any RAR read,
-    // then it's NOT a candidate (it can lead to the RAR read)
-    auto &PossibleHintLocationReach =
-        DFReach.OUT(dyn_cast<Instruction>(PossibleHintLocation));
-    bool CanReachRARRead = false;
-    for (auto &RARRead : RARs) {
-      if (contains(PossibleHintLocationReach, RARRead)) {
-        CanReachRARRead = true;
-        break;
-      }
-    }
-    if (CanReachRARRead) {
-      dbgs() << "      INVALID - Possible hint location can reach a RAR read\n";
-      continue;
-    }
-
-    // If ALL reachable instructions FROM THIS CANDIDATE MUST reach any WAR write,
-    // then it's a candidate
-
-    // Otherwise, it's a candidate
-    dbgs() << "      VALID - Valid hint location!\n";
-    PossibleHintLocations.insert(dyn_cast<Instruction>(PossibleHintLocation));
-  }
-
-  // If the candidate instruction has NO possible hint locations, it's not a candidate
-  if (PossibleHintLocations.size() == 0) {
-    return {false, CandidateTy{}};
-  }
-
-
-  // The instruction I is a valid candidate, and has possible hint locations
-  return {true,
-          CandidateTy{.I = &I, .PossibleHintLocations = PossibleHintLocations}};
-}
-
-void CacheNoWritebackHint::selectHintLocations(Noelle &N, DependencyAnalysis &DA, CandidatesTy &Candidates) {
-  CandidatesTy HintLocations;
-
-  for (auto &C : Candidates) {
-    Instruction *I = C.I;
-    // Get reachable instructions from candidate
-    dbgs() << "Analyzing candidate: " << *I << "\n";
-
-    // TODO: Select the best candidate
-    Instruction *HI = *C.PossibleHintLocations.begin();
-    dbgs() << "Selected instruction: " << *HI << "\n";
-
-    C.SelectedHintLocations.insert(HI);
-  }
-}
-
-void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
-                                                  std::string FunctionName,
-                                                  Instruction *I, Instruction *HintLocation) {
+  assert((I != nullptr) && "insertHintFunctionCall: hint Load is nullptr");
+  assert((HintLocation != nullptr) && "insertHintFunctionCall: hint location is nullptr");
 
   // Greate the builder
   auto *BB = I->getParent();
@@ -258,19 +279,10 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   // Get the context
   LLVMContext &Ctx = F->getContext();
 
+  // Get the function
   FunctionCallee InsertFunctionCallee =
     M.getOrInsertFunction("__cache_hint", Type::getVoidTy(Ctx), Type::getInt8PtrTy(Ctx));
-
-  // Get the function
-  //Function *InsertFunction = PassUtils::GetMethod(&M, FunctionName);
-  //assert(!!InsertFunction &&
-  //       "CacheNoWritebackHint: Can't find function");
-  //FunctionType *InsertFunctionType = InsertFunction->getFunctionType();
-
-  //FunctionCallee InsertFunctionCallee =
-  //    M.getOrInsertFunction(InsertFunction->getName(), InsertFunctionType);
   Value *InsertFunctionValue = InsertFunctionCallee.getCallee();
-
 
   // Get the Load source address
   LoadInst *Load = dyn_cast<LoadInst>(I);
@@ -287,50 +299,45 @@ void CacheNoWritebackHint::insertHintFunctionCall(Noelle &N, Module &M,
   CI->setCallingConv(F->getCallingConv());
 }
 
-void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, CandidatesTy &Candidates) {
+void CacheNoWritebackHint::Instrument(Noelle &N, Module &M, InstructionHintsMapTy &Candidates) {
   // Iterate over all the candidates
-  for (auto &C : Candidates) {
-    dbg() << "Instrumenting candidate: " << *C.I << "\n";
-
-    for (auto &H : C.SelectedHintLocations) {
-      dbg() << "  Inserting hint before: " << *H << "\n";
-      // Insert the call
-      insertHintFunctionCall(N, M, "__cache_hint", C.I, H);
+  // Add hints to the code by calling _cache_hint(load_source_address) at the hint locations
+  for (const auto & [inst, hints] : Candidates) {
+    for (const auto &hint : hints) {
+      dbgs() << "Adding hint call at:\n" << *inst << "\n  for:\n" << *hint << "\n";
+      insertHintFunctionCall(M, dyn_cast<Instruction>(hint), inst);
     }
   }
 }
 
-bool CacheNoWritebackHint::run(Noelle &N, Module &M) {
+bool CacheNoWritebackHint::run(Noelle &N, WPAPass &WPA, Module &M) {
   auto FM = N.getFunctionsManager();
   auto PCF = FM->getProgramCallGraph();
 
   // Analyze all the instruction dependencies
   DependencyAnalysis DA = DependencyAnalysis(N);
 
+  // Debug
+  dbgs() << "#WARs: " << DA.getInstructionDependenciesTo().WARs.size() << "\n";
+
   // Go through all the functions
   for (auto Node : PCF->getFunctionNodes()) {
     Function *F = Node->getFunction();
     assert(F != nullptr);
-    if (F->isIntrinsic())
+    //if (F->isIntrinsic())
+    //  continue;
+    if (F->getInstructionCount() == 0)
       continue;
 
     // Analyze the function
-    CandidatesTy Candidates = analyzeFunction(N, DA, *F);
-
-    // Find the ideal instructions to place hints
-    selectHintLocations(N, DA, Candidates);
-
-    // Print the candidates and possible locations
-    dbgs() << "CacheNoWritebackHint candidates for function: " << F->getName() << "\n";
-    for (auto &C : Candidates) {
-      dbgs() << "  Candidate instruction: " << *C.I << "\n";
-      dbgs() << "    Possible hint locations: \n";
-      for (auto &PHL : C.PossibleHintLocations) {
-        dbgs() << "    " << *PHL << "\n";
-      }
-      dbgs() << "    Selected hint locations: \n";
-      for (auto &SHL : C.SelectedHintLocations) {
-        dbgs() << "    " << *SHL << "\n";
+    auto Candidates = analyzeFunction(N, WPA, DA, *F);
+ 
+    dbgs() << "Instructions with hint locations:\n";
+    for (const auto & [inst, hints] : Candidates) {
+      // Printing
+      dbgs() << *inst << " has hints:\n";
+      for (const auto &hint : hints) {
+        dbgs() << "    " << *hint << "\n";
       }
     }
 
@@ -362,9 +369,23 @@ bool CacheNoWritebackHint::runOnModule(Module &M) {
          << N.numberOfProgramInstructions() << " instructions\n";
 
   /*
+   * Fetch WPA
+   */
+  auto &WPA = getAnalysis<WPAPass>();
+
+  //SVFModule svfModule{ M };
+  //auto pta = new AndersenWaveDiff();
+  //pta->analyze(svfModule);
+  //auto svfCallGraph = pta->getPTACallGraph();
+  //auto mssa = new MemSSA((BVDataPTAImpl *)pta, false);
+
+  // For unit tests
+  dbgs() << "#instructions: " << N.numberOfProgramInstructions() << "\n";
+
+  /*
    * Apply the transformation
    */
-  auto modified = this->run(N, M);
+  auto modified = this->run(N, WPA, M);
 
   /*
    * Verify
@@ -380,6 +401,8 @@ void CacheNoWritebackHint::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<LoopInfoWrapperPass>();
   AU.addRequired<DominatorTreeWrapperPass>();
   AU.addRequired<Noelle>();
+
+  AU.addRequired<WPAPass>();
 }
 
 // Next there is code to register your pass to "opt"

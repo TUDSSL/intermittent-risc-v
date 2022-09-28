@@ -9,6 +9,7 @@ BENCHMARKS := \
 
 BUILD_CONFIGURATIONS := \
 		uninstrumented \
+		cachehints
 
 
 # Highlight begin/end

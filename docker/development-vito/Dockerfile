@@ -2,7 +2,7 @@ FROM irv-development
 
 # Install dependencies
 RUN sudo apt-get update && \
-    sudo apt-get install -y software-properties-common
+    sudo apt-get install -y software-properties-common poppler-utils python3-graphviz
 
 # Install a never neovim
 RUN sudo add-apt-repository ppa:neovim-ppa/stable && \
