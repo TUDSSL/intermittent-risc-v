@@ -8,8 +8,7 @@ BENCHMARKS := \
 		picojpeg
 
 BUILD_CONFIGURATIONS := \
-		uninstrumented \
-		cachehints
+		uninstrumented
 
 
 # Highlight begin/end
