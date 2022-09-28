@@ -7,7 +7,8 @@ set -e
 
 # Get the desired optimization level if specified
 if [[ -z "${OPT_LEVEL}" ]]; then
-    OPT_LEVEL_ARG=""
+    # Default OPT level
+    OPT_LEVEL_ARG="-DOPT_LEVEL=-O1"
 else
     OPT_LEVEL_ARG="-DOPT_LEVEL=${OPT_LEVEL}"
 fi
