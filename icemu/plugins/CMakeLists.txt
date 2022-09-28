@@ -50,4 +50,5 @@ add_subdirectory(simple_war_detect_plugin)
 # add_subdirectory(cache_temp_dead_block_plugin)
 add_subdirectory(clank_cache_plugin)
 add_subdirectory(custom_cache_plugin)
+add_subdirectory(memory_stats_plugin)
 
