@@ -38,6 +38,7 @@
 #include "../includes/MemChecker.hpp"
 #include "../includes/StackTracker.hpp"
 #include "../includes/CacheHints.hpp"
+#include "../includes/RegisterCheckpoint.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -66,6 +67,8 @@ class Cache {
     uint64_t last_checkpoint_cycle;
 
     // Settings
+    bool double_bufferd_checkpoints = true;
+
     bool enable_pw;
 
     enum StackTrackConfig {
@@ -77,13 +80,18 @@ class Cache {
 
 
   public:
+    // Register checkpoint
+    RegisterCheckpoint registerCheckpoint;
+
     // StackPointer tracker
     StackTracker stackTracker;
+
+    // Cache hint detection
     CacheHints cacheHints;
 
     RiscvE21Pipeline *Pipeline;
 
-    Cache(icemu::Emulator &emu) : _emu(emu), stackTracker(emu), cacheHints(emu) {
+    Cache(icemu::Emulator &emu) : _emu(emu), registerCheckpoint(emu), stackTracker(emu), cacheHints(emu) {
     }
 
   ~Cache()
@@ -845,6 +853,11 @@ class Cache {
    */
   void createCheckpoint(enum CheckpointReason reason)
   {
+    // Create a register checkpoint
+    int reg_cp_size = registerCheckpoint.create();
+    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
+    stats.incNVMWrites(reg_cp_size);
+
     // Only place where checkpoints are incremented
     stats.incCheckpoints();
     cost.modifyCost(Pipeline, CHECKPOINT, 0);
@@ -897,7 +910,9 @@ class Cache {
                 if (stackTrackConfig == STACK_TRACK_NONE) {
                   // Perform the actual write to the memory
                   cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                  stats.incCacheCheckpoint(l.blocks.size);
+                  auto cp_size = l.blocks.size;
+                  if (double_bufferd_checkpoints) cp_size *= 2; // Double buffered register checkpoint
+                  stats.incCacheCheckpoint(cp_size);
                 } else {
                   // Check if we need to write (depends on if the stack is still in use)
                   auto evict_address = reconstructAddress(l) | l.blocks.bits.offset;
@@ -906,8 +921,10 @@ class Cache {
                     // Outside of the region, we evict
                     // Perform the actual write to the memory
                     cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                    stats.incCacheCheckpoint(l.blocks.size);
-                      //p_err << "\n";
+                    auto cp_size = l.blocks.size;
+                    if (double_bufferd_checkpoints) cp_size *= 2; // Double buffered register checkpoint
+                    stats.incCacheCheckpoint(cp_size);
+                    //p_err << "\n";
                   }
                 }
               }
@@ -926,6 +943,33 @@ class Cache {
 
     // Sanity check - MUST pass
     nvm.compareMemory(false);
+  }
+
+  void restoreCheckpoint() {
+    // Restore the registers
+    int reg_cp_size = registerCheckpoint.restore();
+
+    // Clear the cache
+    for (CacheSet &s : sets) {
+      for (CacheLine &line : s.lines) {
+        // Reset the data in the cache
+        memset(&line.blocks, 0, sizeof(struct CacheBlock));
+
+        // Reset all bits
+        clearBit(VALID, line);
+        clearBit(READ_DOMINATED, line);
+        clearBit(WRITE_DOMINATED, line);
+        clearBit(POSSIBLE_WAR, line);
+        clearBit(DIRTY, line);
+      }
+    }
+
+    // Increment NVM writes
+    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint load
+    stats.incNVMReads(reg_cp_size);
+
+    // Increment counter
+    stats.incRestores();
   }
 
   /**

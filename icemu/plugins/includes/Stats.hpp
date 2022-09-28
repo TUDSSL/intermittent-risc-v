@@ -38,7 +38,7 @@ struct CheckpointStats {
     uint64_t last_checkpoint_cycle;
     uint64_t cycles_between_checkpoints;
     enum CheckpointReason cause;
-    
+    uint64_t restores;
 };
 
 struct MiscStats {
@@ -122,6 +122,7 @@ class Stats {
         print("Checkpoints due to dirty:", checkpoint.due_to_dirty);
         print("Checkpoints due to period:", checkpoint.due_to_period);
         print("Max cycles b/ checkpoints: ", checkpoint.cycles_between_checkpoints);
+        print("Restores:", checkpoint.restores);
 
         print("Misc: hints given:", misc.hints_given);
         print("Misc: Max ratio", misc.max_dirty_ratio);
@@ -147,6 +148,7 @@ class Stats {
         log("checkpoint_dirty:", checkpoint.due_to_dirty, logger);
         log("checkpoint_period:", checkpoint.due_to_period, logger);
         log("checkpoint_max_cycles: ", checkpoint.cycles_between_checkpoints, logger);
+        log("restore:", checkpoint.restores, logger);
 
         log("hints_given:", misc.hints_given, logger);
         log("max_dirty_ratio:", misc.max_dirty_ratio, logger);
@@ -192,6 +194,7 @@ class Stats {
     void incCheckpointsDueToDirty() { checkpoint.due_to_dirty++; }
     void updateLastCheckpointCycle(uint64_t cycle) { checkpoint.last_checkpoint_cycle = cycle; }
     uint64_t getLastCheckpointCycle() { return checkpoint.last_checkpoint_cycle; }
+    void incRestores() { checkpoint.restores++; }
 };
 
 #endif /* _STATS */
