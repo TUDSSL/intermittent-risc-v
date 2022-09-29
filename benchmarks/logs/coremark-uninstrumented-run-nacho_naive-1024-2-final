@@ -1,20 +1,21 @@
 
-cache_miss:5816
-cache_hit:452683
-cache_read:974289
-cache_write:495784
+cache_miss:6020
+cache_hit:532901
+cache_read:1093243
+cache_write:689986
 cache_cuckoo:0
-cache_checkpoint:24652
-nvm_reads_no_cache:982901
-nvm_writes_no_cache:495784
-nvm_reads:8612
-nvm_writes:24652
-checkpoint:94
-checkpoint_war:94
+cache_checkpoint:81120
+nvm_reads_no_cache:1102128
+nvm_writes_no_cache:689986
+nvm_reads:8885
+nvm_writes:51236
+checkpoint:157
+checkpoint_war:157
 checkpoint_dirty:0
 checkpoint_period:0
-checkpoint_max_cycles: 176769
+checkpoint_max_cycles: 194827
+restore:0
 hints_given:0
-max_dirty_ratio:0.671875
+max_dirty_ratio:0.800781
 cuckoo_iter:0
-cycle:2973897
+cycle:3434000
