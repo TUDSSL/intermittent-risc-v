@@ -20,28 +20,31 @@ static int test_encrypt_ecb(void);
 static int test_decrypt_ecb(void);
 //static void test_encrypt_ecb_verbose(void);
 
+#define ITERATIONS 50
 
 int main(void)
 {
     int exit;
 
+    for (size_t i=0; i<ITERATIONS; i++) {
 #if defined(AES256)
-    printf("\nTesting AES256\n\n");
+        printf("\nTesting AES256\n\n");
 #elif defined(AES192)
-    printf("\nTesting AES192\n\n");
+        printf("\nTesting AES192\n\n");
 #elif defined(AES128)
-    printf("\nTesting AES128\n\n");
+        printf("\nTesting AES128\n\n");
 #else
-    printf("You need to specify a symbol between AES128, AES192 or AES256. Exiting");
-    return 0;
+        printf("You need to specify a symbol between AES128, AES192 or AES256. Exiting");
+        return 0;
 #endif
 
-    exit = test_encrypt_cbc() + test_decrypt_cbc() +
-	test_encrypt_ctr() + test_decrypt_ctr() +
-	test_decrypt_ecb() + test_encrypt_ecb();
-    // Disable verbose, it's not working for 192 and 256
-    // https://github.com/kokke/tiny-AES-c/issues/142
-    //test_encrypt_ecb_verbose();
+        exit = test_encrypt_cbc() + test_decrypt_cbc() +
+	    test_encrypt_ctr() + test_decrypt_ctr() +
+	    test_decrypt_ecb() + test_encrypt_ecb();
+        // Disable verbose, it's not working for 192 and 256
+        // https://github.com/kokke/tiny-AES-c/issues/142
+        //test_encrypt_ecb_verbose();
+  }
 
     return exit;
 }
