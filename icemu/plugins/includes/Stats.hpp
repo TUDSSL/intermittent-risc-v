@@ -47,6 +47,8 @@ struct MiscStats {
     float dirty_ratio;
     uint64_t current_cycle;
     uint32_t no_of_cuckoos;
+    uint64_t on_duration;
+    uint64_t checkpoint_period;
 };
 
 class Stats {
@@ -127,6 +129,8 @@ class Stats {
         print("Misc: hints given:", misc.hints_given);
         print("Misc: Max ratio", misc.max_dirty_ratio);
         print("Misc: No of cuckoo iter:", misc.no_of_cuckoos);
+        print("Misc: On duration:", misc.on_duration);
+        print("Misc: Checkpoint period:", misc.checkpoint_period);
         cout << "\n-------------------------------------" << endl;
     }
 
@@ -154,6 +158,8 @@ class Stats {
         log("max_dirty_ratio:", misc.max_dirty_ratio, logger);
         log("cuckoo_iter:", misc.no_of_cuckoos, logger);
         log("cycle:", misc.current_cycle, logger);
+        log("on_duration:", misc.on_duration, logger);
+        log("checkpoint_period:", misc.checkpoint_period, logger);
         logger << endl;
     }
 

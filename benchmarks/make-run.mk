@@ -65,10 +65,11 @@ ALL_CONFIGURATIONS += \
 
 
 #generate_target_with_options(uninstrumented, NACHO_NAIVE_OPTIONS)
+# $(3)+0+0 is for the on-duration and checkpoint period (0 means cont, i.e., no power failures and no periodic checkpoints)
 define generate_run_target_configurations
 $(1)-$(2)-run-$(3):
 		@echo "$(HLB)Running benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' $(HLE)"
-		cd $(1)/build-$(2) && benchmark-run $(3) $(1).elf $(2)
+		cd $(1)/build-$(2) && benchmark-run $(3)+0+0 $(1).elf $(2)
 TARGETS += $(1)-$(2)-run-$(3)
 TARGETS-$(1) += $(1)-$(2)-run-$(3)
 TARGETS-$(2) += $(1)-$(2)-run-$(3)
@@ -116,6 +117,43 @@ endef
 $(foreach build-config, $(BUILD_CONFIGURATIONS), \
 	$(eval $(call generate_run_targets_build_configuration,$(build-config))))
 
+
+# Generate power failure options
+# 1 = benchmark
+# 2 = compile config
+# 3 = run target
+# 4 = on-duration
+define generate_pf_run_target_configurations
+$(1)-$(2)-pf-run-$(3)+$(4):
+		@echo "$(HLB)Running power failure benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' on duration '$(4)' $(HLE)"
+		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(CHECKPOINT_PERIOD) $(1).elf $(2)
+
+TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
+TARGETS-$(1) += $(1)-$(2)-pf-run-$(3)+$(4)
+TARGETS-$(2) += $(1)-$(2)-pf-run-$(3)+$(4)
+TARGETS-$(3)+$(4) += $(1)-$(2)-pf-run-$(3)+$(4)
+PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
+endef
+
+#
+# Power-failure build configurations
+#
+
+# Nacho PW ST Cont
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,nacho-pw-stcont+512+2,$(on-duration)))))
+
+# Prowl
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,prowl+512+2,$(on-duration)))))
+
+# Clank
+
+show-pf-targets:
+	@echo "$(PF_TARGETS)"
+
+run-pf-targets: $(PF_TARGETS)
+	@echo "$(HLB)Done running power failure targets$(HLE)"
 
 # Show-targets
 $(foreach target, $(BENCHMARKS), $(eval $(call generate_show_targets,$(target))))
@@ -195,4 +233,5 @@ clean:
 	show-targets show-benchmarks \
 	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-plain-c show-targets-prowl \
 	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-plain-c run-targets-prowl \
+	show-pf-targets run-pf-targets \
 	$(TARGETS)

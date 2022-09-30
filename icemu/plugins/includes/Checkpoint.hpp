@@ -5,18 +5,33 @@
 
 #include "icemu/emu/Emulator.h"
 
-class RegisterCheckpoint {
+class Checkpoint {
  private:
    icemu::Emulator &emu;
 
    static const size_t checkpoint_size = 32+2;
    uint32_t SavedRegisters[checkpoint_size];
+  
+   // 10 Meg max for now, TODO: dynamically check the max memory size
+   icemu::memseg_t *main_memseg;
+   size_t memory_size;
+   uint8_t *SavedMemory;
 
  public:
-  RegisterCheckpoint(icemu::Emulator &emu) : emu(emu) {
+  size_t count = 0;
+
+  Checkpoint(icemu::Emulator &emu) : emu(emu) {
+    main_memseg = emu.getMemory().find("RWMEM");
+    assert((main_memseg != nullptr) && "Could not find memory segment RWMEM");
+
+    memory_size = main_memseg->length;
+
+    // Allocate space
+    SavedMemory = new uint8_t[main_memseg->allocated_length];
   }
 
-  ~RegisterCheckpoint() {
+  ~Checkpoint() {
+    delete[] SavedMemory;
   }
 
   void print() {
@@ -32,9 +47,23 @@ class RegisterCheckpoint {
   }
 
   /*
+   * Because the emulator memory is our shadow memory, we also need to checkpoint and restore
+   * it to verify OUR memory (which should automatically restore)
+   */
+  void createShadowMemoryCheckpoint() {
+    memcpy(SavedMemory, main_memseg->data, memory_size);
+  }
+  void restoreShadowMemoryCheckpoint() {
+    memcpy(main_memseg->data, SavedMemory, memory_size);
+  }
+
+  /*
    * Create a checkpoint and return the size of the checkpoint
    */
   int create() {
+    std::cout << "Checkpoint" << std::endl;
+    ++count;
+    createShadowMemoryCheckpoint();
     return create(SavedRegisters);
   }
 
@@ -89,6 +118,7 @@ class RegisterCheckpoint {
    * Restore a checkpoint and return the size of the checkpoint
    */
   int restore() {
+    restoreShadowMemoryCheckpoint();
     return restore(SavedRegisters);
   }
 

@@ -18,6 +18,8 @@ mkdir -p $LOGDIR/binaries
 function nacho-naive() {
     cache=$1
     lines=$2
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf \
         -p custom_cache_plugin.so \
         -a hash-method=0 \
@@ -26,12 +28,16 @@ function nacho-naive() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_naive \
         -a enable-pw-bit=0 \
         -a enable-stack-tracking=0 \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
 function nacho-pw() {
     cache=$1
     lines=$2
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf \
         -p custom_cache_plugin.so \
         -a hash-method=0 \
@@ -40,6 +46,8 @@ function nacho-pw() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw \
         -a enable-pw-bit=1 \
         -a enable-stack-tracking=0 \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
@@ -47,6 +55,8 @@ function nacho-pw() {
 function nacho-pw-st() {
     cache=$1
     lines=$2
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf \
         -p custom_cache_plugin.so \
         -a hash-method=0 \
@@ -55,6 +65,8 @@ function nacho-pw-st() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw_st \
         -a enable-pw-bit=1 \
         -a enable-stack-tracking=1 \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
@@ -63,6 +75,8 @@ function nacho-pw-st() {
 function nacho-pw-stcont() {
     cache=$1
     lines=$2
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf \
         -p custom_cache_plugin.so \
         -a hash-method=0 \
@@ -71,36 +85,50 @@ function nacho-pw-stcont() {
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_pw_stcont \
         -a enable-pw-bit=1 \
         -a enable-stack-tracking=2 \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
 function nacho-clank() {
     cache=$1
     lines=$2
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf \
         -p clank_cache_plugin.so \
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_clank \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
 function clank() {
+    on_duration=$1
+    checkpoint_period=$2
 	run-elf \
         -p simple_war_detect_plugin.so \
         -a clank-log-file=$LOGDIR/$name-$compile_config-run-clank \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 
 
 function prowl() {
     cache=$1
+    on_duration=$3
+    checkpoint_period=$4
 	run-elf -p custom_cache_plugin.so \
         -a hash-method=1 \
         -a cache-size=$cache \
         -a cache-lines=2 \
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-prowl \
+        -a on-duration=$on_duration \
+        -a checkpoint-period=$checkpoint_period \
         $elf
 }
 

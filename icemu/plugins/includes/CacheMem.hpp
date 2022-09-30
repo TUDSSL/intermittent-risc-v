@@ -38,7 +38,7 @@
 #include "../includes/MemChecker.hpp"
 #include "../includes/StackTracker.hpp"
 #include "../includes/CacheHints.hpp"
-#include "../includes/RegisterCheckpoint.hpp"
+#include "../includes/Checkpoint.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -59,7 +59,6 @@ class Cache {
     std::vector<CacheSet> sets;
 
     // Helper stuffs
-    Stats stats;
     LocalMemory nvm;
     icemu::Memory *EmuMem;
     CycleCost cost;
@@ -80,8 +79,11 @@ class Cache {
 
 
   public:
+    // Statistics
+    Stats stats;
+
     // Register checkpoint
-    RegisterCheckpoint registerCheckpoint;
+    Checkpoint registerCheckpoint;
 
     // StackPointer tracker
     StackTracker stackTracker;
@@ -120,9 +122,11 @@ class Cache {
     stats.printStats();
     log.printEndStats(stats);
 
-    // Perform final checks
-    ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
-    ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
+    // Perform final checks (if there were no restores, as that messes up the count due to re-execution)
+    if (stats.checkpoint.restores == 0) {
+        ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
+        ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
+    }
 
     p_debug << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
@@ -241,7 +245,7 @@ class Cache {
 
       // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
-      checkCycleCountAndCreateCheckpoint();
+      //checkCycleCountAndCreateCheckpoint();
 
       // Dirty ratio should never go negative
       ASSERT(dirty_ratio >= 0);
@@ -956,7 +960,7 @@ class Cache {
         memset(&line.blocks, 0, sizeof(struct CacheBlock));
 
         // Reset all bits
-        clearBit(VALID, line);
+        if (line.valid == true) clearBit(VALID, line);
         clearBit(READ_DOMINATED, line);
         clearBit(WRITE_DOMINATED, line);
         clearBit(POSSIBLE_WAR, line);
@@ -1079,6 +1083,7 @@ class Cache {
     return false;
   }
 
+#if 0 // Moved to CustomCache.cpp
   /**
    * @brief Check the value of the dirty ratio and invoke
    * checkpoint if the number of cycles since last
@@ -1105,6 +1110,7 @@ class Cache {
     return false;
       
   }
+#endif
 
   /**
    * @brief Write back the cache content to the shadow memory

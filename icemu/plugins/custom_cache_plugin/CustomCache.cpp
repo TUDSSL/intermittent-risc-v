@@ -44,6 +44,14 @@ class HookInstructionCount : public HookCode {
     Cache *obj;
     RiscvE21Pipeline Pipeline;
 
+    // Power failure emulation
+    uint64_t on_duration = 0;
+    uint64_t reset_cycle_target = 0;
+    uint64_t last_reset_checkpoint_count = 0;
+
+    // Periodic checkpoints
+    uint64_t checkpoint_period = 0;
+
   public:
     uint64_t pc = 0;
     uint64_t count = 0;
@@ -52,6 +60,19 @@ class HookInstructionCount : public HookCode {
   {
     Pipeline.setVerifyJumpDestinationGuess(false);
     Pipeline.setVerifyNextInstructionGuess(false);
+
+    // Get the on duration from the arguments
+    auto arg_on_duration = PluginArgumentParsing::GetArguments(getEmulator(), "on-duration=");
+    if (arg_on_duration.size())
+      on_duration = std::stoul(arg_on_duration[0]);
+
+    // Configure the next reset_cycle_target
+    reset_cycle_target += on_duration;
+
+    // Get the checkpoint cycle threshold
+    auto arg_checkpoint_period = PluginArgumentParsing::GetArguments(getEmulator(), "checkpoint-period=");
+    if (arg_checkpoint_period.size())
+      checkpoint_period = std::stoul(arg_checkpoint_period[0]);
   }
 
   ~HookInstructionCount() override
@@ -63,14 +84,52 @@ class HookInstructionCount : public HookCode {
   {
     obj = ext_obj;
     obj->Pipeline = &Pipeline;
+
+    // Set constant stats
+    obj->stats.misc.on_duration = on_duration;
+    obj->stats.misc.checkpoint_period = checkpoint_period;
   }
 
   void resetProcessor() {
+    cout << "Resetting processor" << endl;
     obj->restoreCheckpoint();
   }
 
   void run(hook_arg_t *arg) override
   {
+    auto PC = getEmulator().getArchitecture().registerGet(icemu::Architecture::Register::REG_PC);
+    cout << "Instruction hook PC: " << PC << endl;
+    // Reset the processor after a defined number of cycles (re-execution benchmark)
+    // If the reset_cycle_target = 0, then no resets happen
+    if (reset_cycle_target > 0 
+        && Pipeline.getTotalCycles() >= reset_cycle_target) {
+
+      // Check if there were checkpoints since the last reset (to detect the lack of forward progress)
+      if (last_reset_checkpoint_count == obj->registerCheckpoint.count) {
+        cout << "NO FORWARD PROGRESS" << endl;
+        assert(false && "No forward progress is made, abort execution");
+      }
+      last_reset_checkpoint_count = obj->registerCheckpoint.count;
+
+      // Set the next reset target
+      reset_cycle_target += on_duration;
+
+      // Reset the processor
+      resetProcessor();
+
+      // Skip the other steps
+      return;
+    }
+
+    // Check if we need to create a periodic checkpoint
+    // if the checkpoint_period = 0, then there are no periodic checkpoints
+    if (checkpoint_period > 0
+        && obj->stats.getCurrentCycle() >= (obj->stats.getLastCheckpointCycle() + checkpoint_period)) {
+      //cout << "Periodic checkpoint" << endl;
+      // Create a periodic checkpoint
+      obj->createCheckpoint(CHECKPOINT_DUE_TO_PERIOD);
+    }
+
     Pipeline.add(arg->address, arg->size);
     obj->updateCycleCount(Pipeline.getTotalCycles());
 
@@ -114,6 +173,8 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) { 
+    auto PC = getEmulator().getArchitecture().registerGet(icemu::Architecture::Register::REG_PC);
+    cout << "Memory hook PC: " << PC << endl;
     address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
     address_t value = arg->value;
@@ -173,7 +234,23 @@ class MemoryAccess : public HookMemory {
       if (arg5_val.size())
         enable_stack_tracking = std::stoul(arg5_val[0]);
 
-      filename += "-" + std::to_string(size) + "-" + std::to_string(lines);
+      // Arguments used in HookInstructionCount 
+      // TODO: Merge the use, because now we look for them here AND in the HookInstructionCount plugin
+      // Here we only need them for the filename
+      uint64_t on_duration = 0;
+      auto arg_on_duration = PluginArgumentParsing::GetArguments(getEmulator(), "on-duration=");
+      if (arg_on_duration.size())
+        on_duration = std::stoul(arg_on_duration[0]);
+
+      // Get the checkpoint cycle threshold
+      uint64_t checkpoint_period = 0;
+      auto arg_checkpoint_period = PluginArgumentParsing::GetArguments(getEmulator(), "checkpoint-period=");
+      if (arg_checkpoint_period.size())
+        checkpoint_period = std::stoul(arg_checkpoint_period[0]);
+
+      filename += "-" + std::to_string(size) + "-" + std::to_string(lines) 
+                + "-" + std::to_string(checkpoint_period) + "-" + std::to_string(on_duration);
+
       cout << "Lines from outside " << lines << endl;
       CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method, enable_pw, enable_stack_tracking);
   }
