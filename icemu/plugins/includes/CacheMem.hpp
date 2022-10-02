@@ -125,7 +125,10 @@ class Cache {
     // Perform final checks (if there were no restores, as that messes up the count due to re-execution)
     if (stats.checkpoint.restores == 0) {
         ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
-        ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
+        // The assert below does not work anymore, as we might read part of the cache line from 
+        // the NVM on a cache write, when the cache line is not valid.
+        // This has to be done as the cache might be empty after a power-failure 
+        //ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
     }
 
     p_debug << "Cache lines not used: " << non_used_cache_blocks << endl;
