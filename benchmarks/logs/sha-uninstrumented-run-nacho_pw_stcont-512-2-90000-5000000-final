@@ -7,7 +7,7 @@ cache_cuckoo:0
 cache_checkpoint:996224
 nvm_reads_no_cache:8027270
 nvm_writes_no_cache:2716613
-nvm_reads:2036
+nvm_reads:1335324
 nvm_writes:965136
 checkpoint:1295
 checkpoint_war:1257
