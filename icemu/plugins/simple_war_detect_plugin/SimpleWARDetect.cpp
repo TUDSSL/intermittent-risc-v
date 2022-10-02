@@ -77,6 +77,7 @@ class Clank {
 
   void runInstruction(address_t address, size_t size) {
     Pipeline.add(address, size);
+    stats.updateCurrentCycle(Pipeline.getTotalCycles());
   }
 
   void runMemory(address_t address, enum HookMemory::memory_type type, address_t value, size_t size) {
