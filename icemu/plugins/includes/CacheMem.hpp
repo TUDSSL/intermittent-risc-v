@@ -250,7 +250,6 @@ class Cache {
 
       // Create checkpoints due to period and dirty ratio
       checkDirtyRatioAndCreateCheckpoint();
-      //checkCycleCountAndCreateCheckpoint();
 
       // Dirty ratio should never go negative
       ASSERT(dirty_ratio >= 0);
