@@ -128,10 +128,6 @@ $(1)-$(2)-pf-run-$(3)+$(4):
 		@echo "$(HLB)Running power failure benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' on duration '$(4)' $(HLE)"
 		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(CHECKPOINT_PERIOD) $(1).elf $(2)
 
-TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
-TARGETS-$(1) += $(1)-$(2)-pf-run-$(3)+$(4)
-TARGETS-$(2) += $(1)-$(2)-pf-run-$(3)+$(4)
-TARGETS-$(3)+$(4) += $(1)-$(2)-pf-run-$(3)+$(4)
 PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
 endef
 
@@ -148,6 +144,7 @@ $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
 	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,prowl+512+2,$(on-duration)))))
 
 # Clank
+# TODO
 
 show-pf-targets:
 	@echo "$(PF_TARGETS)"
