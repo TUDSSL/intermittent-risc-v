@@ -4,6 +4,7 @@
  */
 
 #include "icemu/emu/Emulator.h"
+#include "Utils.hpp"
 
 class Checkpoint {
  private:
@@ -61,7 +62,7 @@ class Checkpoint {
    * Create a checkpoint and return the size of the checkpoint
    */
   int create() {
-    std::cout << "Checkpoint" << std::endl;
+    p_debug << "Checkpoint" << std::endl;
     ++count;
     createShadowMemoryCheckpoint();
     return create(SavedRegisters);

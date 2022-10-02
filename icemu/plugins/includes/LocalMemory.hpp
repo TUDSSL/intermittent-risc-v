@@ -95,6 +95,7 @@ class LocalMemory{
 
     // Write the value of the given size to the local memory copy
     void localWrite(address_t address, address_t value, address_t size) {
+        p_debug << "[NVM Write] writing to addr: " << hex << address << " data: " << value << dec << endl;
         address_t address_idx = address - MainMemSegment->origin;
         for (address_t i = 0; i < size; i++) {
             uint64_t byte = (value >> (8 * i)) & 0xFF; // Get the bytes
