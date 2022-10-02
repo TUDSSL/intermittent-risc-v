@@ -129,6 +129,7 @@ $(1)-$(2)-pf-run-$(3)+$(4):
 		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(CHECKPOINT_PERIOD) $(1).elf $(2)
 
 PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
+PF_TARGETS-$(3) += $(1)-$(2)-pf-run-$(3)+$(4)
 endef
 
 #
@@ -151,6 +152,9 @@ show-pf-targets:
 	@echo "$(PF_TARGETS)"
 
 run-pf-targets: $(PF_TARGETS)
+	@echo "$(HLB)Done running power failure targets$(HLE)"
+
+run-pf-targets-clank: $(PF_TARGETS-clank)
 	@echo "$(HLB)Done running power failure targets$(HLE)"
 
 # Show-targets
@@ -219,6 +223,9 @@ show-all-configurations:
 
 show-targets:
 	@echo "$(TARGETS)"
+
+run-targets: $(TARGETS)
+	@echo "$(HLB)Done running targets$(HLE)"
 
 show-benchmarks:
 	@echo "$(BENCHMARKS)"
