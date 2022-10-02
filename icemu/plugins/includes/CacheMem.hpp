@@ -118,10 +118,6 @@ class Cache {
     //nvm.compareMemory(true && hash_method == 0); 
     nvm.compareMemory(false && hash_method == 0); 
 
-    // Do any logging/printing
-    stats.printStats();
-    log.printEndStats(stats);
-
     // Perform final checks (if there were no restores, as that messes up the count due to re-execution)
     if (stats.checkpoint.restores == 0) {
         ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
@@ -129,7 +125,13 @@ class Cache {
         // the NVM on a cache write, when the cache line is not valid.
         // This has to be done as the cache might be empty after a power-failure 
         //ASSERT(stats.cache.reads + stats.nvm.nvm_reads == stats.nvm.nvm_reads_without_cache);
+        // However, it does need to be at least the same, or more (due to fetching extra bytes)
+        ASSERT(stats.cache.reads + stats.nvm.nvm_reads >= stats.nvm.nvm_reads_without_cache);
     }
+
+    // Do any logging/printing
+    stats.printStats();
+    log.printEndStats(stats);
 
     p_debug << "Cache lines not used: " << non_used_cache_blocks << endl;
   }
@@ -569,6 +571,7 @@ class Cache {
 
       // Now that the eviction has been done, perform the replacement.
       evicted_line->blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
+      stats.incNVMReads(4);
       cacheStoreAddress(*evicted_line, req);
       updateCacheLastUsed(*evicted_line);
       cacheCreateEntry(*evicted_line, req);
@@ -599,6 +602,7 @@ class Cache {
         setBit(VALID, cuckoo_incoming);
 
         cuckoo_incoming.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
+        stats.incNVMReads(4);
         cacheStoreAddress(cuckoo_incoming, req);
         updateCacheLastUsed(cuckoo_incoming);
         cacheCreateEntry(cuckoo_incoming, req);
