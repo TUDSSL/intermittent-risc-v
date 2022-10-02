@@ -269,7 +269,13 @@ class Cache {
           // New cache entry for the line.
           if (line.valid == false) {
               line.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
-              stats.incNVMReads(4);
+              // Ideal case, when we write to memory we only get the "remaining" bytes to fill the cache line
+              // If we read, we get all the bytes from NVM
+              if (mem_type == HookMemory::MEM_WRITE) {
+                  stats.incNVMReads(4-req.size);
+              } else {
+                  stats.incNVMReads(4);
+              }
 
               handleCacheMiss(line);
               p_debug << "Cache create, stored at IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
