@@ -144,7 +144,8 @@ $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
 	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,prowl+512+2,$(on-duration)))))
 
 # Clank
-# TODO
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,clank,$(on-duration)))))
 
 show-pf-targets:
 	@echo "$(PF_TARGETS)"
