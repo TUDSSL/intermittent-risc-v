@@ -383,12 +383,13 @@ class Cache {
         stats.incCacheReads(req.size);
         cost.modifyCost(Pipeline, CACHE_READ, req.size);
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
+        p_debug << "RD: " << line.read_dominated << " WD: " << line.write_dominated << " PW: " << line.possible_war << endl;
         break;
       
       // For a write hit
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        setBit(WRITE_DOMINATED, line);
+        if (req.size == 4) setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
         setBit(POSSIBLE_WAR, line);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
@@ -398,6 +399,8 @@ class Cache {
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data << dec << endl;
         p_debug << "Data at NVM: " << hex << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
+
+        p_debug << "RD: " << line.read_dominated << " WD: " << line.write_dominated << " PW: " << line.possible_war << endl;
 
         stats.incCacheWrites(req.size);
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
@@ -427,7 +430,7 @@ class Cache {
 
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        setBit(WRITE_DOMINATED, line);
+        if (req.size == 4) setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
 
@@ -532,6 +535,7 @@ class Cache {
                   if (evicted_line->possible_war || enable_pw == false)
                       createCheckpoint(CHECKPOINT_DUE_TO_WAR);
                   else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                      p_debug << "PW bit not set, no checkpoint needed" << endl;
                       cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
                       clearBit(DIRTY, *evicted_line);
                       stats.incCacheDirtyEvictions();
@@ -548,6 +552,7 @@ class Cache {
               if (evicted_line->possible_war || enable_pw == false)
                   createCheckpoint(CHECKPOINT_DUE_TO_WAR);
               else { // This is the case where there is no need for checkpoint but still needs to be evicted
+                  p_debug << "PW bit not set, no checkpoint needed" << endl;
                   cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
                   clearBit(DIRTY, *evicted_line);
                   stats.incCacheDirtyEvictions();
@@ -918,6 +923,9 @@ class Cache {
 
     // And then update when this checkpoint was created
     stats.updateLastCheckpointCycle(stats.getCurrentCycle());
+
+    // Reset the stack tracker
+    stackTracker.resetMinStackAddress();
   }
 
   /**
@@ -965,9 +973,6 @@ class Cache {
         }
     }
 
-    // Reset the stack tracker
-    stackTracker.resetMinStackAddress();
-
     // Sanity check - MUST pass
     nvm.compareMemory(false);
   }
@@ -997,6 +1002,9 @@ class Cache {
 
     // Increment counter
     stats.incRestores();
+
+    // Reset the stack tracker
+    stackTracker.resetMinStackAddress();
   }
 
   /**
