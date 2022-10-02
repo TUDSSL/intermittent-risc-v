@@ -91,14 +91,12 @@ class HookInstructionCount : public HookCode {
   }
 
   void resetProcessor() {
-    cout << "Resetting processor" << endl;
+    p_debug << "Resetting processor" << endl;
     obj->restoreCheckpoint();
   }
 
   void run(hook_arg_t *arg) override
   {
-    auto PC = getEmulator().getArchitecture().registerGet(icemu::Architecture::Register::REG_PC);
-    cout << "Instruction hook PC: " << PC << endl;
     // Reset the processor after a defined number of cycles (re-execution benchmark)
     // If the reset_cycle_target = 0, then no resets happen
     if (reset_cycle_target > 0 
@@ -173,8 +171,6 @@ class MemoryAccess : public HookMemory {
   }
 
   void run(hook_arg_t *arg) { 
-    auto PC = getEmulator().getArchitecture().registerGet(icemu::Architecture::Register::REG_PC);
-    cout << "Memory hook PC: " << PC << endl;
     address_t address = arg->address;
     enum memory_type mem_type = arg->mem_type;
     address_t value = arg->value;
