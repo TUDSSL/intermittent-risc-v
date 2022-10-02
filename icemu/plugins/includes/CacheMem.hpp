@@ -268,6 +268,9 @@ class Cache {
 
           // New cache entry for the line.
           if (line.valid == false) {
+              line.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
+              stats.incNVMReads(4);
+
               handleCacheMiss(line);
               p_debug << "Cache create, stored at IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
               break;
@@ -379,6 +382,8 @@ class Cache {
         setBit(WRITE_DOMINATED, line);
         setBit(POSSIBLE_WAR, line);
 
+        p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
+
         writeToCache(line);
 
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data << dec << endl;
@@ -406,9 +411,7 @@ class Cache {
         setBit(READ_DOMINATED, line);
       
         // In case of a read, read the value from the local NVM copy
-        line.blocks.data = nvm.localRead(reconstructAddress(line), 4);
         line.blocks.size = 4;//req.size;
-        stats.incNVMReads(req.size);
         cost.modifyCost(Pipeline, NVM_READ, req.size);
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -416,6 +419,8 @@ class Cache {
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
         setBit(WRITE_DOMINATED, line);
+
+        p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
 
         // In case of a write, copy the value from the CPU to the data
         writeToCache(line);
@@ -639,14 +644,16 @@ class Cache {
         int reg_cp_size = registerCheckpoint.create();
         if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
         stats.incNVMWrites(reg_cp_size);
+
+        stats.incCheckpoints();
+        stats.incCheckpointsDueToWAR(); 
+
         // write the dangling cuckoo back to nvm
+        p_debug << "Writing dangling cuckoo to NVM" << endl;
         cacheNVMwrite(reconstructAddress(cuckoo_incoming), cuckoo_incoming.blocks.data, cuckoo_incoming.blocks.size, true);
         clearBit(DIRTY, cuckoo_incoming);
         clearBit(VALID, cuckoo_incoming);
 
-        stats.incCheckpoints();
-        stats.incCheckpointsDueToWAR(); 
-        
         cost.modifyCost(Pipeline, CHECKPOINT, 0);
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
@@ -666,6 +673,7 @@ class Cache {
                    */
                   if (l.dirty) {
                       // Perform the actual write to the memory
+                      p_debug << "Perform the actual write to the memory" << endl;
                       cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
                       stats.incCacheCheckpoint(l.blocks.size);
                   }
@@ -911,6 +919,7 @@ class Cache {
    */
   void checkpointEviction()
   {
+    p_debug << "checkpoint eviction" << endl;
     // Evict all the writes that are a possible war and reset the bits
     for (CacheSet &s : sets) {
         for (CacheLine &l : s.lines) {
