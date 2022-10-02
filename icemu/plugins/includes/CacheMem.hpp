@@ -634,6 +634,11 @@ class Cache {
         ASSERT(cuckoo_incoming.valid == true);
         ASSERT(cuckoo_incoming.dirty == true);
 
+        // Create the checkpoint checkpoint
+        p_debug << "Creating PROWL checkpoint" << endl;
+        int reg_cp_size = registerCheckpoint.create();
+        if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
+        stats.incNVMWrites(reg_cp_size);
         // write the dangling cuckoo back to nvm
         cacheNVMwrite(reconstructAddress(cuckoo_incoming), cuckoo_incoming.blocks.data, cuckoo_incoming.blocks.size, true);
         clearBit(DIRTY, cuckoo_incoming);
