@@ -157,9 +157,9 @@ class Stats {
         log("hints_given:", misc.hints_given, logger);
         log("max_dirty_ratio:", misc.max_dirty_ratio, logger);
         log("cuckoo_iter:", misc.no_of_cuckoos, logger);
-        log("cycle:", misc.current_cycle, logger);
-        log("on_duration:", misc.on_duration, logger);
-        log("checkpoint_period:", misc.checkpoint_period, logger);
+        log("cycles:", misc.current_cycle, logger);
+        log("on_duration_cycles:", misc.on_duration, logger);
+        log("checkpoint_period_cycles:", misc.checkpoint_period, logger);
         logger << endl;
     }
 
