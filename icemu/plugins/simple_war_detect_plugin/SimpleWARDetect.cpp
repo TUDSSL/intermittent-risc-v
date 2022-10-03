@@ -259,6 +259,7 @@ class MemoryAccess : public HookMemory {
       if (arg1_val.size())
         filename = arg1_val[0];
     
+    filename += "-" + std::to_string(hook_instr_cnt->checkpoint_period) + "-" + std::to_string(hook_instr_cnt->on_duration);
     clank->log.init(filename);
     clank->nvm.initMem(&getEmulator().getMemory());
   }
