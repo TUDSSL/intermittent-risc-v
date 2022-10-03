@@ -4,20 +4,20 @@ cache_hit:2399
 cache_read:4536
 cache_write:4669
 cache_cuckoo:0
-cache_checkpoint:976
+cache_checkpoint:1656
 nvm_reads_no_cache:4605
 nvm_writes_no_cache:4669
-nvm_reads:1009
-nvm_writes:808
-checkpoint:1
-checkpoint_war:1
+nvm_reads:536
+nvm_writes:1004
+checkpoint:2
+checkpoint_war:2
 checkpoint_dirty:0
 checkpoint_period:0
 checkpoint_max_cycles: 0
 restore:0
 hints_given:0
-max_dirty_ratio:0.953125
+max_dirty_ratio:0.859375
 cuckoo_iter:0
-cycles:44834
+cycles:50053
 on_duration_cycles:0
 checkpoint_period_cycles:0

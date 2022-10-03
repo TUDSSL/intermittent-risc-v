@@ -13,11 +13,11 @@ checkpoint:1211
 checkpoint_war:1211
 checkpoint_dirty:0
 checkpoint_period:0
-checkpoint_max_cycles: 123448
+checkpoint_max_cycles: 128806
 restore:0
 hints_given:0
 max_dirty_ratio:0.808594
 cuckoo_iter:0
-cycles:43297284
+cycles:45619239
 on_duration_cycles:0
 checkpoint_period_cycles:0
