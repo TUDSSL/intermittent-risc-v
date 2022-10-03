@@ -272,15 +272,6 @@ class Cache {
 
           // New cache entry for the line.
           if (line.valid == false) {
-              line.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
-              // Ideal case, when we write to memory we only get the "remaining" bytes to fill the cache line
-              // If we read, we get all the bytes from NVM
-              if (mem_type == HookMemory::MEM_WRITE) {
-                  stats.incNVMReads(4-req.size);
-              } else {
-                  stats.incNVMReads(4);
-              }
-
               handleCacheMiss(line);
               p_debug << "Cache create, stored at IDX: " << hex << hashed_index << dec << " WAY: " << i << endl;
               break;
@@ -423,19 +414,43 @@ class Cache {
    */
   void cacheCreateEntry(CacheLine &line, const CacheReq req)
   {
+    // Already fetch the data, stats are updated depending on how much we use (emulation shortcut)
+    line.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
+
     switch (req.type) {
       case HookMemory::MEM_READ:
         setBit(READ_DOMINATED, line);
-      
-        // In case of a read, read the value from the local NVM copy
+
+        // Read the entry from NVM
+        cost.modifyCost(Pipeline, NVM_READ, 4);
+        stats.incNVMReads(4);
+
+        // Read the entry from the cache
+        // TODO: This is only required when we read through the cache.
+        // i.e., if the data first goes into the cache, and then loaded from the cache
+        //cost.modifyCost(Pipeline, CACHE_READ, req.size);
+        //stats.incCacheReads(req.size);
+
+        // We read the whole line
         line.blocks.size = 4;//req.size;
-        cost.modifyCost(Pipeline, NVM_READ, req.size);
+
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
 
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        if (req.size == 4) setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+
+        // Ideal case, when we write to memory we only get the "remaining" bytes to fill the cache line
+        // If we read, we get all the bytes from NVM
+        if (4-req.size != 0) {
+          cost.modifyCost(Pipeline, NVM_READ, 4-req.size);
+          stats.incNVMReads(4-req.size);
+        }
+
+        // Write the remaining size to the cache
+        cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
+        stats.incCacheWrites(req.size);
+
         if (req.size == 4)
           setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
         else
@@ -450,8 +465,6 @@ class Cache {
         p_debug << "Data at NVM: " << hex << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
-        stats.incCacheWrites(req.size);
-        cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
         ASSERT(line.possible_war == false);
         //ASSERT(line.read_dominated == false);
         break;
@@ -577,8 +590,6 @@ class Cache {
       clearBit(DIRTY, *evicted_line);
 
       // Now that the eviction has been done, perform the replacement.
-      evicted_line->blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
-      stats.incNVMReads(4);
       cacheStoreAddress(*evicted_line, req);
       updateCacheLastUsed(*evicted_line);
       cacheCreateEntry(*evicted_line, req);
@@ -608,8 +619,6 @@ class Cache {
         // This line will be cuckooed around - this is the data that has to be inserted
         setBit(VALID, cuckoo_incoming);
 
-        cuckoo_incoming.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
-        stats.incNVMReads(4);
         cacheStoreAddress(cuckoo_incoming, req);
         updateCacheLastUsed(cuckoo_incoming);
         cacheCreateEntry(cuckoo_incoming, req);
