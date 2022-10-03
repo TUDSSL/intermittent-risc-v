@@ -37,7 +37,8 @@ class StackTracker {
         auto cur_stack_address = getStackPointer();
 
         // TODO: check offset
-        if (evict_address+8 < min_stack_address || evict_address+8 > cur_stack_address) {
+        //if (evict_address+8 < min_stack_address || evict_address+8 > cur_stack_address) {
+        if (evict_address <= min_stack_address || evict_address+4 >= cur_stack_address) {
             return true;
         }
 
