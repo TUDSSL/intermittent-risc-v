@@ -28,7 +28,10 @@ private:
 
 public:
   MemClockCycles(Emulator &emu)
-      : HookCode(emu, "memory_stats_cycles"), Pipeline(emu) {}
+      : HookCode(emu, "memory_stats_cycles"), Pipeline(emu) {
+    Pipeline.setVerifyJumpDestinationGuess(false);
+    Pipeline.setVerifyNextInstructionGuess(false);
+  }
 
   ~MemClockCycles() {}
 
