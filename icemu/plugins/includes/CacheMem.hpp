@@ -390,7 +390,11 @@ class Cache {
       // For a write hit
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        if (req.size == 4) setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+        if (req.size == 4)
+          setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+        else
+          setBit(READ_DOMINATED, line);
+
         setBit(POSSIBLE_WAR, line);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
@@ -432,6 +436,10 @@ class Cache {
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
         if (req.size == 4) setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+        if (req.size == 4)
+          setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+        else
+          setBit(READ_DOMINATED, line);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
 
@@ -445,7 +453,7 @@ class Cache {
         stats.incCacheWrites(req.size);
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
         ASSERT(line.possible_war == false);
-        ASSERT(line.read_dominated == false);
+        //ASSERT(line.read_dominated == false);
         break;
     }
   }
