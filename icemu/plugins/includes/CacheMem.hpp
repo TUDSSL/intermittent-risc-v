@@ -675,9 +675,21 @@ class Cache {
 
         // Create the checkpoint checkpoint
         p_debug << "Creating PROWL checkpoint" << endl;
-        int reg_cp_size = registerCheckpoint.create();
-        if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
+        int reg_cp_size = registerCheckpoint.create()*4; // Register checkpoint in bytes
+                                                         //
+        // NVM writes
         stats.incNVMWrites(reg_cp_size);
+        cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+
+        if (double_bufferd_checkpoints) {
+          // NVM Read
+          stats.incNVMReads(reg_cp_size);
+          cost.modifyCost(Pipeline, NVM_READ, reg_cp_size);
+
+          // NVM Write
+          stats.incNVMWrites(reg_cp_size);
+          cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+        }
 
         stats.incCheckpoints();
         stats.incCheckpointsDueToWAR(); 
@@ -708,8 +720,9 @@ class Cache {
                   if (l.dirty) {
                       // Perform the actual write to the memory
                       p_debug << "Perform the actual write to the memory" << endl;
-                      cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                      stats.incCacheCheckpoint(l.blocks.size);
+                      checkpointWriteMem(l);
+                      //cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
+                      //stats.incCacheCheckpoint(l.blocks.size);
                   }
                   
                   clearBit(DIRTY, l);
@@ -905,13 +918,25 @@ class Cache {
   void createCheckpoint(enum CheckpointReason reason)
   {
     // Create a register checkpoint
-    int reg_cp_size = registerCheckpoint.create();
-    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
+    int reg_cp_size = registerCheckpoint.create()*4; // Get the size in bytes
+
+    // NVM writes
     stats.incNVMWrites(reg_cp_size);
+    cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+
+    if (double_bufferd_checkpoints) {
+      // NVM Read
+      stats.incNVMReads(reg_cp_size);
+      cost.modifyCost(Pipeline, NVM_READ, reg_cp_size);
+
+      // NVM Write
+      stats.incNVMWrites(reg_cp_size);
+      cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+    }
 
     // Only place where checkpoints are incremented
     stats.incCheckpoints();
-    cost.modifyCost(Pipeline, CHECKPOINT, 0);
+    //cost.modifyCost(Pipeline, CHECKPOINT, 0);
 
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
@@ -948,6 +973,34 @@ class Cache {
     stackTracker.resetMinStackAddress();
   }
 
+  /*
+   * Checkpoint a line
+   *  - Read from cache (inCacheCheckpoint)
+   *  - Write to NVM (incNVMWrites)
+   *
+   * If the checkpoint is double buffered it means an extra:
+   *  - Read from NVM (incNVMReads)
+   *  - Write to NVM (incNVMWrites)
+   */
+  void checkpointWriteMem(CacheLine &l) {
+    // Read from Cache
+    stats.incCacheCheckpoint(l.blocks.size);
+    cost.modifyCost(Pipeline, CACHE_READ, l.blocks.size);
+
+    // Write to NVM stat + Pipeline + Perform the actual write to the memory
+    cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true); 
+
+    if (double_bufferd_checkpoints) {
+      // Read from NVM + Pipeline
+      stats.incNVMReads(l.blocks.size);
+      cost.modifyCost(Pipeline, NVM_READ, l.blocks.size);
+
+      // Write to NVM + Pipeline
+      stats.incNVMWrites(l.blocks.size);
+      cost.modifyCost(Pipeline, NVM_READ, l.blocks.size);
+    }
+  }
+
   /**
    * @brief Carry out the actual checkpointing. Iterate through the
    * cache and figure out which cache entry needs to be written out
@@ -964,22 +1017,14 @@ class Cache {
               if (l.dirty) {
                 if (stackTrackConfig == STACK_TRACK_NONE) {
                   // Perform the actual write to the memory
-                  cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                  auto cp_size = l.blocks.size;
-                  if (double_bufferd_checkpoints) cp_size *= 2; // Double buffered register checkpoint
-                  stats.incCacheCheckpoint(cp_size);
+                  checkpointWriteMem(l);
                 } else {
                   // Check if we need to write (depends on if the stack is still in use)
                   auto evict_address = reconstructAddress(l) | l.blocks.bits.offset;
-
                   if (stackTracker.isMemoryWriteNeeded(evict_address)) {
                     // Outside of the region, we evict
                     // Perform the actual write to the memory
-                    cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                    auto cp_size = l.blocks.size;
-                    if (double_bufferd_checkpoints) cp_size *= 2; // Double buffered register checkpoint
-                    stats.incCacheCheckpoint(cp_size);
-                    //p_err << "\n";
+                    checkpointWriteMem(l);
                   }
                 }
               }
@@ -1017,7 +1062,6 @@ class Cache {
     }
 
     // Increment NVM writes
-    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint load
     stats.incNVMReads(reg_cp_size);
 
     // Increment counter
