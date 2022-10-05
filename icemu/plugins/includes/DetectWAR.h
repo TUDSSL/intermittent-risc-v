@@ -19,7 +19,6 @@
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
 #include "icemu/emu/Architecture.h"
-#include "CycleCounter.h"
 
 using namespace std;
 using namespace icemu;
@@ -39,46 +38,6 @@ class DetectWAR{
     }
 
     ~DetectWAR() = default;
-
-#if 0
-    bool isWAR(address_t addr, HookMemory::memory_type type)
-    {
-      // Check if the reads is in the reads list
-      bool isInReads = (reads.find(addr) != reads.end());
-      // Check if the reads is in the writes list
-      bool isInWrites = (writes.find(addr) != writes.end());
-
-      switch (type) {
-        // If the current access type is read, just put it in the set
-        case HookMemory::MEM_READ:
-          reads.insert(addr);
-          return false;
-          break;
-
-        // If the current access is a write
-        //  - If the address is in 'writes' we are OK, it's write dominated
-        //  - If the address is not in 'writes', but IS in 'reads', we have a WAR
-        //  - If the address is not in 'writes' AND not in 'reads', we have a new access, add it to writes
-        case HookMemory::MEM_WRITE:
-          if (isInWrites) {
-            // Write is already set. So it's write dominated and safe
-            // (We only add to writes if it's the first access)
-            return false;
-          } else if (isInReads) {
-            // We have a WAR, addr is not in writes, but is in reads (and this is a write)
-            reset();
-            return true;
-          } else {
-            // Is neither in writes or reads, new access. Add it to writes
-            writes.insert(addr);
-            return false;
-          }
-          break;
-      }
-
-      assert(false && "WAR detector, should not reach this");
-    }
-#endif
 
     bool isWAR(address_t addr, size_t size, HookMemory::memory_type type) {
       switch (type) {
