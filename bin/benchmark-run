@@ -96,13 +96,16 @@ function nacho-clank() {
     on_duration=$3
     checkpoint_period=$4
 	run-elf \
-        -p clank_cache_plugin.so \
+        -p custom_cache_plugin.so \
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
         -a custom-cache-log-file=$LOGDIR/$name-$compile_config-run-nacho_clank \
         -a on-duration=$on_duration \
         -a checkpoint-period=$checkpoint_period \
+        -a enable-stack-tracking=2 \
+        -a enable-pw-bit=0 \
+        -a enable-oracle=1 \
         $elf
 }
 
