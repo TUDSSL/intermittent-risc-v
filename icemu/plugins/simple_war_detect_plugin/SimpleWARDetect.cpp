@@ -95,7 +95,7 @@ class Clank {
         break;
     }
 
-    if (war.isWAR(address, type)) {
+    if (war.isWAR(address, size, type)) {
       p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
       // Create a checkpoint
       createCheckpoint(CHECKPOINT_DUE_TO_WAR);
@@ -106,13 +106,25 @@ class Clank {
   void createCheckpoint(enum CheckpointReason reason) {
     //cout << "Creating checkpoint" << endl;
     // Create a register checkpoint
-    int reg_cp_size = registerCheckpoint.create();
-    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint
+    int reg_cp_size = registerCheckpoint.create()*4; // Checkpoint size in bytes
+
+    // Write the checkpoint to NVM
     stats.incNVMWrites(reg_cp_size);
+    cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size);
+
+    // Double buffer
+    if (double_bufferd_checkpoints) {
+      // Read the checkpoint back
+      stats.incNVMReads(reg_cp_size);
+      cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size);
+
+      // Double buffered final write
+      stats.incNVMWrites(reg_cp_size);
+      cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size);
+    }
 
     // Only place where checkpoints are incremented
     stats.incCheckpoints();
-    cost.modifyCost(&Pipeline, CHECKPOINT, 0);
 
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
@@ -143,11 +155,11 @@ class Clank {
 
   void restoreCheckpoint() {
     // Restore the registers
-    int reg_cp_size = registerCheckpoint.restore();
+    int reg_cp_size = registerCheckpoint.restore()*4; // Checkpoint size in bytes
 
     // Increment NVM writes
-    if (double_bufferd_checkpoints) reg_cp_size *= 2; // Double buffered register checkpoint load
     stats.incNVMReads(reg_cp_size);
+    cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size);
 
     // Increment counter
     stats.incRestores();
@@ -246,9 +258,6 @@ class MemoryAccess : public HookMemory {
   // Register checkpoint
   Checkpoint registerCheckpoint;
   
-  // Settings
-  bool double_bufferd_checkpoints = true;
-
   MemoryAccess(Emulator &emu) : HookMemory(emu, "memory-access-ratio"), registerCheckpoint(emu) {
     hook_instr_cnt = new HookInstructionCount(emu);
     clank = &hook_instr_cnt->clank;
