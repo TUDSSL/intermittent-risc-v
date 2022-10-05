@@ -70,6 +70,8 @@ class Cache {
 
     bool enable_pw;
 
+    bool enable_oracle;
+
     enum StackTrackConfig {
       STACK_TRACK_NONE,
       STACK_TRACK_CHECKPOINT,
@@ -77,6 +79,8 @@ class Cache {
     };
     enum StackTrackConfig stackTrackConfig = STACK_TRACK_NONE;
 
+    // WAR detect (to check correctness)
+    DetectWAR War;
 
   public:
     // Statistics
@@ -149,7 +153,7 @@ class Cache {
    */
   void init(uint32_t size, uint32_t ways, enum replacement_policy p,
             icemu::Memory &emu_mem, string filename, enum CacheHashMethod hash_method,
-            bool enable_pw, int enable_stack_tracking)
+            bool enable_pw, int enable_stack_tracking, bool enable_oracle)
   {
     // Initialize meta stuffs
     EmuMem = &emu_mem;
@@ -160,6 +164,7 @@ class Cache {
     p_debug << "Hash method: " << hash_method << endl;
     this->hash_method = hash_method;
     this->enable_pw = enable_pw;
+    this->enable_oracle = enable_oracle;
 
     switch (enable_stack_tracking) {
       case 0:
@@ -371,7 +376,7 @@ class Cache {
     switch (req.type) {
       // For a read hit
       case HookMemory::MEM_READ:
-        setBit(READ_DOMINATED, line);
+        //setBit(READ_DOMINATED, line);
         stats.incCacheReads(req.size);
         cost.modifyCost(Pipeline, CACHE_READ, req.size);
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
@@ -381,12 +386,12 @@ class Cache {
       // For a write hit
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
-        if (req.size == 4)
-          setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
-        else
-          setBit(READ_DOMINATED, line);
+        //if (req.size == 4)
+        //  setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
+        //else
+        //  setBit(READ_DOMINATED, line);
 
-        setBit(POSSIBLE_WAR, line);
+        //setBit(POSSIBLE_WAR, line);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
 
@@ -415,24 +420,31 @@ class Cache {
   void cacheCreateEntry(CacheLine &line, const CacheReq req)
   {
     // Already fetch the data, stats are updated depending on how much we use (emulation shortcut)
-    line.blocks.data = nvm.localRead(reconstructAddress(req.mem_id.tag, req.mem_id.index), 4);
+    auto address = reconstructAddress(req.mem_id.tag, req.mem_id.index);
+    line.blocks.data = nvm.localRead(address, 4);
+
+    // Set the detection bits
+    updateDetectionBits(&line, req.type, req.size);
 
     switch (req.type) {
       case HookMemory::MEM_READ:
-        setBit(READ_DOMINATED, line);
+        // WAR detection (read can never cause WAR, but need it to track writes later)
+        War.isWAR(address, 4, HookMemory::MEM_READ);
 
         // Read the entry from NVM
         cost.modifyCost(Pipeline, NVM_READ, 4);
         stats.incNVMReads(4);
 
+        // Write the entry to the cache
+        cost.modifyCost(Pipeline, CACHE_WRITE, 4);
+        stats.incCacheWrites(4);
+
         // Read the entry from the cache
-        // TODO: This is only required when we read through the cache.
-        // i.e., if the data first goes into the cache, and then loaded from the cache
-        //cost.modifyCost(Pipeline, CACHE_READ, req.size);
-        //stats.incCacheReads(req.size);
+        cost.modifyCost(Pipeline, CACHE_READ, 4);
+        stats.incCacheReads(4);
 
         // We read the whole line
-        line.blocks.size = 4;//req.size;
+        line.blocks.size = 4;
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -440,21 +452,18 @@ class Cache {
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
 
-        // Ideal case, when we write to memory we only get the "remaining" bytes to fill the cache line
-        // If we read, we get all the bytes from NVM
-        if (4-req.size != 0) {
-          cost.modifyCost(Pipeline, NVM_READ, 4-req.size);
-          stats.incNVMReads(4-req.size);
+        if (req.size != 4) {
+          // If we don't write a full cache line, we first need to read it to fill in the missing bytes
+          War.isWAR(address, 4, HookMemory::MEM_READ);
+
+          // Add costs
+          cost.modifyCost(Pipeline, NVM_READ, 4);
+          stats.incNVMReads(4);
         }
 
         // Write the remaining size to the cache
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
         stats.incCacheWrites(req.size);
-
-        if (req.size == 4)
-          setBit(WRITE_DOMINATED, line); // Can only be write dominated when the WHOLE cache line is written
-        else
-          setBit(READ_DOMINATED, line);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec << endl;
 
@@ -465,8 +474,6 @@ class Cache {
         p_debug << "Data at NVM: " << hex << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
-        ASSERT(line.possible_war == false);
-        //ASSERT(line.read_dominated == false);
         break;
     }
   }
@@ -513,6 +520,49 @@ class Cache {
       return data;
   }
 
+  /*
+   * Only size 4 can set the write dominated bit, becuase when the request size is <4 we will read
+   * data from the cache to fill the complete line. We have to be conservative, so we set it as Read dominated
+   */
+  void updateDetectionBits(CacheLine *line, enum HookMemory::memory_type new_entry_type, size_t size) {
+
+    // Get the set corresponding to the line
+    address_t hashed_index = cacheHash(line->blocks.bits.tag, line->blocks.bits.index, hash_method, 0);
+    auto cacheSet = sets.at(hashed_index);
+
+    // If ANY of the lines in the set have possible_war set we can not trust write dominated
+    bool possible_war = false;
+    for (const auto &l : cacheSet.lines) {
+        possible_war |= l.possible_war;
+    }
+
+    bool was_read_dominated = line->read_dominated;
+
+    // If the new entry is a write, we only set Write dominated if possible war is not yet set
+    if (new_entry_type == HookMemory::MEM_WRITE) {
+      if (possible_war == false && size == 4) {
+        // The line is now write dominated
+        line->write_dominated = true;
+        line->read_dominated = false;
+      } else {
+        // The line is now read dominated
+        line->write_dominated = false;
+        line->read_dominated = true;
+      }
+    }
+
+    // If the new entry is a read, we always set the Read dominated bit
+    else if (new_entry_type == HookMemory::MEM_READ) {
+      line->write_dominated = false;
+      line->read_dominated = true;
+    }
+
+    // If the line was read dominated, we set the possible war
+    if (was_read_dominated) {
+      line->possible_war = true;
+    }
+  }
+
   /**
    * @brief Performs eviction of a cache block depending on the cache
    * replacement policy set. On eviction, it handles and places the
@@ -546,48 +596,62 @@ class Cache {
       
       ASSERT(evicted_line != nullptr);
       ASSERT(evicted_line->valid == true);
-    
+
+      // Reconstruct the address
+      auto evict_address = reconstructAddress(*evicted_line);
+
+      p_debug << "Evicting address: " << hex << evict_address << dec << endl;
+ 
       // Perform the eviction
       if (evicted_line->dirty) {
-          if (stackTrackConfig == STACK_TRACK_CONTINUOUS) {
-              // Check if the memory is needed
-              auto evict_address = reconstructAddress(*evicted_line) | evicted_line->blocks.bits.offset;
-              if (stackTracker.isMemoryWriteNeeded(evict_address)) {
-                  // Normal eviction
-                  if (evicted_line->possible_war || enable_pw == false)
-                      createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-                  else { // This is the case where there is no need for checkpoint but still needs to be evicted
-                      p_debug << "PW bit not set, no checkpoint needed" << endl;
-                      cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
-                      clearBit(DIRTY, *evicted_line);
-                      stats.incCacheDirtyEvictions();
-                  }
+          if (true
+                  && (stackTrackConfig == STACK_TRACK_CONTINUOUS)
+                  && !stackTracker.isMemoryWriteNeeded(evict_address)) {
+              p_debug << "In unused region of stack, no need to check memory" << endl;
+          } 
+
+          else if (enable_oracle) {
+              // Check for WARs
+              bool isWar = War.isWAR(evict_address, evicted_line->blocks.size, HookMemory::MEM_WRITE);
+
+              if (isWar) {
+                p_debug << "Oracle WAR" << endl;
+                createCheckpoint(CHECKPOINT_DUE_TO_WAR);
               } else {
-                  p_debug << "No need to check memory\n";
-                  // We don't need the memory, clear the bits
-                  clearBit(DIRTY, *evicted_line);
-                  stats.incCacheDirtyEvictions();
-              }
-          
-          } else {
-              // Normal eviction
-              if (evicted_line->possible_war || enable_pw == false)
-                  createCheckpoint(CHECKPOINT_DUE_TO_WAR);
-              else { // This is the case where there is no need for checkpoint but still needs to be evicted
-                  p_debug << "PW bit not set, no checkpoint needed" << endl;
-                  cacheNVMwrite(reconstructAddress(*evicted_line), evicted_line->blocks.data, evicted_line->blocks.size, true);
-                  clearBit(DIRTY, *evicted_line);
-                  stats.incCacheDirtyEvictions();
+                p_debug << "Oracle safe writeback" << endl;
+                cacheNVMwrite(evict_address, evicted_line->blocks.data, evicted_line->blocks.size, true);
+                clearBit(DIRTY, *evicted_line);
+                stats.incCacheDirtyEvictions();
               }
           }
-      } else
-          stats.incCacheCleanEvictions();
+          
+          else if (enable_pw == false) {
+              p_debug << "Nacho naive, creating checkpoint" << endl;
+              createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+          }
 
-      // If evicted then reset all the flags (except VALID)
-      clearBit(READ_DOMINATED, *evicted_line);
-      clearBit(WRITE_DOMINATED, *evicted_line);
-      clearBit(POSSIBLE_WAR, *evicted_line);
-      clearBit(DIRTY, *evicted_line);
+          else if (evicted_line->read_dominated) {
+              p_debug << "PW bit set, creating checkpoint" << endl;
+              createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+          }
+
+          else { // This is the case where there is no need for checkpoint but still needs to be evicted
+              p_debug << "PW bit not set, safe writeback" << endl;
+
+              // Correctness check, can never write back if it can cause a WAR
+              bool isWar = War.isWAR(evict_address, evicted_line->blocks.size, HookMemory::MEM_WRITE);
+              ASSERT(isWar == false);
+
+              // Perform actual write
+              cacheNVMwrite(evict_address, evicted_line->blocks.data, evicted_line->blocks.size, true);
+
+              // Update the bits
+              clearBit(DIRTY, *evicted_line);
+              stats.incCacheDirtyEvictions();
+          }
+      } else {
+          stats.incCacheCleanEvictions();
+      }
 
       // Now that the eviction has been done, perform the replacement.
       cacheStoreAddress(*evicted_line, req);
@@ -658,7 +722,7 @@ class Cache {
           } else {
             // In case successful Cuckoo, it is 1 cache write
             stats.incCacheCuckoo(cuckoo_incoming.blocks.size);
-            cost.modifyCost(Pipeline, CACHE_READ, cuckoo_incoming.blocks.size);
+            cost.modifyCost(Pipeline, CACHE_WRITE, cuckoo_incoming.blocks.size);
 
             // If found a nice place, just put it there
             copyCacheLines(*cuckoo_cache, cuckoo_incoming);
@@ -676,7 +740,7 @@ class Cache {
         // Create the checkpoint checkpoint
         p_debug << "Creating PROWL checkpoint" << endl;
         int reg_cp_size = registerCheckpoint.create()*4; // Register checkpoint in bytes
-                                                         //
+
         // NVM writes
         stats.incNVMWrites(reg_cp_size);
         cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
@@ -697,10 +761,20 @@ class Cache {
         // write the dangling cuckoo back to nvm
         p_debug << "Writing dangling cuckoo to NVM" << endl;
         cacheNVMwrite(reconstructAddress(cuckoo_incoming), cuckoo_incoming.blocks.data, cuckoo_incoming.blocks.size, true);
+
+        if (double_bufferd_checkpoints) {
+          // Read from NVM + Pipeline
+          stats.incNVMReads(4);
+          cost.modifyCost(Pipeline, NVM_READ, 4);
+
+          // Write to NVM + Pipeline
+          stats.incNVMWrites(4);
+          cost.modifyCost(Pipeline, NVM_READ, 4);
+        }
+
         clearBit(DIRTY, cuckoo_incoming);
         clearBit(VALID, cuckoo_incoming);
 
-        cost.modifyCost(Pipeline, CHECKPOINT, 0);
         for (CacheSet &s : sets) {
             for (CacheLine &l : s.lines) {
                 if (l.valid) {
@@ -721,8 +795,6 @@ class Cache {
                       // Perform the actual write to the memory
                       p_debug << "Perform the actual write to the memory" << endl;
                       checkpointWriteMem(l);
-                      //cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
-                      //stats.incCacheCheckpoint(l.blocks.size);
                   }
                   
                   clearBit(DIRTY, l);
@@ -917,6 +989,8 @@ class Cache {
    */
   void createCheckpoint(enum CheckpointReason reason)
   {
+    p_debug << "Checkpoint" << endl;
+
     // Create a register checkpoint
     int reg_cp_size = registerCheckpoint.create()*4; // Get the size in bytes
 
@@ -936,7 +1010,6 @@ class Cache {
 
     // Only place where checkpoints are incremented
     stats.incCheckpoints();
-    //cost.modifyCost(Pipeline, CHECKPOINT, 0);
 
     // Update the cause to the stats
     stats.updateCheckpointCause(reason);
@@ -971,6 +1044,9 @@ class Cache {
 
     // Reset the stack tracker
     stackTracker.resetMinStackAddress();
+
+    // Reset the WAR detection
+    War.reset();
   }
 
   /*
@@ -1044,7 +1120,7 @@ class Cache {
 
   void restoreCheckpoint() {
     // Restore the registers
-    int reg_cp_size = registerCheckpoint.restore();
+    int reg_cp_size = registerCheckpoint.restore()*4; // Size in bytes
 
     // Clear the cache
     for (CacheSet &s : sets) {

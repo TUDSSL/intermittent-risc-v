@@ -208,6 +208,7 @@ class MemoryAccess : public HookMemory {
       uint32_t size = 512, lines = 2, hash_method = 0;
       bool enable_pw = false;
       int enable_stack_tracking = 0;
+      bool enable_oracle = false;
       string arg1 = "cache-size=", arg2 = "cache-lines=", arg3 = "hash-method=", arg4="enable-pw-bit=", arg5="enable-stack-tracking=";
       
       auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), arg1);
@@ -230,6 +231,10 @@ class MemoryAccess : public HookMemory {
       if (arg5_val.size())
         enable_stack_tracking = std::stoul(arg5_val[0]);
 
+      auto arg_oracle_val = PluginArgumentParsing::GetArguments(getEmulator(), "enable-oracle=");
+      if (arg_oracle_val.size())
+        enable_oracle = !!(std::stoul(arg_oracle_val[0]));
+
       // Arguments used in HookInstructionCount 
       // TODO: Merge the use, because now we look for them here AND in the HookInstructionCount plugin
       // Here we only need them for the filename
@@ -248,7 +253,8 @@ class MemoryAccess : public HookMemory {
                 + "-" + std::to_string(checkpoint_period) + "-" + std::to_string(on_duration);
 
       cout << "Lines from outside " << lines << endl;
-      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method, enable_pw, enable_stack_tracking);
+      CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename, (enum CacheHashMethod)hash_method,
+          enable_pw, enable_stack_tracking, enable_oracle);
   }
 };
 
