@@ -1,5 +1,4 @@
-#ifndef _DETECT_WAR
-#define _DETECT_WAR
+#pragma once
 
 #include <iostream>
 #include <map>
@@ -23,85 +22,81 @@
 using namespace std;
 using namespace icemu;
 
-class DetectWAR{
-  public:
-    unordered_set<address_t> reads, writes;
+class DetectWAR {
+ public:
+  unordered_set<address_t> reads, writes;
 
-  public:
-    uint32_t checkpoints;
+  uint32_t checkpoints;
 
-    DetectWAR()
-    {
-      reads.clear();
-      writes.clear();
-      checkpoints = 0;
+  DetectWAR() {
+    reads.clear();
+    writes.clear();
+    checkpoints = 0;
+  }
+
+  ~DetectWAR() = default;
+
+  bool isWAR(address_t addr, size_t size, HookMemory::memory_type type) {
+    switch (type) {
+    // If the current access type is read, just put it in the set
+    case HookMemory::MEM_READ:
+      return processRead(addr, size);
+      break;
+
+    // If the current access is a write
+    //  - If the address is in 'writes' we are OK, it's write dominated
+    //  - If the address is not in 'writes', but IS in 'reads', we have a WAR
+    //  - If the address is not in 'writes' AND not in 'reads', we have a new
+    //  access, add it to writes
+    case HookMemory::MEM_WRITE:
+      return processWrite(addr, size);
+      break;
     }
 
-    ~DetectWAR() = default;
+    assert(false && "WAR detector, should not reach this");
+  }
 
-    bool isWAR(address_t addr, size_t size, HookMemory::memory_type type) {
-      switch (type) {
-        // If the current access type is read, just put it in the set
-        case HookMemory::MEM_READ:
-          return processRead(addr, size);
-          break;
-
-        // If the current access is a write
-        //  - If the address is in 'writes' we are OK, it's write dominated
-        //  - If the address is not in 'writes', but IS in 'reads', we have a WAR
-        //  - If the address is not in 'writes' AND not in 'reads', we have a new access, add it to writes
-        case HookMemory::MEM_WRITE:
-          return processWrite(addr, size);
-          break;
-      }
-
-      assert(false && "WAR detector, should not reach this");
-    }
-
-    void reset()
-    {
-      checkpoints++;
-      reads.clear();
-      writes.clear();
-    }
+  void reset() {
+    checkpoints++;
+    reads.clear();
+    writes.clear();
+  }
 
  private:
-    bool processRead(address_t addr, size_t size) {
-      // Process all the bytes in the read access
-      for (size_t i=0; i<size; i++) {
-        reads.insert(addr+i);
-      }
-      // Read can never cause a WAR
-      return false;
+  bool processRead(address_t addr, size_t size) {
+    // Process all the bytes in the read access
+    for (size_t i = 0; i < size; i++) {
+      reads.insert(addr + i);
     }
+    // Read can never cause a WAR
+    return false;
+  }
 
-    bool processWrite(address_t addr, size_t size) {
-      // Process all the bytes in the write access
-      for (size_t i=0; i<size; i++) {
-        address_t byte_addr = addr+i;
+  bool processWrite(address_t addr, size_t size) {
+    // Process all the bytes in the write access
+    for (size_t i = 0; i < size; i++) {
+      address_t byte_addr = addr + i;
 
-        // Check if the address is in the reads
-        bool isInReads = (reads.find(byte_addr) != reads.end());
+      // Check if the address is in the reads
+      bool isInReads = (reads.find(byte_addr) != reads.end());
 
-        // Check if the addres is in the writes
-        bool isInWrites = (writes.find(byte_addr) != writes.end());
+      // Check if the addres is in the writes
+      bool isInWrites = (writes.find(byte_addr) != writes.end());
 
-        // Check for a WAR
-        if (isInWrites) {
-          // Write is already set. So it's write dominated and safe
-          // (We only add to writes if it's the first access)
-        } else if (isInReads) {
-          // We have a WAR, addr is not in writes, but is in reads (and this is a write)
-          reset();
-          return true;
-        } else {
-          // Is neither in writes or reads, new access. Add it to writes
-          writes.insert(addr);
-        }
+      // Check for a WAR
+      if (isInWrites) {
+        // Write is already set. So it's write dominated and safe
+        // (We only add to writes if it's the first access)
+      } else if (isInReads) {
+        // We have a WAR, addr is not in writes, but is in reads (and this is a
+        // write)
+        reset();
+        return true;
+      } else {
+        // Is neither in writes or reads, new access. Add it to writes
+        writes.insert(addr);
       }
-      return false;
     }
-
+    return false;
+  }
 };
-
-#endif /* _DETECT_WAR */

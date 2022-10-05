@@ -23,10 +23,10 @@ using namespace std;
 using namespace icemu;
 
 class MemClockCycles : public HookCode {
-private:
+ private:
   RiscvE21Pipeline Pipeline;
 
-public:
+ public:
   MemClockCycles(Emulator &emu)
       : HookCode(emu, "memory_stats_cycles"), Pipeline(emu) {
     Pipeline.setVerifyJumpDestinationGuess(false);

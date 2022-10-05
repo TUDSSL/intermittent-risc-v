@@ -7,7 +7,6 @@
  * Should be compiled as a shared library, i.e. using `-shared -fPIC`
  */
 
-
 /**
  * Different stats that can be fetched
  * - Cache hits
@@ -25,32 +24,32 @@
  * 4. Get the number of checkpoints
  */
 
-#include <map>
-#include <iostream>
+#include <bitset>
+#include <chrono>
 #include <fstream>
+#include <iostream>
+#include <map>
+#include <math.h>
+#include <string.h>
 #include <string>
 #include <vector>
-#include <math.h>
-#include <bitset>
-#include <string.h>
-#include <chrono>
 
+#include "icemu/emu/Architecture.h"
 #include "icemu/emu/Emulator.h"
 #include "icemu/emu/Memory.h"
 #include "icemu/hooks/HookFunction.h"
 #include "icemu/hooks/HookManager.h"
 #include "icemu/hooks/RegisterHook.h"
-#include "icemu/emu/Architecture.h"
 
+#include "../includes/Checkpoint.hpp"
+#include "../includes/CycleCostCalculator.hpp"
 #include "../includes/DetectWAR.h"
-#include "../includes/Stats.hpp"
+#include "../includes/LocalMemory.hpp"
 #include "../includes/Logger.hpp"
+#include "../includes/Stats.hpp"
+#include "../includes/Utils.hpp"
 #include "PluginArgumentParsing.h"
 #include "Riscv32E21Pipeline.hpp"
-#include "../includes/LocalMemory.hpp"
-#include "../includes/CycleCostCalculator.hpp"
-#include "../includes/Utils.hpp"
-#include "../includes/Checkpoint.hpp"
 
 using namespace std;
 using namespace icemu;
@@ -80,13 +79,14 @@ class Clank {
     stats.updateCurrentCycle(Pipeline.getTotalCycles());
   }
 
-  void runMemory(address_t address, enum HookMemory::memory_type type, address_t value, size_t size) {
+  void runMemory(address_t address, enum HookMemory::memory_type type,
+                 address_t value, size_t size) {
     switch (type) {
       case HookMemory::MEM_READ:
         cost.modifyCost(&Pipeline, NVM_READ, size);
         stats.incNVMReads(size);
         break;
-      
+
       case HookMemory::MEM_WRITE:
         cost.modifyCost(&Pipeline, NVM_WRITE, size);
         stats.incNVMWrites(size);
@@ -100,13 +100,12 @@ class Clank {
       // Create a checkpoint
       createCheckpoint(CHECKPOINT_DUE_TO_WAR);
     }
-
   }
 
   void createCheckpoint(enum CheckpointReason reason) {
-    //cout << "Creating checkpoint" << endl;
+    // cout << "Creating checkpoint" << endl;
     // Create a register checkpoint
-    int reg_cp_size = registerCheckpoint.create()*4; // Checkpoint size in bytes
+    int reg_cp_size = registerCheckpoint.create() * 4; // Checkpoint size in bytes
 
     // Write the checkpoint to NVM
     stats.incNVMWrites(reg_cp_size);
@@ -130,8 +129,7 @@ class Clank {
     stats.updateCheckpointCause(reason);
 
     // Increment based on reasons
-    switch (reason)
-    {
+    switch (reason) {
       case CHECKPOINT_DUE_TO_WAR:
         stats.incCheckpointsDueToWAR();
         // p_debug << " due to WAR" << endl;
@@ -155,7 +153,7 @@ class Clank {
 
   void restoreCheckpoint() {
     // Restore the registers
-    int reg_cp_size = registerCheckpoint.restore()*4; // Checkpoint size in bytes
+    int reg_cp_size = registerCheckpoint.restore() * 4; // Checkpoint size in bytes
 
     // Increment NVM writes
     stats.incNVMReads(reg_cp_size);
@@ -169,9 +167,7 @@ class Clank {
     p_debug << "Resetting processor" << endl;
     restoreCheckpoint();
   }
-
 };
-
 
 class HookInstructionCount : public HookCode {
  public:
@@ -195,7 +191,8 @@ class HookInstructionCount : public HookCode {
     reset_cycle_target += on_duration;
 
     // Get the checkpoint cycle threshold
-    auto arg_checkpoint_period = PluginArgumentParsing::GetArguments(getEmulator(), "checkpoint-period=");
+    auto arg_checkpoint_period = PluginArgumentParsing::GetArguments(
+        getEmulator(), "checkpoint-period=");
     if (arg_checkpoint_period.size())
       checkpoint_period = std::stoul(arg_checkpoint_period[0]);
 
@@ -208,16 +205,16 @@ class HookInstructionCount : public HookCode {
     clank.stats.misc.checkpoint_period = checkpoint_period;
   }
 
-  ~HookInstructionCount() {
-  }
+  ~HookInstructionCount() {}
 
   void run(hook_arg_t *arg) {
-    // Reset the processor after a defined number of cycles (re-execution benchmark)
-    // If the reset_cycle_target = 0, then no resets happen
-    if (reset_cycle_target > 0 
-        && clank.Pipeline.getTotalCycles() >= reset_cycle_target) {
+    // Reset the processor after a defined number of cycles (re-execution
+    // benchmark) If the reset_cycle_target = 0, then no resets happen
+    if (reset_cycle_target > 0 &&
+        clank.Pipeline.getTotalCycles() >= reset_cycle_target) {
 
-      // Check if there were checkpoints since the last reset (to detect the lack of forward progress)
+      // Check if there were checkpoints since the last reset (to detect the
+      // lack of forward progress)
       if (last_reset_checkpoint_count == clank.registerCheckpoint.count) {
         cout << "NO FORWARD PROGRESS" << endl;
         assert(false && "No forward progress is made, abort execution");
@@ -236,20 +233,17 @@ class HookInstructionCount : public HookCode {
 
     // Check if we need to create a periodic checkpoint
     // if the checkpoint_period = 0, then there are no periodic checkpoints
-    if (checkpoint_period > 0
-        && clank.Pipeline.getTotalCycles() >= (clank.stats.getLastCheckpointCycle() + checkpoint_period)) {
-      //cout << "Periodic checkpoint" << endl;
+    if (checkpoint_period > 0 &&
+        clank.Pipeline.getTotalCycles() >= (clank.stats.getLastCheckpointCycle() + checkpoint_period)) {
+      // cout << "Periodic checkpoint" << endl;
       // Create a periodic checkpoint
       clank.createCheckpoint(CHECKPOINT_DUE_TO_PERIOD);
     }
 
     clank.runInstruction(arg->address, arg->size);
-
   }
 };
 
-
-// TODO: Need a way to get information from other hooks
 class MemoryAccess : public HookMemory {
  public:
   HookInstructionCount *hook_instr_cnt;
@@ -257,25 +251,26 @@ class MemoryAccess : public HookMemory {
 
   // Register checkpoint
   Checkpoint registerCheckpoint;
-  
+
   MemoryAccess(Emulator &emu) : HookMemory(emu, "memory-access-ratio"), registerCheckpoint(emu) {
     hook_instr_cnt = new HookInstructionCount(emu);
     clank = &hook_instr_cnt->clank;
 
     string filename;
-    
+
     auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), "clank-log-file=");
-      if (arg1_val.size())
-        filename = arg1_val[0];
-    
-    filename += "-" + std::to_string(hook_instr_cnt->checkpoint_period) + "-" + std::to_string(hook_instr_cnt->on_duration);
+    if (arg1_val.size())
+      filename = arg1_val[0];
+
+    filename += "-" + std::to_string(hook_instr_cnt->checkpoint_period) + "-" +
+                std::to_string(hook_instr_cnt->on_duration);
     clank->log.init(filename);
     clank->nvm.initMem(&getEmulator().getMemory());
   }
 
   ~MemoryAccess() {
-      clank->stats.printStats();
-      clank->log.printEndStats(clank->stats);
+    clank->stats.printStats();
+    clank->log.printEndStats(clank->stats);
   }
 
   void run(hook_arg_t *arg) {

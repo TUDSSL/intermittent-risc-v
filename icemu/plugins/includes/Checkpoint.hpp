@@ -13,7 +13,6 @@ class Checkpoint {
    static const size_t checkpoint_size = 32+2;
    uint32_t SavedRegisters[checkpoint_size];
   
-   // 10 Meg max for now, TODO: dynamically check the max memory size
    icemu::memseg_t *main_memseg;
    size_t memory_size;
    uint8_t *SavedMemory;
