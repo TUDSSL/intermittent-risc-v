@@ -27,8 +27,15 @@
 #include "../includes/CacheMem.hpp"
 #include "../includes/DetectWAR.h"
 
+#include "capstone/capstone.h"
+
 using namespace std;
 using namespace icemu;
+
+int NoMemCost(cs_insn *insn) {
+  (void)insn;
+  return 0;
+}
 
 // TODO: Need a way to get information from other hooks
 class HookInstructionCount : public HookCode {
@@ -45,12 +52,16 @@ class HookInstructionCount : public HookCode {
   // Periodic checkpoints
   uint64_t checkpoint_period = 0;
 
+  // Disable pipeline cost for memory accesses in the pipeline
+  // We will do this manually
+  RiscvE21Pipeline::memcost_func_t noMemCost = &NoMemCost;
+
  public:
   uint64_t pc = 0;
   uint64_t count = 0;
 
   explicit HookInstructionCount(Emulator &emu)
-      : HookCode(emu, "stack-war"), Pipeline(emu) {
+      : HookCode(emu, "stack-war"), Pipeline(emu, &NoMemCost, &NoMemCost) {
     Pipeline.setVerifyJumpDestinationGuess(false);
     Pipeline.setVerifyNextInstructionGuess(false);
 
