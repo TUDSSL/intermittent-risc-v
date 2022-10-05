@@ -51,7 +51,7 @@ struct MiscStats {
 };
 
 class Stats {
-private:
+ private:
   char separator = ' ';
   int text_width = 30;
 
@@ -83,7 +83,7 @@ private:
     logNum(t2, logger);
   }
 
-public:
+ public:
   struct CacheStats cache;
   struct NVMStats nvm;
   struct CheckpointStats checkpoint;

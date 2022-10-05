@@ -42,7 +42,7 @@ using namespace std;
 using namespace icemu;
 
 class Cache {
-private:
+ private:
   Emulator &_emu;
   // Cache metadata
   enum replacement_policy policy;
@@ -79,7 +79,7 @@ private:
   // WAR detect (to check correctness)
   DetectWAR War;
 
-public:
+ public:
   // Statistics
   Stats stats;
 
@@ -124,7 +124,7 @@ public:
     // Perform final checks (if there were no restores, as that messes up the
     // count due to re-execution)
     if (stats.checkpoint.restores == 0) {
-      ASSERT(stats.cache.writes == stats.nvm.nvm_writes_without_cache);
+      ASSERT(stats.cache.writes >= stats.nvm.nvm_writes_without_cache);
       // The assert below does not work anymore, as we might read part of the
       // cache line from the NVM on a cache write, when the cache line is not
       // valid. This has to be done as the cache might be empty after a
@@ -1247,9 +1247,15 @@ public:
           ASSERT(dirty_ratio >= 0.0);
         }
         break;
-      default:
-        p_err << "Only VALID and DIRTY should be set through here" << endl;
-        ASSERT(false);
+      case READ_DOMINATED:
+        line.read_dominated = false;
+        break;
+      case WRITE_DOMINATED:
+        line.write_dominated = false;
+        break;
+      case POSSIBLE_WAR:
+        line.possible_war = false;
+        break;
     }
   }
 

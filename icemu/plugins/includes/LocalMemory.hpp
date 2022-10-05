@@ -22,14 +22,14 @@ using namespace icemu;
 static const bool PRINT_MEMORY_DIFF = false;
 
 class LocalMemory {
-private:
+ private:
   unordered_set<address_t> reads, writes;
   memseg_t *MainMemSegment = nullptr;
   uint8_t *LocalMem = nullptr;
   uint8_t *EmuMem = nullptr;
   icemu::Memory *mem;
 
-public:
+ public:
   LocalMemory() = default;
   ~LocalMemory() { delete[] LocalMem; }
 
