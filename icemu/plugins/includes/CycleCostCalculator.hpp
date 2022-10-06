@@ -13,10 +13,10 @@
 using namespace std;
 
 // Cycle costs per byte of access
-#define CACHE_READ_COST 1
-#define CACHE_WRITE_COST 1
-#define NVM_READ_COST 5
-#define NVM_WRITE_COST 5
+#define CACHE_READ_COST 2
+#define CACHE_WRITE_COST 2
+#define NVM_READ_COST 10
+#define NVM_WRITE_COST 10
 
 class CycleCost {
  public:
@@ -26,6 +26,10 @@ class CycleCost {
 
   void modifyCost(RiscvE21Pipeline *Pipeline, enum CostSpecification type,
                   address_t size) {
+
+    // Round up to nearest word access. We count the cost per word
+    size = (address_t)ceil((float)size/4.0);
+
     switch (type) {
       case CACHE_READ:
         Pipeline->addToCycles(CACHE_READ_COST * size);
