@@ -728,7 +728,6 @@ class Cache {
       cuckoo_cache = &sets.at(cuckoo_hash).lines.at(line_used);
 
       stats.incCuckooIterations();
-      cost.modifyCost(Pipeline, CUCKOO_ITER, 0);
 
       p_debug << "Cuckoo iter : " << cuckoo_iter << hex
               << " Addr: " << reconstructAddress(*cuckoo_cache)
@@ -742,8 +741,8 @@ class Cache {
         stats.incCacheCuckoo(cuckoo_cache->blocks.size * 2);
         stats.incCacheCuckoo(cuckoo_incoming.blocks.size * 2);
         // Apart from the access, compute the extra cycle cost as well.
-        cost.modifyCost(Pipeline, CACHE_ACCESS, cuckoo_cache->blocks.size * 2);
-        cost.modifyCost(Pipeline, CACHE_ACCESS, cuckoo_incoming.blocks.size * 2);
+        cost.modifyCost(Pipeline, CACHE_READ, cuckoo_cache->blocks.size * 2);
+        cost.modifyCost(Pipeline, CACHE_WRITE, cuckoo_incoming.blocks.size * 2);
 
         // Backup the line already in the cache
         copyCacheLines(cuckoo_temp, *cuckoo_cache);

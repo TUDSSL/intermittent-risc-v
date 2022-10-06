@@ -55,11 +55,6 @@ enum CostSpecification {
   CACHE_WRITE,
   NVM_READ,
   NVM_WRITE,
-  EVICT,
-  CHECKPOINT,
-  HINTS,
-  CUCKOO_ITER,
-  CACHE_ACCESS
 };
 
 enum CacheBits {

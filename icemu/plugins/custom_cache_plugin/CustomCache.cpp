@@ -32,11 +32,6 @@
 using namespace std;
 using namespace icemu;
 
-int NoMemCost(cs_insn *insn) {
-  (void)insn;
-  return 0;
-}
-
 // TODO: Need a way to get information from other hooks
 class HookInstructionCount : public HookCode {
  private:
@@ -52,9 +47,10 @@ class HookInstructionCount : public HookCode {
   // Periodic checkpoints
   uint64_t checkpoint_period = 0;
 
-  // Disable pipeline cost for memory accesses in the pipeline
-  // We will do this manually
-  RiscvE21Pipeline::memcost_func_t noMemCost = &NoMemCost;
+  static int NoMemCost(cs_insn *insn) {
+    (void)insn;
+    return 0;
+  }
 
  public:
   uint64_t pc = 0;

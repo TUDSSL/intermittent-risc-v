@@ -55,6 +55,12 @@ using namespace std;
 using namespace icemu;
 
 class Clank {
+ private:
+  static int NoMemCost(cs_insn *insn) {
+    (void)insn;
+    return 0;
+  }
+
  public:
   RiscvE21Pipeline Pipeline;
   Checkpoint registerCheckpoint;
@@ -69,7 +75,9 @@ class Clank {
   // Settings
   bool double_bufferd_checkpoints = true;
 
-  Clank(Emulator &emu) : Pipeline(emu), registerCheckpoint(emu) {
+  // We control the memory access cost our selves using the CycleCostCalculator
+  // in order to keep it the same for all systems
+  Clank(Emulator &emu) : Pipeline(emu, &NoMemCost, &NoMemCost), registerCheckpoint(emu) {
     Pipeline.setVerifyJumpDestinationGuess(false);
     Pipeline.setVerifyNextInstructionGuess(false);
   }
