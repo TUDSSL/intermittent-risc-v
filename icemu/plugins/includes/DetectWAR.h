@@ -36,7 +36,7 @@ class DetectWAR {
 
   ~DetectWAR() = default;
 
-  bool isWAR(address_t addr, size_t size, HookMemory::memory_type type) {
+  bool isWAR(address_t addr, size_t size, HookMemory::memory_type type, bool can_set_write_dominated=true) {
     switch (type) {
     // If the current access type is read, just put it in the set
     case HookMemory::MEM_READ:
@@ -49,7 +49,7 @@ class DetectWAR {
     //  - If the address is not in 'writes' AND not in 'reads', we have a new
     //  access, add it to writes
     case HookMemory::MEM_WRITE:
-      return processWrite(addr, size);
+      return processWrite(addr, size, can_set_write_dominated);
       break;
     }
 
@@ -72,7 +72,7 @@ class DetectWAR {
     return false;
   }
 
-  bool processWrite(address_t addr, size_t size) {
+  bool processWrite(address_t addr, size_t size, bool can_set_write_dominated) {
     // Process all the bytes in the write access
     for (size_t i = 0; i < size; i++) {
       address_t byte_addr = addr + i;
@@ -94,7 +94,8 @@ class DetectWAR {
         return true;
       } else {
         // Is neither in writes or reads, new access. Add it to writes
-        writes.insert(addr);
+        if (can_set_write_dominated)
+          writes.insert(byte_addr);
       }
     }
     return false;

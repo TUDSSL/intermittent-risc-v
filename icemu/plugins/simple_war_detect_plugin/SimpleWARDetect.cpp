@@ -87,26 +87,57 @@ class Clank {
     stats.updateCurrentCycle(Pipeline.getTotalCycles());
   }
 
+  bool isWAR(address_t address, size_t size, enum HookMemory::memory_type type) {
+    // We are tracking WARs per 4 bytes.
+    // So we clear the last 2 bits, to make it a 4 byte aligned address
+    address_t base_addr = address & ~(0b11);
+
+    bool has_war = false;
+
+    if (type == HookMemory::MEM_WRITE) {
+      // If it's a write with a size < 4, we can not mark it as
+      // write-dominated (to protect against WRW) as the protection is per 4-bytes
+      // and the protection needs to be conservative.
+      // We only use 1 bit per 4 bytes. So it's either write-dominated or read-dominated
+      // By adding it as a read in the WAR checker, we make it read-dominated (as that's the only other option)
+      // This is also done in Clank (footnote 2)
+      bool can_set_write_dominated = true;
+      if (size < 4) {
+        can_set_write_dominated = false;
+      }
+      
+      has_war = war.isWAR(base_addr, 4, HookMemory::MEM_WRITE, can_set_write_dominated);
+    } else {
+      has_war = war.isWAR(base_addr, 4, HookMemory::MEM_READ);
+    }
+
+    return has_war;
+  }
+
   void runMemory(address_t address, enum HookMemory::memory_type type,
                  address_t value, size_t size) {
+
+    if (isWAR(address, size, type)) {
+      p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
+      // Create a checkpoint
+      createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+
+      // If it was a WAR, we have to re-add it now
+      isWAR(address, size, type);
+    }
+
     switch (type) {
       case HookMemory::MEM_READ:
-        cost.modifyCost(&Pipeline, NVM_READ, size);
+        cost.modifyCost(&Pipeline, NVM_READ, 4);
         stats.incNVMReads(size);
         break;
 
       case HookMemory::MEM_WRITE:
-        cost.modifyCost(&Pipeline, NVM_WRITE, size);
+        cost.modifyCost(&Pipeline, NVM_WRITE, 4);
         stats.incNVMWrites(size);
 
         nvm.localWrite(address, value, size);
         break;
-    }
-
-    if (war.isWAR(address, size, type)) {
-      p_debug << "Creating checkpoint #" << stats.checkpoint.checkpoints << endl;
-      // Create a checkpoint
-      createCheckpoint(CHECKPOINT_DUE_TO_WAR);
     }
   }
 
@@ -169,6 +200,9 @@ class Clank {
 
     // Increment counter
     stats.incRestores();
+
+    // Reset WAR detection
+    war.reset();
   }
 
   void resetProcessor() {
