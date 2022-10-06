@@ -381,6 +381,22 @@ class Cache {
     updateCacheLastUsed(line);
     stats.incCacheHits();
 
+    // It's a hit, but the bits have been cleared by a checkpoint
+    // Then we need to update them now
+    if (line.read_dominated == false && line.write_dominated == false) {
+      updateDetectionBits(&line, req.type, req.size);
+
+      // Here we additionally check for WARs if we are not in oracle mode 
+      // this COULD have been a cache miss. It's a hit because there was
+      // a checkpoint that cleared the bits. If it was a miss (which happens during
+      // the re-execution) it could trigger a WAR. Assume re-execution for this assert.
+      if (enable_oracle == false) {
+        auto address = reconstructAddress(req.mem_id.tag, req.mem_id.index);
+        bool isWar = War.isWAR(address, 4, req.type);
+        ASSERT(isWar == false);
+      }
+    }
+
     // Perform hit actions - note that these are slightly different
     // from putting a new element in an empty cache line
     switch (req.type) {
@@ -545,23 +561,25 @@ class Cache {
                            enum HookMemory::memory_type new_entry_type,
                            size_t size) {
 
-    // Get the set corresponding to the line
-    address_t hashed_index = cacheHash(line->blocks.bits.tag,
-                                       line->blocks.bits.index, hash_method, 0);
-    auto cacheSet = sets.at(hashed_index);
-
-    // If ANY of the lines in the set have possible_war set we can not trust
-    // write dominated
-    bool possible_war = false;
-    for (const auto &l : cacheSet.lines) {
-      possible_war |= l.possible_war;
-    }
-
+    // If the existing line was dominated
     bool was_read_dominated = line->read_dominated;
 
     // If the new entry is a write, we only set Write dominated if possible war
     // is not yet set
     if (new_entry_type == HookMemory::MEM_WRITE) {
+      // If ANY of the lines in the set have possible_war set we can not trust
+      // write dominated
+      bool possible_war = false;
+
+      // Get the set corresponding to the line
+      address_t hashed_index = cacheHash(line->blocks.bits.tag,
+                                         line->blocks.bits.index, hash_method, 0);
+      auto cacheSet = sets.at(hashed_index);
+      for (const auto &l : cacheSet.lines) {
+        possible_war |= l.possible_war;
+      }
+
+      // Set the bits
       if (possible_war == false && size == 4) {
         // The line is now write dominated
         line->write_dominated = true;
@@ -627,19 +645,26 @@ class Cache {
 
     // Perform the eviction
     if (evicted_line->dirty) {
+
+      // If the line is dirty, it must have either of these bits set
+      // The only case where they can NOT be set, is after a checkpoint eviction
+      ASSERT(evicted_line->read_dominated || evicted_line->write_dominated);
+
       if (true && (stackTrackConfig == STACK_TRACK_CONTINUOUS) &&
           !stackTracker.isMemoryWriteNeeded(evict_address)) {
         p_debug << "In unused region of stack, no need to check memory" << endl;
+        clearBit(DIRTY, *evicted_line);
       }
 
       else if (enable_oracle) {
         // Check for WARs
-        bool isWar = War.isWAR(evict_address, evicted_line->blocks.size,
-                               HookMemory::MEM_WRITE);
+        bool isWar = War.isWAR(evict_address, 4, HookMemory::MEM_WRITE);
 
         if (isWar) {
           p_debug << "Oracle WAR" << endl;
           createCheckpoint(CHECKPOINT_DUE_TO_WAR);
+          isWar = War.isWAR(evict_address, 4, HookMemory::MEM_WRITE);
+          ASSERT(isWar == false);
         } else {
           p_debug << "Oracle safe writeback" << endl;
           cacheNVMwrite(evict_address, evicted_line->blocks.data,
@@ -655,17 +680,16 @@ class Cache {
       }
 
       else if (evicted_line->read_dominated) {
-        p_debug << "PW bit set, creating checkpoint" << endl;
+        p_debug << "RD bit set and dirty, creating checkpoint" << endl;
         createCheckpoint(CHECKPOINT_DUE_TO_WAR);
       }
 
       else { // This is the case where there is no need for checkpoint but still
              // needs to be evicted
-        p_debug << "PW bit not set, safe writeback" << endl;
+        p_debug << "RD bit not set, safe writeback" << endl;
 
         // Correctness check, can never write back if it can cause a WAR
-        bool isWar = War.isWAR(evict_address, evicted_line->blocks.size,
-                               HookMemory::MEM_WRITE);
+        bool isWar = War.isWAR(evict_address, 4, HookMemory::MEM_WRITE);
         ASSERT(isWar == false);
 
         // Perform actual write
@@ -1180,6 +1204,9 @@ class Cache {
 
     // Reset the stack tracker
     stackTracker.resetMinStackAddress();
+
+    // Reset the WAR detection
+    War.reset();
   }
 
   /**
