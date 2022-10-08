@@ -35,6 +35,14 @@ NACHO_PW_STCONT_CONFIGURATIONS := \
   		nacho-pw-stcont+1024+2 \
   		nacho-pw-stcont+1024+4
 
+NACHO_STCONT_CONFIGURATIONS := \
+  		nacho-stcont+256+2 \
+  		nacho-stcont+256+4 \
+  		nacho-stcont+512+2 \
+  		nacho-stcont+512+4 \
+  		nacho-stcont+1024+2 \
+  		nacho-stcont+1024+4
+
 NACHO_CLANK_CONFIGURATIONS += \
   		nacho-clank+256+2 \
   		nacho-clank+256+4 \
@@ -42,6 +50,26 @@ NACHO_CLANK_CONFIGURATIONS += \
   		nacho-clank+512+4 \
   		nacho-clank+1024+2 \
   		nacho-clank+1024+4
+
+#NACHO_NAIVE_CONFIGURATIONS := \
+#  		nacho-naive+256+2 \
+#  		nacho-naive+512+2
+#
+#NACHO_PW_CONFIGURATIONS := \
+#  		nacho-pw+256+2 \
+#  		nacho-pw+512+2
+#
+#NACHO_PW_ST_CONFIGURATIONS := \
+#  		nacho-pw-st+256+2 \
+#  		nacho-pw-st+512+2
+#
+#NACHO_PW_STCONT_CONFIGURATIONS := \
+#  		nacho-pw-stcont+256+2 \
+#  		nacho-pw-stcont+512+2
+#
+#NACHO_CLANK_CONFIGURATIONS += \
+#  		nacho-clank+256+2 \
+#  		nacho-clank+512+2
 
 PROWL_CONFIGURATIONS += \
   		prowl+256+2 \
@@ -58,6 +86,7 @@ ALL_CONFIGURATIONS += \
 		$(NACHO_NAIVE_OPTIONS) \
 		$(NACHO_PW_CONFIGURATIONS) \
 		$(NACHO_PW_ST_CONFIGURATIONS) \
+		$(NACHO_ST_CONFIGURATIONS) \
 		$(NACHO_CLANK_CONFIGURATIONS) \
 		$(PROWL_CONFIGURATIONS) \
 		$(CLANK_CONFIGURATIONS) \
@@ -97,6 +126,9 @@ $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_PW_ST_CONFIGURATION
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
 $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_PW_STCONT_CONFIGURATIONS), \
+	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
+
+$(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_STCONT_CONFIGURATIONS), \
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
 $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_CLANK_CONFIGURATIONS), \
@@ -193,6 +225,13 @@ show-targets-nacho-pw-stcont:
 
 run-targets-nacho-pw-stcont: $(TARGETS-nacho-pw-stcont)
 	@echo "$(HLB)Done running nacho-pw-stcont targets$(HLE)"
+
+$(foreach target, $(NACHO_STCONT_CONFIGURATIONS), $(eval $(call generate_target_group,nacho-stcont,$(target))))
+show-targets-nacho-stcont:
+	@echo "$(TARGETS-nacho-stcont)"
+
+run-targets-nacho-stcont: $(TARGETS-nacho-stcont)
+	@echo "$(HLB)Done running nacho-stcont targets$(HLE)"
 
 $(foreach target, $(NACHO_CLANK_CONFIGURATIONS), $(eval $(call generate_target_group,nacho-clank,$(target))))
 show-targets-nacho-clank:
