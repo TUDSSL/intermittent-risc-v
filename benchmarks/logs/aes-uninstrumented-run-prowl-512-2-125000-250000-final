@@ -1,0 +1,23 @@
+
+cache_miss:414476
+cache_hit:2413898
+cache_read:3387633
+cache_write:3208802
+cache_cuckoo:7824952
+cache_checkpoint:293300
+nvm_reads_no_cache:2341605
+nvm_writes_no_cache:1769830
+nvm_reads:2345680
+nvm_writes:1591208
+checkpoint:3595
+checkpoint_war:3346
+checkpoint_dirty:0
+checkpoint_period:249
+checkpoint_max_cycles: 0
+restore:124
+hints_given:0
+max_dirty_ratio:0.25
+cuckoo_iter:794407
+cycles:31191535
+on_duration_cycles:250000
+checkpoint_period_cycles:125000
