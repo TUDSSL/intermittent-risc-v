@@ -10,18 +10,18 @@ BENCHMARKS := \
 BUILD_CONFIGURATIONS := \
 		uninstrumented
 
-# Power failure tests. 0 means continious, but is interesting as it includes the CHECKPOINT_PERIOD
+# Note that the checkpoint period in the benchmarks is on_duration/2
+# 250000   =>   5ms @ 50MHz
+# 500000   =>  10ms @ 50MHz
+# 2500000  =>  50ms @ 50MHz
+# 5000000  => 100ms @ 50MHz
+# 25000000 => 500ms @ 50MHz
 ON_DURATIONS := \
-		0			\
-		100000 		\
-		1000000 	\
-		5000000 	\
-		10000000 	\
-
-# Only one possible.
-# The period for the periodic checkpoint, only used when running power-failure tests
-# using the ON_DURATIONS
-CHECKPOINT_PERIOD := 90000 
+    	250000 \
+    	500000 \
+    	2500000 \
+    	5000000 \
+    	25000000
 
 # Highlight begin/end
 HLB = "\\e[33m\\e[1m"

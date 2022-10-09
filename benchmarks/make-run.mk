@@ -158,7 +158,7 @@ $(foreach build-config, $(BUILD_CONFIGURATIONS), \
 define generate_pf_run_target_configurations
 $(1)-$(2)-pf-run-$(3)+$(4):
 		@echo "$(HLB)Running power failure benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' on duration '$(4)' $(HLE)"
-		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(CHECKPOINT_PERIOD) $(1).elf $(2)
+		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(shell echo $$(( $(4) / 2 ))) $(1).elf $(2)
 
 PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
 PF_TARGETS-$(3) += $(1)-$(2)-pf-run-$(3)+$(4)
