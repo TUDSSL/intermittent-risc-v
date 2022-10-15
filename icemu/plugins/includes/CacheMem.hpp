@@ -207,7 +207,7 @@ class Cache {
         memset(&line->blocks, 0, sizeof(struct CacheBlock));
         line->valid = false;
         line->read_dominated = false;
-        line->write_dominated = false;
+        //line->write_dominated = false;
         line->possible_war = false;
         line->dirty = false;
       }
@@ -383,14 +383,17 @@ class Cache {
 
     // It's a hit, but the bits have been cleared by a checkpoint
     // Then we need to update them now
-    if (line.read_dominated == false && line.write_dominated == false) {
+    //if (line.read_dominated == false && line.write_dominated == false) {
+    if (line.possible_war == false && line.read_dominated == false && line.dirty == false) {
       updateDetectionBits(&line, req.type, req.size);
 
       // Here we additionally check for WARs if we are not in oracle mode 
       // this COULD have been a cache miss. It's a hit because there was
       // a checkpoint that cleared the bits. If it was a miss (which happens during
       // the re-execution) it could trigger a WAR. Assume re-execution for this assert.
-      if (enable_oracle == false) {
+      // hash_method check is to only perform this check when running NACHO, not PROWL
+      // PROWL creates a checkpoint for all evictions, so it does not matter
+      if (enable_oracle == false && hash_method == CacheHashMethod::SET_ASSOCIATIVE) {
         auto address = reconstructAddress(req.mem_id.tag, req.mem_id.index);
         bool isWar = War.isWAR(address, 4, req.type);
         ASSERT(isWar == false);
@@ -405,9 +408,10 @@ class Cache {
         stats.incCacheReads(req.size);
         cost.modifyCost(Pipeline, CACHE_READ, req.size);
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
-        p_debug << "RD: " << line.read_dominated
-                << " WD: " << line.write_dominated << " PW: " << line.possible_war
-                << endl;
+        //p_debug << "RD: " << line.read_dominated
+        //        << " WD: " << line.write_dominated << " PW: " << line.possible_war
+        //        << endl;
+        p_debug << "RD: " << line.read_dominated << " PW: " << line.possible_war << endl;
         break;
 
       // For a write hit
@@ -426,9 +430,10 @@ class Cache {
         p_debug << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
-        p_debug << "RD: " << line.read_dominated
-                << " WD: " << line.write_dominated << " PW: " << line.possible_war
-                << endl;
+        //p_debug << "RD: " << line.read_dominated
+        //        << " WD: " << line.write_dominated << " PW: " << line.possible_war
+        //        << endl;
+        p_debug << "RD: " << line.read_dominated << " PW: " << line.possible_war << endl;
 
         stats.incCacheWrites(req.size);
         cost.modifyCost(Pipeline, CACHE_WRITE, req.size);
@@ -582,18 +587,18 @@ class Cache {
       // Set the bits
       if (possible_war == false && size == 4) {
         // The line is now write dominated
-        line->write_dominated = true;
+        //line->write_dominated = true;
         line->read_dominated = false;
       } else {
         // The line is now read dominated
-        line->write_dominated = false;
+        //line->write_dominated = false;
         line->read_dominated = true;
       }
     }
 
     // If the new entry is a read, we always set the Read dominated bit
     else if (new_entry_type == HookMemory::MEM_READ) {
-      line->write_dominated = false;
+      //line->write_dominated = false;
       line->read_dominated = true;
     }
 
@@ -601,6 +606,12 @@ class Cache {
     if (was_read_dominated) {
       line->possible_war = true;
     }
+
+    // Check for unexpected cases:
+    // Note: line->dirty will not be set yet if it's a write, so we use the entry type instead as that will lead to dirty being set or not 
+    // i.e., new_entry_type == HookMemory::MEM_READ means that line->dirty will be false
+    ASSERT((line->possible_war == false && line->read_dominated == false && new_entry_type == HookMemory::MEM_READ) == false); // happens only after a checkpoint
+    ASSERT((line->possible_war == true && line->read_dominated == false && new_entry_type == HookMemory::MEM_READ) == false); // Should never happen
   }
 
   /**
@@ -648,7 +659,7 @@ class Cache {
 
       // If the line is dirty, it must have either of these bits set
       // The only case where they can NOT be set, is after a checkpoint eviction
-      ASSERT(evicted_line->read_dominated || evicted_line->write_dominated);
+      //ASSERT(evicted_line->read_dominated || evicted_line->write_dominated);
 
       if (true && (stackTrackConfig == STACK_TRACK_CONTINUOUS) &&
           !stackTracker.isMemoryWriteNeeded(evict_address)) {
@@ -982,7 +993,7 @@ class Cache {
                 (reconstructAddress(line) | line.blocks.bits.offset)) {
               std::cout << "Clearing a hint!\n";
               clearBit(READ_DOMINATED, line);
-              clearBit(WRITE_DOMINATED, line);
+              //clearBit(WRITE_DOMINATED, line);
               clearBit(POSSIBLE_WAR, line);
               clearBit(DIRTY, line);
             }
@@ -1165,7 +1176,7 @@ class Cache {
 
           // Reset all bits
           clearBit(READ_DOMINATED, l);
-          clearBit(WRITE_DOMINATED, l);
+          //clearBit(WRITE_DOMINATED, l);
           clearBit(POSSIBLE_WAR, l);
           clearBit(DIRTY, l);
         }
@@ -1190,7 +1201,7 @@ class Cache {
         if (line.valid == true)
           clearBit(VALID, line);
         clearBit(READ_DOMINATED, line);
-        clearBit(WRITE_DOMINATED, line);
+        //clearBit(WRITE_DOMINATED, line);
         clearBit(POSSIBLE_WAR, line);
         clearBit(DIRTY, line);
       }
@@ -1277,7 +1288,8 @@ class Cache {
         line.read_dominated = false;
         break;
       case WRITE_DOMINATED:
-        line.write_dominated = false;
+        //line.write_dominated = false;
+        ASSERT(false && "Write dominated bit no longer used, functionality merged into read_dominated and dirty bits");
         break;
       case POSSIBLE_WAR:
         line.possible_war = false;

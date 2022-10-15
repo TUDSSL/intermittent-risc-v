@@ -135,7 +135,7 @@ struct CacheLine {
   bool valid;
   bool dirty;
   bool read_dominated;
-  bool write_dominated;
+  //bool write_dominated;
   bool possible_war;
 
   // Overload the < operator to enable LRU/MRU
@@ -198,6 +198,6 @@ void copyCacheLines(struct CacheLine &dst, const struct CacheLine &src) {
   dst.dirty = src.dirty;
   dst.possible_war = src.possible_war;
   dst.read_dominated = src.read_dominated;
-  dst.write_dominated = src.write_dominated;
+  //dst.write_dominated = src.write_dominated;
 }
 
