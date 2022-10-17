@@ -15,8 +15,8 @@ using namespace std;
 // Cycle costs per byte of access
 #define CACHE_READ_COST 2
 #define CACHE_WRITE_COST 2
-#define NVM_READ_COST 10
-#define NVM_WRITE_COST 10
+#define NVM_READ_COST 6
+#define NVM_WRITE_COST 6
 
 class CycleCost {
  public:
