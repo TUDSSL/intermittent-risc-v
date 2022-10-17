@@ -35,6 +35,14 @@ NACHO_PW_STCONT_CONFIGURATIONS := \
   		nacho-pw-stcont+1024+2 \
   		nacho-pw-stcont+1024+4
 
+NACHO_STCONT_CONFIGURATIONS := \
+  		nacho-stcont+256+2 \
+  		nacho-stcont+256+4 \
+  		nacho-stcont+512+2 \
+  		nacho-stcont+512+4 \
+  		nacho-stcont+1024+2 \
+  		nacho-stcont+1024+4
+
 NACHO_CLANK_CONFIGURATIONS += \
   		nacho-clank+256+2 \
   		nacho-clank+256+4 \
@@ -42,6 +50,26 @@ NACHO_CLANK_CONFIGURATIONS += \
   		nacho-clank+512+4 \
   		nacho-clank+1024+2 \
   		nacho-clank+1024+4
+
+#NACHO_NAIVE_CONFIGURATIONS := \
+#  		nacho-naive+256+2 \
+#  		nacho-naive+512+2
+#
+#NACHO_PW_CONFIGURATIONS := \
+#  		nacho-pw+256+2 \
+#  		nacho-pw+512+2
+#
+#NACHO_PW_ST_CONFIGURATIONS := \
+#  		nacho-pw-st+256+2 \
+#  		nacho-pw-st+512+2
+#
+#NACHO_PW_STCONT_CONFIGURATIONS := \
+#  		nacho-pw-stcont+256+2 \
+#  		nacho-pw-stcont+512+2
+#
+#NACHO_CLANK_CONFIGURATIONS += \
+#  		nacho-clank+256+2 \
+#  		nacho-clank+512+2
 
 PROWL_CONFIGURATIONS += \
   		prowl+256+2 \
@@ -58,6 +86,7 @@ ALL_CONFIGURATIONS += \
 		$(NACHO_NAIVE_OPTIONS) \
 		$(NACHO_PW_CONFIGURATIONS) \
 		$(NACHO_PW_ST_CONFIGURATIONS) \
+		$(NACHO_ST_CONFIGURATIONS) \
 		$(NACHO_CLANK_CONFIGURATIONS) \
 		$(PROWL_CONFIGURATIONS) \
 		$(CLANK_CONFIGURATIONS) \
@@ -65,10 +94,11 @@ ALL_CONFIGURATIONS += \
 
 
 #generate_target_with_options(uninstrumented, NACHO_NAIVE_OPTIONS)
+# $(3)+0+0 is for the on-duration and checkpoint period (0 means cont, i.e., no power failures and no periodic checkpoints)
 define generate_run_target_configurations
 $(1)-$(2)-run-$(3):
 		@echo "$(HLB)Running benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' $(HLE)"
-		cd $(1)/build-$(2) && benchmark-run $(3) $(1).elf $(2)
+		cd $(1)/build-$(2) && benchmark-run $(3)+0+0 $(1).elf $(2)
 TARGETS += $(1)-$(2)-run-$(3)
 TARGETS-$(1) += $(1)-$(2)-run-$(3)
 TARGETS-$(2) += $(1)-$(2)-run-$(3)
@@ -98,6 +128,9 @@ $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_PW_ST_CONFIGURATION
 $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_PW_STCONT_CONFIGURATIONS), \
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
+$(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_STCONT_CONFIGURATIONS), \
+	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
+
 $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(NACHO_CLANK_CONFIGURATIONS), \
 	$(eval $(call generate_run_target_configurations,$(bench),$(1),$(run-config)))))
 
@@ -116,6 +149,45 @@ endef
 $(foreach build-config, $(BUILD_CONFIGURATIONS), \
 	$(eval $(call generate_run_targets_build_configuration,$(build-config))))
 
+
+# Generate power failure options
+# 1 = benchmark
+# 2 = compile config
+# 3 = run target
+# 4 = on-duration
+define generate_pf_run_target_configurations
+$(1)-$(2)-pf-run-$(3)+$(4):
+		@echo "$(HLB)Running power failure benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' on duration '$(4)' $(HLE)"
+		cd $(1)/build-$(2) && benchmark-run $(3)+$(4)+$(shell echo $$(( $(4) / 2 ))) $(1).elf $(2)
+
+PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
+PF_TARGETS-$(3) += $(1)-$(2)-pf-run-$(3)+$(4)
+endef
+
+#
+# Power-failure build configurations
+#
+
+# Nacho PW ST Cont
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,nacho-pw-stcont+512+2,$(on-duration)))))
+
+# Prowl
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,prowl+512+2,$(on-duration)))))
+
+# Clank
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,clank,$(on-duration)))))
+
+show-pf-targets:
+	@echo "$(PF_TARGETS)"
+
+run-pf-targets: $(PF_TARGETS)
+	@echo "$(HLB)Done running power failure targets$(HLE)"
+
+run-pf-targets-clank: $(PF_TARGETS-clank)
+	@echo "$(HLB)Done running power failure targets$(HLE)"
 
 # Show-targets
 $(foreach target, $(BENCHMARKS), $(eval $(call generate_show_targets,$(target))))
@@ -154,6 +226,13 @@ show-targets-nacho-pw-stcont:
 run-targets-nacho-pw-stcont: $(TARGETS-nacho-pw-stcont)
 	@echo "$(HLB)Done running nacho-pw-stcont targets$(HLE)"
 
+$(foreach target, $(NACHO_STCONT_CONFIGURATIONS), $(eval $(call generate_target_group,nacho-stcont,$(target))))
+show-targets-nacho-stcont:
+	@echo "$(TARGETS-nacho-stcont)"
+
+run-targets-nacho-stcont: $(TARGETS-nacho-stcont)
+	@echo "$(HLB)Done running nacho-stcont targets$(HLE)"
+
 $(foreach target, $(NACHO_CLANK_CONFIGURATIONS), $(eval $(call generate_target_group,nacho-clank,$(target))))
 show-targets-nacho-clank:
 	@echo "$(TARGETS-nacho-clank)"
@@ -184,6 +263,9 @@ show-all-configurations:
 show-targets:
 	@echo "$(TARGETS)"
 
+run-targets: $(TARGETS)
+	@echo "$(HLB)Done running targets$(HLE)"
+
 show-benchmarks:
 	@echo "$(BENCHMARKS)"
 
@@ -195,4 +277,5 @@ clean:
 	show-targets show-benchmarks \
 	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-plain-c show-targets-prowl \
 	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-plain-c run-targets-prowl \
+	show-pf-targets run-pf-targets \
 	$(TARGETS)

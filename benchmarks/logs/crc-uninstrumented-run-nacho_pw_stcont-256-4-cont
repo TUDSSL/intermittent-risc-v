@@ -1,5 +1,0 @@
-checkpoints,cycle count,last checkpoint,dirty ratio,cause
-1,8406,8406,0.828125,0
-2,9104,698,0.3125,0
-3,20010,10906,0.6875,0
-4,44552,24542,0.84375,0

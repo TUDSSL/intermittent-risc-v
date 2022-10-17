@@ -19,16 +19,29 @@
 #include "Riscv32E21Pipeline.hpp"
 #include "PluginArgumentParsing.h"
 
+#include "../includes/CycleCostCalculator.hpp"
+
 using namespace std;
 using namespace icemu;
 
 class MemClockCycles : public HookCode {
-private:
-  RiscvE21Pipeline Pipeline;
+ private:
+  static int NoMemCost(cs_insn *insn) {
+    (void)insn;
+    return 0;
+  }
 
-public:
+ public:
+  RiscvE21Pipeline Pipeline;
+  CycleCost cost;
+
+  // We control the memory access cost our selves using the CycleCostCalculator
+  // in order to keep it the same for all systems
   MemClockCycles(Emulator &emu)
-      : HookCode(emu, "memory_stats_cycles"), Pipeline(emu) {}
+      : HookCode(emu, "memory_stats_cycles"), Pipeline(emu, &NoMemCost, &NoMemCost) {
+    Pipeline.setVerifyJumpDestinationGuess(false);
+    Pipeline.setVerifyNextInstructionGuess(false);
+  }
 
   ~MemClockCycles() {}
 
@@ -95,9 +108,13 @@ class MemoryStats : public HookMemory {
     switch(arg->mem_type) {
       case MEM_READ:
         bytes_read += arg->size;
+        // This plugin emulates full volatile execution, i.e., full cache execution
+        CC.cost.modifyCost(&CC.Pipeline, CACHE_READ, arg->size);
         break;
       case MEM_WRITE:
         bytes_written += arg->size;
+        // This plugin emulates full volatile execution, i.e., full cache execution
+        CC.cost.modifyCost(&CC.Pipeline, CACHE_WRITE, arg->size);
         break;
     }
   }

@@ -1,10 +1,9 @@
-#ifndef _LOGGER
-#define _LOGGER
+#pragma once
 
-#include <iostream>
 #include <fstream>
-#include <string.h>
 #include <iomanip>
+#include <iostream>
+#include <string.h>
 
 // Local includes
 #include "../includes/Stats.hpp"
@@ -15,38 +14,36 @@ using namespace std;
 ofstream logger_cont, logger_final;
 
 class Logger {
-  private:
-    string continuous_logging_filename, final_logging_filename;
+ private:
+  string continuous_logging_filename, final_logging_filename;
 
-  public:
-    Logger() = default;
-    ~Logger() = default;
-    
-    void init(string filename)
-    {
-        continuous_logging_filename = filename + "-cont";
-        final_logging_filename = filename + "-final";
+ public:
+  Logger() = default;
+  ~Logger() = default;
 
-        // Open the file for logging
-        logger_cont.open(continuous_logging_filename.c_str(), ios::out | ios::trunc);
-        assert(logger_cont.is_open());
-        logger_final.open(final_logging_filename.c_str(), ios::out | ios::trunc);
-        assert(logger_final.is_open());
-        
-        logger_cont << "checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
-    }
+  void init(string filename) {
+    continuous_logging_filename = filename + "-cont";
+    final_logging_filename = filename + "-final";
 
-    void printCheckpointStats(Stats &stats) {
-        logger_cont << stats.checkpoint.checkpoints << ","
-                    << stats.misc.current_cycle << ","
-                    << stats.misc.current_cycle - stats.checkpoint.last_checkpoint_cycle << ","
-                    << stats.misc.dirty_ratio << ","
-                    << stats.checkpoint.cause << endl;
-    }
+    // Open the file for logging
+    logger_cont.open(continuous_logging_filename.c_str(), ios::out | ios::trunc);
+    assert(logger_cont.is_open());
+    logger_final.open(final_logging_filename.c_str(), ios::out | ios::trunc);
+    assert(logger_final.is_open());
 
-    void printEndStats(Stats &stats) {
-        stats.logStats(logger_final);
-    }
+    logger_cont << "checkpoints,cycle count,last checkpoint,dirty ratio,cause" << endl;
+  }
+
+  void printCheckpointStats(Stats &stats) {
+    logger_cont << stats.checkpoint.checkpoints << ","
+                << stats.misc.current_cycle << ","
+                << stats.misc.current_cycle -
+                       stats.checkpoint.last_checkpoint_cycle
+                << "," << stats.misc.dirty_ratio << ","
+                << stats.checkpoint.cause << endl;
+  }
+
+  void printEndStats(Stats &stats) {
+    stats.logStats(logger_final);
+  }
 };
-
-#endif /* _LOGGER */
