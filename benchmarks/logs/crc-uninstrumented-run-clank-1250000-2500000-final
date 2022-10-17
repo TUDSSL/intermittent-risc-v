@@ -18,6 +18,6 @@ restore:0
 hints_given:0
 max_dirty_ratio:0
 cuckoo_iter:0
-cycles:340066
+cycles:219794
 on_duration_cycles:2500000
 checkpoint_period_cycles:1250000
