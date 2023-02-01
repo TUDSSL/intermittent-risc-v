@@ -60,7 +60,8 @@ WORKDIR /home/user
 USER user
 
 # Install gllvm (https://github.com/SRI-CSL/gllvm)
-RUN go get github.com/SRI-CSL/gllvm/cmd/...
+RUN git -c advice.detachedHead=false clone https://github.com/SRI-CSL/gllvm -b v1.3.0 && \
+    cd gllvm && go mod init github.com/SRI-CSL/gllvm && make install
 
 ## Configure the environment
 RUN echo "export PATH=$HOME/go/bin:\$PATH" >> "$HOME/.env"
