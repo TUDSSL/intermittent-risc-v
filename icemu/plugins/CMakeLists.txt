@@ -43,4 +43,4 @@ include_directories(${PROJECT_SOURCE_DIR}/../icemu/plugins/common)
 add_subdirectory(simple_war_detect_plugin)
 add_subdirectory(custom_cache_plugin)
 add_subdirectory(memory_stats_plugin)
-
+add_subdirectory(replay_cache_plugin)
