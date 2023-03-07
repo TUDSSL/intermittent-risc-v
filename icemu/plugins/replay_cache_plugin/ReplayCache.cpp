@@ -13,17 +13,24 @@
 #include "Riscv32E21Pipeline.hpp"
 
 #include "../includes/Checkpoint.hpp"
+#include "AsyncWriteBackCache.hpp"
 #include "PowerFailureGenerator.hpp"
 
 using _Pipeline = RiscvE21Pipeline;
 using _PFG = PowerFailureGenerator<_Pipeline>;
 using _Arch = icemu::ArchitectureRiscv32;
 using arch_addr_t = _Arch::riscv_addr_t;
+using _Cache = AsyncWriteBackCache<_Arch>;
 using insn_t = std::unique_ptr<cs_insn, std::function<void(cs_insn *)>>;
 
 #include "util.ipp"
 
-class ReplayCache : public HookCode {
+static int NoMemCost(cs_insn *insn) {
+  (void)insn;
+  return 0;
+}
+
+class ReplayCacheIntrinsics : public HookCode {
 
  private:
   static std::string printLeader() {
@@ -34,16 +41,24 @@ class ReplayCache : public HookCode {
   std::vector<insn_t> replay_instructions;
   arch_addr_t last_region_register_value = 0;
 
+  std::shared_ptr<_Cache> cache;
+
   _Pipeline pipeline;
   Checkpoint checkpoint;
   _PFG power_failure_generator;
 
  public:
-  explicit ReplayCache(Emulator &emu)
+  explicit ReplayCacheIntrinsics(Emulator &emu, const std::shared_ptr<_Cache> &cache)
       : HookCode(emu, "replay_cache"),
-        pipeline(emu), checkpoint(emu), power_failure_generator(emu) {}
+        cache(cache),
+        pipeline(emu, &NoMemCost, &NoMemCost),
+        checkpoint(emu),
+        power_failure_generator(emu) {
+    pipeline.setVerifyJumpDestinationGuess(false);
+    pipeline.setVerifyNextInstructionGuess(false);
+  }
 
-  ~ReplayCache() {
+  ~ReplayCacheIntrinsics() {
     std::cout << printLeader() << " total cycle count: " << pipeline.getTotalCycles() << std::endl;
   }
 
@@ -52,17 +67,20 @@ class ReplayCache : public HookCode {
       std::cout << printLeader() << " power failure at cycle " << pipeline.getTotalCycles() << std::endl;
 
       createCheckpoint();
-      // TODO: reset (zero?) the processor (registers, etc.)
-      // TODO: reset (zero?) the cache
+      resetProcessorAndCache();
       restoreCheckpoint();
       // Don't clear the replay instructions; they are still valid
 
       return;
     }
 
+    const auto cyclesBefore = pipeline.getTotalCycles();
     pipeline.add(arg->address, arg->size);
+    const auto pipelineCycleEst = pipeline.getTotalCycles() - cyclesBefore;
+
+    cache->tick(pipelineCycleEst);
+
     processInstructions(arg->address, arg->size);
-    // TODO: check if any cache write-backs are finished
   }
 
  private:
@@ -148,6 +166,7 @@ class ReplayCache : public HookCode {
         if (is_region_active) {
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
+          p_debug << printLeader() << " stored instruction for replay" << std::endl;
           return true;
         }
         break;
@@ -182,14 +201,8 @@ class ReplayCache : public HookCode {
   }
 
   void executeFence() {
-    // TODO
-    /*
-    The FENCE instruction can appear anywhere, but is it only placed at the end of a region.
-    1. Find the largest remaining write-back time of any write-back operations in the queue.
-    2. Increase the cycle count by that amount.
-    (3. Perform all write-back operations that are due.)
-    4. Clear the write-back queue.
-    */
+    const auto fence_cycles = cache->fence();
+    // TODO: increase cycle count with the returned value
   }
 
   void createCheckpoint() {
@@ -197,11 +210,50 @@ class ReplayCache : public HookCode {
     // TODO: increase cycle count with the returned checkpoint size
   }
 
+  void resetProcessorAndCache() {
+    // Zero out all regular registers
+    setRegisterValue(_Arch::REG_X0, 0);
+    setRegisterValue(_Arch::REG_X1, 0);
+    setRegisterValue(_Arch::REG_X2, 0);
+    setRegisterValue(_Arch::REG_X3, 0);
+    setRegisterValue(_Arch::REG_X4, 0);
+    setRegisterValue(_Arch::REG_X5, 0);
+    setRegisterValue(_Arch::REG_X6, 0);
+    setRegisterValue(_Arch::REG_X7, 0);
+    setRegisterValue(_Arch::REG_X8, 0);
+    setRegisterValue(_Arch::REG_X9, 0);
+    setRegisterValue(_Arch::REG_X10, 0);
+    setRegisterValue(_Arch::REG_X11, 0);
+    setRegisterValue(_Arch::REG_X12, 0);
+    setRegisterValue(_Arch::REG_X13, 0);
+    setRegisterValue(_Arch::REG_X14, 0);
+    setRegisterValue(_Arch::REG_X15, 0);
+    setRegisterValue(_Arch::REG_X16, 0);
+    setRegisterValue(_Arch::REG_X17, 0);
+    setRegisterValue(_Arch::REG_X18, 0);
+    setRegisterValue(_Arch::REG_X19, 0);
+    setRegisterValue(_Arch::REG_X20, 0);
+    setRegisterValue(_Arch::REG_X21, 0);
+    setRegisterValue(_Arch::REG_X22, 0);
+    setRegisterValue(_Arch::REG_X23, 0);
+    setRegisterValue(_Arch::REG_X24, 0);
+    setRegisterValue(_Arch::REG_X25, 0);
+    setRegisterValue(_Arch::REG_X26, 0);
+    setRegisterValue(_Arch::REG_X27, 0);
+    setRegisterValue(_Arch::REG_X28, 0);
+    setRegisterValue(_Arch::REG_X29, 0);
+    setRegisterValue(_Arch::REG_X30, 0);
+    setRegisterValue(_Arch::REG_X31, 0);
+
+    // Incur power failure on the cache
+    cache->powerFailure();
+  }
+
   void restoreCheckpoint() {
     // Replay all stores that were issued in this region so far
     std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
     for (auto &insn : replay_instructions) {
-      const auto store = parseStore(insn);
+      const auto store = StoreParsed::parse(insn);
       replay(store);
     }
 
@@ -228,10 +280,11 @@ class ReplayCache : public HookCode {
     const auto addr = base_value + store.offset;
 
     p_debug << printLeader() << " replay 0x" << std::hex << std::setw(8) << std::setfill('0') << src_value
-            << " to " << std::hex << std::setw(8) << std::setfill('0') << addr << std::dec << std::endl;
+            << " to 0x" << std::hex << std::setw(8) << std::setfill('0') << addr << std::dec << std::endl;
 
-    // TODO: write the value to the cache at the given address
-    // TODO: (?) enqueue a write-back operation to that address
+    // Inform the cache about the replay
+    cache->handleReplay(addr, src_value, store.size);
+
     // TODO: increase the cycle count with the correct amount of cycles
   }
 
@@ -251,12 +304,46 @@ class ReplayCache : public HookCode {
   }
 };
 
+class ReplayCacheMemoryAccess : public HookMemory {
+ private:
+
+  std::shared_ptr<_Cache> cache;
+
+ public:
+  ReplayCacheMemoryAccess(Emulator &emu, const std::shared_ptr<_Cache> &cache)
+      : HookMemory(emu, "cache-lru-async"),
+        cache(cache) {
+    //
+  }
+
+  void run(hook_arg_t *arg) {
+    const auto address = arg->address;
+    const auto mem_type = arg->mem_type;
+    auto value = arg->value;
+
+    if (arg->mem_type == MEM_READ) {
+      const auto *read_value = getEmulator().getMemory().at(arg->address);
+      memcpy(&arg->value, read_value, arg->size);
+    }
+
+    const auto main_memory_start = getEmulator().getMemory().entrypoint;
+
+    // Process only valid memory
+    if (!(address >= main_memory_start))
+      return;
+
+    cache->handleRequest(address, mem_type, &value, arg->size);
+  }
+};
+
 // Function that registers the hook
 static void registerMyCodeHook(Emulator &emu, HookManager &HM) {
-  auto *RC = new ReplayCache(emu);
-  assert(RC != nullptr);
+  // Create the cache, which is shared between the two hooks
+  auto cache = std::make_shared<_Cache>(emu);
 
-  HM.add(RC);
+  // Register the hooks with ICEmu
+  HM.add(new ReplayCacheIntrinsics(emu, cache));
+  HM.add(new ReplayCacheMemoryAccess(emu, cache));
 }
 
 // Class that is used by ICEmu to find the register function

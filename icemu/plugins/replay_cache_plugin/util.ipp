@@ -85,48 +85,48 @@ struct StoreParsed {
   _Arch::Register r_base;
   int64_t offset = 0;
   address_t size = 0;
-};
 
-StoreParsed parseStore(const insn_t &insn) {
-  StoreParsed store;
+  static StoreParsed parse(const insn_t &insn) {
+    StoreParsed store;
 
-  assert(insn->detail->riscv.op_count >= 2);
+    assert(insn->detail->riscv.op_count >= 2);
 
-  const auto o_src = insn->detail->riscv.operands[0];
-  assert(o_src.type == RISCV_OP_REG);
-  store.r_src = fromCapstone(o_src.reg);
+    const auto o_src = insn->detail->riscv.operands[0];
+    assert(o_src.type == RISCV_OP_REG);
+    store.r_src = fromCapstone(o_src.reg);
 
-  if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_SH || insn->id == RISCV_INS_SB) {
-    assert(insn->detail->riscv.op_count == 2);
-    
-    const auto o_mem = insn->detail->riscv.operands[1];
-    assert(o_mem.type == RISCV_OP_MEM);
-    
-    store.r_base = fromCapstone(o_mem.mem.base);
-    store.offset = o_mem.mem.disp;
-    if (insn->id == RISCV_INS_SW) {
+    if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_SH || insn->id == RISCV_INS_SB) {
+      assert(insn->detail->riscv.op_count == 2);
+      
+      const auto o_mem = insn->detail->riscv.operands[1];
+      assert(o_mem.type == RISCV_OP_MEM);
+      
+      store.r_base = fromCapstone(o_mem.mem.base);
+      store.offset = o_mem.mem.disp;
+      if (insn->id == RISCV_INS_SW) {
+        store.size = 4;
+      } else if (insn->id == RISCV_INS_SH) {
+        store.size = 2;
+      } else if (insn->id == RISCV_INS_SB) {
+        store.size = 1;
+      }
+    } else if (insn->id == RISCV_INS_C_SW || insn->id == RISCV_INS_C_SWSP) {
+      assert(insn->detail->riscv.op_count == 3);
+
+      const auto o_offset = insn->detail->riscv.operands[1];
+      const auto o_base = insn->detail->riscv.operands[2];
+      assert(o_base.type == RISCV_OP_REG);
+      assert(o_offset.type == RISCV_OP_IMM);
+
+      store.r_base = fromCapstone(o_base.reg);
+      store.offset = o_offset.imm * 4;
       store.size = 4;
-    } else if (insn->id == RISCV_INS_SH) {
-      store.size = 2;
-    } else if (insn->id == RISCV_INS_SB) {
-      store.size = 1;
+    } else {
+      assert(false && "invalid store instruction to decode");
     }
-  } else if (insn->id == RISCV_INS_C_SW || insn->id == RISCV_INS_C_SWSP) {
-    assert(insn->detail->riscv.op_count == 3);
 
-    const auto o_offset = insn->detail->riscv.operands[1];
-    const auto o_base = insn->detail->riscv.operands[2];
-    assert(o_base.type == RISCV_OP_REG);
-    assert(o_offset.type == RISCV_OP_IMM);
+    assert(store.size > 0);
 
-    store.r_base = fromCapstone(o_base.reg);
-    store.offset = o_offset.imm * 4;
-    store.size = 4;
-  } else {
-    assert(false && "invalid store instruciton to decode");
+    return store;
   }
-
-  assert(store.size > 0);
-
-  return store;
-}
+};
