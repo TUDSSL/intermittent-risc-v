@@ -12,7 +12,7 @@ class Checkpoint {
 
    static const size_t checkpoint_size = 32+2;
    uint32_t SavedRegisters[checkpoint_size];
-  
+
    icemu::memseg_t *main_memseg;
    size_t memory_size;
    uint8_t *SavedMemory;
@@ -127,15 +127,15 @@ class Checkpoint {
 
     // Restore all the registers
     arch.registerSet(icemu::ArchitectureRiscv32::REG_X0,  src[0]);
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X1,  src[1]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X2,  src[2]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X3,  src[3]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X4,  src[4]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X5,  src[5]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X6,  src[6]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X7,  src[7]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X8,  src[8]); 
-    arch.registerSet(icemu::ArchitectureRiscv32::REG_X9,  src[9]); 
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X1,  src[1]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X2,  src[2]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X3,  src[3]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X4,  src[4]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X5,  src[5]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X6,  src[6]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X7,  src[7]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X8,  src[8]);
+    arch.registerSet(icemu::ArchitectureRiscv32::REG_X9,  src[9]);
     arch.registerSet(icemu::ArchitectureRiscv32::REG_X10, src[10]);
     arch.registerSet(icemu::ArchitectureRiscv32::REG_X11, src[11]);
     arch.registerSet(icemu::ArchitectureRiscv32::REG_X12, src[12]);
@@ -166,6 +166,56 @@ class Checkpoint {
     arch.registerSet(icemu::ArchitectureRiscv32::REG_MSTATUS, reg_mstatus);
 
     return checkpoint_size;
+  }
+
+  /*
+   * Get the checkpointed value of a register.
+   */
+  uint32_t getRegister(icemu::ArchitectureRiscv32::Register reg) {
+    return getRegister(reg, SavedRegisters);
+  }
+
+  uint32_t getRegister(icemu::ArchitectureRiscv32::Register reg, uint32_t *src) {
+    switch (reg) {
+      case icemu::ArchitectureRiscv32::REG_X0:  return src[0];
+      case icemu::ArchitectureRiscv32::REG_X1:  return src[1];
+      case icemu::ArchitectureRiscv32::REG_X2:  return src[2];
+      case icemu::ArchitectureRiscv32::REG_X3:  return src[3];
+      case icemu::ArchitectureRiscv32::REG_X4:  return src[4];
+      case icemu::ArchitectureRiscv32::REG_X5:  return src[5];
+      case icemu::ArchitectureRiscv32::REG_X6:  return src[6];
+      case icemu::ArchitectureRiscv32::REG_X7:  return src[7];
+      case icemu::ArchitectureRiscv32::REG_X8:  return src[8];
+      case icemu::ArchitectureRiscv32::REG_X9:  return src[9];
+      case icemu::ArchitectureRiscv32::REG_X10: return src[10];
+      case icemu::ArchitectureRiscv32::REG_X11: return src[11];
+      case icemu::ArchitectureRiscv32::REG_X12: return src[12];
+      case icemu::ArchitectureRiscv32::REG_X13: return src[13];
+      case icemu::ArchitectureRiscv32::REG_X14: return src[14];
+      case icemu::ArchitectureRiscv32::REG_X15: return src[15];
+      case icemu::ArchitectureRiscv32::REG_X16: return src[16];
+      case icemu::ArchitectureRiscv32::REG_X17: return src[17];
+      case icemu::ArchitectureRiscv32::REG_X18: return src[18];
+      case icemu::ArchitectureRiscv32::REG_X19: return src[19];
+      case icemu::ArchitectureRiscv32::REG_X20: return src[20];
+      case icemu::ArchitectureRiscv32::REG_X21: return src[21];
+      case icemu::ArchitectureRiscv32::REG_X22: return src[22];
+      case icemu::ArchitectureRiscv32::REG_X23: return src[23];
+      case icemu::ArchitectureRiscv32::REG_X24: return src[24];
+      case icemu::ArchitectureRiscv32::REG_X25: return src[25];
+      case icemu::ArchitectureRiscv32::REG_X26: return src[26];
+      case icemu::ArchitectureRiscv32::REG_X27: return src[27];
+      case icemu::ArchitectureRiscv32::REG_X28: return src[28];
+      case icemu::ArchitectureRiscv32::REG_X29: return src[29];
+      case icemu::ArchitectureRiscv32::REG_X30: return src[30];
+      case icemu::ArchitectureRiscv32::REG_X31: return src[31];
+      case icemu::ArchitectureRiscv32::REG_PC:  return src[32];
+      case icemu::ArchitectureRiscv32::REG_MSTATUS: return src[33];
+      default: break;
+    }
+
+    assert(false && "Invalid register");
+    return 0;
   }
 
 };

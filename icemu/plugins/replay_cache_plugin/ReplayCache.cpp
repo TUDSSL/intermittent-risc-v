@@ -40,6 +40,8 @@ class ReplayCacheIntrinsics : public HookCode {
   bool is_region_active = false;
   std::vector<insn_t> replay_instructions;
   arch_addr_t last_region_register_value = 0;
+  arch_addr_t last_store_address = 0;
+  address_t last_store_size = 0;
 
   std::shared_ptr<_Cache> cache;
 
@@ -162,7 +164,7 @@ class ReplayCacheIntrinsics : public HookCode {
       case RISCV_INS_SB:
       case RISCV_INS_C_SW:
       case RISCV_INS_C_SWSP: {
-        // TODO: in any case, make sure writes are delayed and not written back to NVM immediately
+        recordLastStore(insn);
         if (is_region_active) {
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
@@ -175,6 +177,20 @@ class ReplayCacheIntrinsics : public HookCode {
         break;
     }
     return false;
+  }
+
+  void recordLastStore(const insn_t &insn) {
+    const auto store = StoreParsed::parse(insn);
+
+    // Get only the base value, the source register is irrelevant
+    const auto base_value = getRegisterValue(store.r_base);
+
+    // Calculate the actual destination address, respecting the offset
+    const auto addr = base_value + store.offset;
+
+    // Persist the address and size for the CLWB instruction
+    last_store_address = addr;
+    last_store_size = store.size;
   }
 
   void endRegion() {
@@ -190,14 +206,7 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void executeCLWB() {
-    // TODO
-    /*
-    The CLWB instruction should always follow a store instruction, that is why we do not have an
-    explicit reference to the relevant memory address.
-    1. Get last store instruction.
-    2. Find out the memory address it would write to.
-    3. Enqueue a write-back operation to that address.
-    */
+    cache->clwb(last_store_address, last_store_size);
   }
 
   void executeFence() {
@@ -268,13 +277,10 @@ class ReplayCacheIntrinsics : public HookCode {
                              << " to " << registerNameFriendly(store.r_base) << " + " << store.offset
                              << " (size " << store.size << ")" << std::endl;
 
-    // Get the register values
-    // TODO: get these register values from the QuickRecall area,
-    //       as the processor should have been reset and all registers will be zero
-    // TODO: does this incur an NVM write?
-    // TODO: does this populate the cache?
-    const auto src_value = getRegisterValue(store.r_src);
-    const auto base_value = getRegisterValue(store.r_base);
+    // Get the register values from the QuickRecall storage area
+    // TODO: incur an NVM read
+    const auto src_value = getCheckpointedRegisterValue(store.r_src);
+    const auto base_value = getCheckpointedRegisterValue(store.r_base);
 
     // Calculate the actual destination address, respecting the offset
     const auto addr = base_value + store.offset;
@@ -293,6 +299,10 @@ class ReplayCacheIntrinsics : public HookCode {
 
     // TODO: Increase the cycle count with the correct amount of cycles.
     // TODO: is QuickRecall fully deterministic? Do its NVM reads go through the cache?
+  }
+
+  arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {
+    return checkpoint.getRegister(reg);
   }
 
   arch_addr_t getRegisterValue(_Arch::Register reg) {
