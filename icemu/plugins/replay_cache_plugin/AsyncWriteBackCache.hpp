@@ -84,6 +84,11 @@ class AsyncWriteBackCache {
     // TODO: stats & reporting
   }
 
+  /**
+   * @brief Incur a power failure on the cache.
+   * This will ensure the emulator's memory is in inconsistent state for dirty cache lines.
+   * The cache will be cleared and all pending writebacks will be discarded.
+   */
   void powerFailure() {
     // Write back 0xDEADBEEF to all dirty blocks to aid failure detection
     for (CacheSet &s : sets) {
@@ -101,20 +106,32 @@ class AsyncWriteBackCache {
     writeback_queue.clear();
   }
 
+  /**
+   * @brief Advance time by the given number of cycles.
+   * This may complete some pending writeback requests, or otherwise decrease the amount of
+   * pending cycles.
+   */
   void tick(unsigned int cycles_passed) {
+    // Decrease the pending cycles of all writeback requests
+    for (auto &wb: writeback_queue) {
+      if (wb.pending_cycles > cycles_passed) {
+        wb.pending_cycles -= cycles_passed;
+      } else {
+        wb.pending_cycles = 0;
+      }
+    }
+
+    // Complete and remove all writeback requests that are ready (i.e. have no pending cycles)
     auto it = writeback_queue.begin();
     while (it != writeback_queue.end()) {
       auto &wb = *it;
-      if (wb.pending_cycles > cycles_passed) {
-        wb.pending_cycles -= cycles_passed;
-        break;
-      } else {
-        cycles_passed -= wb.pending_cycles;
-        wb.pending_cycles = 0;
+      if (wb.pending_cycles == 0) {
         completeWriteback(wb);
         it = writeback_queue.erase(it);
       }
     }
+
+    ASSERT(writeback_queue.empty());
   }
 
   void handleRequest(address_t address, enum icemu::HookMemory::memory_type mem_type,
@@ -128,13 +145,21 @@ class AsyncWriteBackCache {
     processRequest();
   }
 
+  /**
+   * @brief Perform a Cache Line Write Back (CLWB) operation on the given address and size.
+   * If the corresponding cache line is not found, this will cause an assertion error.
+   */
   void clwb(const arch_addr_t address, const address_t size) {
+    // Simulate a read request so we can find the correct cache line
     configureRequest(address, 0, icemu::HookMemory::MEM_READ, size);
 
+    // Find the cache line that contains the requested address
     bool hit, miss;
     unsigned int collisions;
     auto line = scanLines(hit, miss, collisions);
 
+    // The cache line must be found, because CLWB may only be executed on
+    //  cache lines that would be valid for reading
     ASSERT(line);
     ASSERT(hit);
     ASSERT(!miss);
@@ -145,9 +170,11 @@ class AsyncWriteBackCache {
 
   /**
    * @brief Wait for all cache contents to be written back to memory.
-   * @return The number of cycles spent waiting for all writebacks to complete.
+   * @return The number of cycles it would cost to complete all pending writebacks.
    */
   unsigned int fence() {
+    // Tracker for how many cycles were spent waiting for writebacks at most.
+    // Even if there are multiple writebacks, we only need to wait for the longest one.
     unsigned int max_cycles = 0;
 
     for (auto &wb: writeback_queue) {
@@ -162,6 +189,9 @@ class AsyncWriteBackCache {
 
  private:
 
+  /**
+   * @brief Zero out and reset the cache content.
+   */
   void zeroCacheContent() {
     if (sets.empty()) {
       sets.resize(no_of_sets);
@@ -226,6 +256,18 @@ class AsyncWriteBackCache {
     shadowCheck();
   }
 
+  /**
+   * @brief Scan the entire cache for a cache line to use.
+   * @param[out] hit Whether the data was already in the cache.
+   *             If true, the data can be read from the returned cache line immediately
+   *             or new data can immediately be written.
+   * @param[out] miss Whether the cache line was not found in the cache, but a free line was found.
+   *             If true, a new cache entry can be created in the returned cache line.
+   * @param[out] collisions The number of cache lines that were checked that caused a collision.
+   *             If this is equal to the number of cache lines, all cache lines are occupied,
+   *             and some cache line must be evicted. This implies \p hit and \p miss are false.
+   * @return The cache line to use, or nullptr if all cache lines are occupied.
+   */
   CacheLine *scanLines(bool &hit, bool &miss, unsigned int &collisions) {
     hit = false;
     miss = false;
@@ -339,8 +381,11 @@ class AsyncWriteBackCache {
     }
   }
 
+  /**
+   * Evict and get that line, using the configured policy.
+   * @return The line that was evicted, which has been invalidated.
+   */
   CacheLine &evictLine() {
-    // Get the line to be evicted using the given replacement policy.
     CacheLine *evicted_line = nullptr;
     address_t hashed_index;
 
