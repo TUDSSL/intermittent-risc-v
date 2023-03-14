@@ -15,6 +15,7 @@
 #include "../includes/Checkpoint.hpp"
 #include "AsyncWriteBackCache.hpp"
 #include "PowerFailureGenerator.hpp"
+#include "Stats.hpp"
 
 using _Pipeline = RiscvE21Pipeline;
 using _PFG = PowerFailureGenerator<_Pipeline>;
@@ -46,6 +47,7 @@ class ReplayCacheIntrinsics : public HookCode {
   std::shared_ptr<_Cache> cache;
 
   _Pipeline pipeline;
+  Stats stats;
   Checkpoint checkpoint;
   _PFG power_failure_generator;
 
@@ -55,14 +57,18 @@ class ReplayCacheIntrinsics : public HookCode {
         cache(cache),
         pipeline(emu, &NoMemCost, &NoMemCost),
         checkpoint(emu),
-        power_failure_generator(emu) {
+        power_failure_generator(emu, stats) {
     pipeline.setVerifyJumpDestinationGuess(false);
     pipeline.setVerifyNextInstructionGuess(false);
     cache->setPipeline(&pipeline);
+    cache->setStats(&stats);
   }
 
   ~ReplayCacheIntrinsics() {
+    stats.printAll();
     std::cout << printLeader() << " total cycle count: " << pipeline.getTotalCycles() << std::endl;
+
+    // TODO: log stats to file
   }
 
   void run(hook_arg *arg) {
@@ -216,9 +222,12 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void createCheckpoint() {
+    stats.incCheckpoints();
+
     const auto n_registers_checkpointed = checkpoint.create();
     const auto n_bytes_transferred = n_registers_checkpointed * 4;
-    // TODO: incur actual NVM writes
+
+    stats.incNVMWrites(n_bytes_transferred);
     pipeline.addToCycles(6 * n_bytes_transferred); // NVM writes
     pipeline.addToCycles(2 * n_registers_checkpointed); // QuickRecall logic overhead (TODO: currently just a guess)
   }
@@ -274,6 +283,8 @@ class ReplayCacheIntrinsics : public HookCode {
     //  all registers can be restored to the values before power failure.
     // This happens with QuickRecall.
     quickRecallRestore();
+
+    stats.incRestores();
   }
 
   void replay(const StoreParsed &store) {
@@ -282,8 +293,9 @@ class ReplayCacheIntrinsics : public HookCode {
                              << " (size " << store.size << ")" << std::endl;
 
     // Get the register values from the QuickRecall storage area
-    // TODO: incur an NVM read
+    stats.incNVMReads(4);
     const auto src_value = getCheckpointedRegisterValue(store.r_src);
+    stats.incNVMReads(4);
     const auto base_value = getCheckpointedRegisterValue(store.r_base);
 
     // Calculate the actual destination address, respecting the offset
@@ -308,7 +320,8 @@ class ReplayCacheIntrinsics : public HookCode {
   void quickRecallRestore() {
     const auto n_registers_restored = checkpoint.restore();
     const auto n_bytes_transferred = n_registers_restored * 4;
-    // TODO: incur actual NVM reads
+
+    stats.incNVMReads(n_bytes_transferred);
     pipeline.addToCycles(6 * n_bytes_transferred); // NVM reads, assuming reads did not go through the cache
     pipeline.addToCycles(2 * n_registers_restored); // QuickRecall logic overhead (TODO: currently just a guess)
   }

@@ -5,6 +5,7 @@
 #include "PluginArgumentParsing.h"
 
 #include "../includes/Checkpoint.hpp"
+#include "Stats.hpp"
 
 template <class _Pipeline>
 class PowerFailureGenerator {
@@ -20,7 +21,7 @@ class PowerFailureGenerator {
   bool fail_next = false;
 
  public:
-  PowerFailureGenerator(icemu::Emulator &emu) {
+  PowerFailureGenerator(icemu::Emulator &emu, Stats &stats) {
     // Get the on duration from the arguments
     auto arg_on_duration =
         PluginArgumentParsing::GetArguments(emu, "on-duration=");
@@ -29,6 +30,8 @@ class PowerFailureGenerator {
 
     // Configure the next reset_cycle_target
     reset_cycle_target += on_duration;
+
+    stats.updateOnDuration(on_duration);
   }
 
   bool shouldReset(_Pipeline &pipeline, Checkpoint &checkpoint) {

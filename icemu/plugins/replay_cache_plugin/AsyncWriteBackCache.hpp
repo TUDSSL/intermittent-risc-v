@@ -11,6 +11,7 @@
 
 #include "../includes/LocalMemory.hpp"
 #include "../includes/Utils.hpp"
+#include "Stats.hpp"
 
 constexpr int COST_PER_BYTE_READ_FROM_CACHE = 2;
 constexpr int COST_PER_BYTE_WRITTEN_TO_CACHE = 2;
@@ -39,6 +40,7 @@ class AsyncWriteBackCache {
   icemu::Emulator &emu;
   LocalMemory nvm;
   RiscvE21Pipeline *pipeline = nullptr;
+  Stats *stats = nullptr;
 
   /* Configuration */
 
@@ -128,16 +130,20 @@ class AsyncWriteBackCache {
     return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay);
   }
 
-  ~AsyncWriteBackCache() {
-    // TODO: stats & reporting
-  }
-
   /**
    * @brief Set a pipeline instance.
    * If no pipeline is set, no cycle statistics will be available.
    */
   void setPipeline(RiscvE21Pipeline *pipeline) {
     this->pipeline = pipeline;
+  }
+
+  /**
+   * @brief Set a stats instance.
+   * If no stats instance is set, no statistics will be kept.
+   */
+  void setStats(Stats *stats) {
+    this->stats = stats;
   }
 
   /**
@@ -265,6 +271,7 @@ class AsyncWriteBackCache {
     }
 
     dirty_ratio = 0.0f;
+    if (stats) stats->updateDirtyRatio(dirty_ratio);
   }
 
   void configureRequest(address_t address, address_t value, enum icemu::HookMemory::memory_type mem_type,
@@ -372,10 +379,11 @@ class AsyncWriteBackCache {
   }
 
   void handleHit(CacheLine &line) {
+    if (stats) stats->incCacheHits();
+
     switch (req.type) {
       case HookMemory::MEM_READ:
-        // TODO: stats
-
+        if (stats) stats->incCacheReads(line.blocks.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * line.blocks.size);
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
@@ -389,7 +397,7 @@ class AsyncWriteBackCache {
 
         writeToCache(line);
 
-        // TODO: stats
+        if (stats) stats->incCacheWrites(line.blocks.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
 
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
@@ -403,6 +411,8 @@ class AsyncWriteBackCache {
   }
 
   void handleMiss(CacheLine &line) {
+    if (stats) stats->incCacheMisses();
+
     setBit(VALID, line);
     cacheStoreAddress(line, req);
 
@@ -411,13 +421,14 @@ class AsyncWriteBackCache {
 
     switch (req.type) {
       case HookMemory::MEM_READ:
-        // TODO: stats
-
         // We read the whole line
         line.blocks.size = 4;
 
-        // TODO: register NVM read
+        if (stats) stats->incNVMReads(line.blocks.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * line.blocks.size);
+
+        if (stats) stats->incCacheReads(line.blocks.size);
+        // NOTE: reading from cache is NOT counted (TODO: is it true that on a READ MISS it's 'free'?)
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -431,9 +442,10 @@ class AsyncWriteBackCache {
           //       Is that behavior correct?
           const auto remaining_bytes = 4 - req.size;
           if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * remaining_bytes);
+          if (stats) stats->incNVMReads(remaining_bytes);
         }
 
-        // TODO: stats
+        if (stats) stats->incCacheWrites(line.blocks.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec
@@ -454,7 +466,7 @@ class AsyncWriteBackCache {
   }
 
   /**
-   * Evict and get that line, using the configured policy.
+   * @brief Evict and get that line, using the configured policy.
    * @return The line that was evicted, which has been invalidated.
    */
   CacheLine &evictLine() {
@@ -495,9 +507,9 @@ class AsyncWriteBackCache {
       nvm.localWrite(evict_address, evicted_line->blocks.data,
                      evicted_line->blocks.size);
 
-      // TODO: stats.incCacheDirtyEvictions();
+      if (stats) stats->incCacheDirtyEvictions();
     } else {
-      // TODO: stats: incCacheCleanEvictions();
+      if (stats) stats->incCacheCleanEvictions();
     }
 
     if (pipeline) pipeline->addToCycles(COST_PER_EVICTION);
@@ -524,7 +536,7 @@ class AsyncWriteBackCache {
             << std::hex << wb.addr << std::dec << std::endl;
 
     nvm.localWrite(wb.addr, wb.data, wb.size);
-    // TODO: register NVM write
+    if (stats) stats->incNVMWrites(wb.size);
   }
 
   /********************************************
@@ -770,6 +782,7 @@ class AsyncWriteBackCache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) /
                         (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
+          if (stats) stats->updateDirtyRatio(dirty_ratio);
         }
         // p_debug << "Setting dirty bit: " << line.blocks.set_bits << " to " <<
         // dirty_ratio << endl;
@@ -802,6 +815,7 @@ class AsyncWriteBackCache {
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) /
                         (capacity / CACHE_BLOCK_SIZE);
           ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
+          if (stats) stats->updateDirtyRatio(dirty_ratio);
         }
         break;
       default:
