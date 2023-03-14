@@ -7,9 +7,17 @@
 #include "icemu/emu/Emulator.h"
 
 #include "PluginArgumentParsing.h"
+#include "Riscv32E21Pipeline.hpp"
 
 #include "../includes/LocalMemory.hpp"
 #include "../includes/Utils.hpp"
+
+constexpr int COST_PER_BYTE_READ_FROM_CACHE = 2;
+constexpr int COST_PER_BYTE_WRITTEN_TO_CACHE = 2;
+constexpr int COST_PER_BYTE_READ_FROM_NVM = 6;
+constexpr int COST_PER_BYTE_WRITTEN_TO_NVM = 6;
+// TODO: Maybe eviction is free?
+constexpr int COST_PER_EVICTION = 1;
 
 template <class _Arch>
 class AsyncWriteBackCache {
@@ -30,6 +38,7 @@ class AsyncWriteBackCache {
 
   icemu::Emulator &emu;
   LocalMemory nvm;
+  RiscvE21Pipeline *pipeline = nullptr;
 
   /* Configuration */
 
@@ -82,6 +91,7 @@ class AsyncWriteBackCache {
   AsyncWriteBackCache(AsyncWriteBackCache &&o)
       : emu(o.emu),
         nvm(std::move(o.nvm)),
+        pipeline(o.pipeline),
         policy(o.policy),
         hash_method(o.hash_method),
         capacity(o.capacity),
@@ -92,6 +102,7 @@ class AsyncWriteBackCache {
         req(o.req),
         sets(std::move(o.sets)),
         writeback_queue(std::move(o.writeback_queue)) {
+    o.pipeline = nullptr;
     o.req = {};
   }
 
@@ -119,6 +130,14 @@ class AsyncWriteBackCache {
 
   ~AsyncWriteBackCache() {
     // TODO: stats & reporting
+  }
+
+  /**
+   * @brief Set a pipeline instance.
+   * If no pipeline is set, no cycle statistics will be available.
+   */
+  void setPipeline(RiscvE21Pipeline *pipeline) {
+    this->pipeline = pipeline;
   }
 
   /**
@@ -244,6 +263,8 @@ class AsyncWriteBackCache {
     for (auto &set: sets) {
       set.lines.resize(no_of_lines);
     }
+
+    dirty_ratio = 0.0f;
   }
 
   void configureRequest(address_t address, address_t value, enum icemu::HookMemory::memory_type mem_type,
@@ -268,8 +289,8 @@ class AsyncWriteBackCache {
   }
 
   void processRequest() {
-    // Dirty ratio should never go negative
-    ASSERT(dirty_ratio >= 0);
+    // Dirty ratio should stay between 0 and 1
+    ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
     ASSERT(req.mem_id.index <= no_of_sets);
 
     bool hit, miss;
@@ -353,7 +374,9 @@ class AsyncWriteBackCache {
   void handleHit(CacheLine &line) {
     switch (req.type) {
       case HookMemory::MEM_READ:
-        // TODO: stats & costs
+        // TODO: stats
+
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * line.blocks.size);
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -366,14 +389,15 @@ class AsyncWriteBackCache {
 
         writeToCache(line);
 
+        // TODO: stats
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
+
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at NVM: " << hex
+        p_debug << "Data at Cache: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
-
-        // TODO: stats & costs
         break;
     }
   }
@@ -387,10 +411,13 @@ class AsyncWriteBackCache {
 
     switch (req.type) {
       case HookMemory::MEM_READ:
-        // TODO: stats & costs
+        // TODO: stats
 
         // We read the whole line
         line.blocks.size = 4;
+
+        // TODO: register NVM read
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * line.blocks.size);
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -400,10 +427,14 @@ class AsyncWriteBackCache {
         // If we don't write a full cache line, we first need to read it to fill
         // in the missing bytes
         if (req.size != 4) {
-          // TODO: additional costs
+          // TODO: in CacheMem.hpp, all 4 bytes are read, here we only read the remaining bytes.
+          //       Is that behavior correct?
+          const auto remaining_bytes = 4 - req.size;
+          if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * remaining_bytes);
         }
 
-        // TODO: stats & costs
+        // TODO: stats
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec
                 << endl;
@@ -413,7 +444,7 @@ class AsyncWriteBackCache {
 
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at NVM: " << hex
+        p_debug << "Data at Cache: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
@@ -469,6 +500,8 @@ class AsyncWriteBackCache {
       // TODO: stats: incCacheCleanEvictions();
     }
 
+    if (pipeline) pipeline->addToCycles(COST_PER_EVICTION);
+
     clearBit(VALID, *evicted_line);
     return *evicted_line;
   }
@@ -491,6 +524,7 @@ class AsyncWriteBackCache {
             << std::hex << wb.addr << std::dec << std::endl;
 
     nvm.localWrite(wb.addr, wb.data, wb.size);
+    // TODO: register NVM write
   }
 
   /********************************************
@@ -735,7 +769,7 @@ class AsyncWriteBackCache {
           line.dirty = true;
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) + 1) /
                         (capacity / CACHE_BLOCK_SIZE);
-          ASSERT(dirty_ratio <= 1.0);
+          ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
         }
         // p_debug << "Setting dirty bit: " << line.blocks.set_bits << " to " <<
         // dirty_ratio << endl;
@@ -767,7 +801,7 @@ class AsyncWriteBackCache {
           line.dirty = false;
           dirty_ratio = (dirty_ratio * (capacity / CACHE_BLOCK_SIZE) - 1) /
                         (capacity / CACHE_BLOCK_SIZE);
-          ASSERT(dirty_ratio >= 0.0);
+          ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
         }
         break;
       default:

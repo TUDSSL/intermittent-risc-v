@@ -58,6 +58,7 @@ class ReplayCacheIntrinsics : public HookCode {
         power_failure_generator(emu) {
     pipeline.setVerifyJumpDestinationGuess(false);
     pipeline.setVerifyNextInstructionGuess(false);
+    cache->setPipeline(&pipeline);
   }
 
   ~ReplayCacheIntrinsics() {
@@ -211,12 +212,15 @@ class ReplayCacheIntrinsics : public HookCode {
 
   void executeFence() {
     const auto fence_cycles = cache->fence();
-    // TODO: increase cycle count with the returned value
+    pipeline.addToCycles(fence_cycles);
   }
 
   void createCheckpoint() {
-    checkpoint.create();
-    // TODO: increase cycle count with the returned checkpoint size
+    const auto n_registers_checkpointed = checkpoint.create();
+    const auto n_bytes_transferred = n_registers_checkpointed * 4;
+    // TODO: incur actual NVM writes
+    pipeline.addToCycles(6 * n_bytes_transferred); // NVM writes
+    pipeline.addToCycles(2 * n_registers_checkpointed); // QuickRecall logic overhead (TODO: currently just a guess)
   }
 
   void resetProcessorAndCache() {
@@ -291,14 +295,22 @@ class ReplayCacheIntrinsics : public HookCode {
     // Inform the cache about the replay
     cache->handleReplay(addr, src_value, store.size);
 
-    // TODO: increase the cycle count with the correct amount of cycles
+    // Cost of a single replay is between 34 and 58 cycles
+    pipeline.addToCycles(6 * store.size); // NVM read of the source register
+    pipeline.addToCycles(6 * 4); // NVM read of the base register
+    // replaing the store into the cache is already counted in the cache->handleReplay() call
+    pipeline.addToCycles(1); // decrementing the replay counter
+    pipeline.addToCycles(1); // checking if the replay counter is zero
+
+    // No need to tick the cache here, as there cannot be any writebacks yet
   }
 
   void quickRecallRestore() {
-    checkpoint.restore();
-
-    // TODO: Increase the cycle count with the correct amount of cycles.
-    // TODO: is QuickRecall fully deterministic? Do its NVM reads go through the cache?
+    const auto n_registers_restored = checkpoint.restore();
+    const auto n_bytes_transferred = n_registers_restored * 4;
+    // TODO: incur actual NVM reads
+    pipeline.addToCycles(6 * n_bytes_transferred); // NVM reads, assuming reads did not go through the cache
+    pipeline.addToCycles(2 * n_registers_restored); // QuickRecall logic overhead (TODO: currently just a guess)
   }
 
   arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {
