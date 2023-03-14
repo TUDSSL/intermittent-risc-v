@@ -6,6 +6,8 @@
 #include "icemu/emu/types.h"
 #include "icemu/emu/Emulator.h"
 
+#include "PluginArgumentParsing.h"
+
 #include "../includes/LocalMemory.hpp"
 #include "../includes/Utils.hpp"
 
@@ -32,41 +34,36 @@ class AsyncWriteBackCache {
   /* Configuration */
 
   enum replacement_policy policy;
-  enum CacheHashMethod hash_method;
-  uint32_t capacity; // in bytes
+  const enum CacheHashMethod hash_method;
+  const uint32_t capacity; // in bytes
   uint32_t no_of_sets;
-  uint32_t no_of_lines;
+  const uint32_t no_of_lines;
+  const unsigned int writeback_delay; // in cycles
 
   /* Processing */
 
-  float dirty_ratio;
+  float dirty_ratio = 0.0f;
   CacheReq req;
   std::vector<CacheSet> sets;
   std::list<WriteBackRequest> writeback_queue;
 
  public:
 
-  AsyncWriteBackCache(icemu::Emulator &emu)
-      : emu(emu) {
+  AsyncWriteBackCache(icemu::Emulator &emu,
+                      enum replacement_policy policy,
+                      enum CacheHashMethod hash_method,
+                      uint32_t capacity,
+                      uint32_t no_of_lines,
+                      unsigned int writeback_delay)
+      : emu(emu),
+        policy(policy),
+        hash_method(hash_method),
+        capacity(capacity),
+        no_of_lines(no_of_lines),
+        writeback_delay(writeback_delay) {
     nvm.initMem(&emu.getMemory());
 
-    // TODO: configure parameters
-
-    // TODO: temporary
-    uint32_t size = 512;
-    uint32_t ways = 2;
-    enum replacement_policy p = LRU;
-    enum CacheHashMethod hash_method = SET_ASSOCIATIVE;
-
-    // TODO: cleanup this code, make fields const
-
-    capacity = size;
-    no_of_lines = ways;
-    policy = p;
-    dirty_ratio = 0;
     p_debug << "Hash method: " << hash_method << endl;
-    this->hash_method = hash_method;
-
     if (hash_method == SKEW_ASSOCIATIVE)
       policy = SKEW;
 
@@ -78,6 +75,46 @@ class AsyncWriteBackCache {
     p_debug << "SETS: " << no_of_sets << endl;
     p_debug << "Lines: " << no_of_lines << endl;
     zeroCacheContent();
+  }
+
+  AsyncWriteBackCache(const AsyncWriteBackCache &) = delete;
+
+  AsyncWriteBackCache(AsyncWriteBackCache &&o)
+      : emu(o.emu),
+        nvm(std::move(o.nvm)),
+        policy(o.policy),
+        hash_method(o.hash_method),
+        capacity(o.capacity),
+        no_of_sets(o.no_of_sets),
+        no_of_lines(o.no_of_lines),
+        writeback_delay(o.writeback_delay),
+        dirty_ratio(o.dirty_ratio),
+        req(o.req),
+        sets(std::move(o.sets)),
+        writeback_queue(std::move(o.writeback_queue)) {
+    o.req = {};
+  }
+
+  static AsyncWriteBackCache fromImplicitConfig(icemu::Emulator &emu) {
+    const auto arg_cache_hash_method_val = PluginArgumentParsing::GetArguments(emu, "hash-method=");
+    const auto arg_cache_size_val = PluginArgumentParsing::GetArguments(emu, "cache-size=");
+    const auto arg_cache_lines_val = PluginArgumentParsing::GetArguments(emu, "cache-lines=");
+    const auto arg_writeback_delay_val = PluginArgumentParsing::GetArguments(emu, "writeback-delay=");
+
+    const auto arg_cache_hash_method = arg_cache_hash_method_val.empty()
+        ? SET_ASSOCIATIVE
+        : (enum CacheHashMethod)std::stoul(arg_cache_hash_method_val[0]);
+    const auto arg_cache_size = arg_cache_size_val.empty()
+        ? 512
+        : std::stoul(arg_cache_size_val[0]);
+    const auto arg_cache_lines = arg_cache_lines_val.empty()
+        ? 2
+        : std::stoul(arg_cache_lines_val[0]);
+    const auto arg_writeback_delay = arg_writeback_delay_val.empty()
+        ? 2
+        : std::stoul(arg_writeback_delay_val[0]);
+
+    return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay);
   }
 
   ~AsyncWriteBackCache() {
@@ -113,25 +150,28 @@ class AsyncWriteBackCache {
    */
   void tick(unsigned int cycles_passed) {
     // Decrease the pending cycles of all writeback requests
+    size_t n_ready = 0;
     for (auto &wb: writeback_queue) {
       if (wb.pending_cycles > cycles_passed) {
         wb.pending_cycles -= cycles_passed;
       } else {
         wb.pending_cycles = 0;
       }
+      if (wb.pending_cycles == 0) ++n_ready;
     }
 
     // Complete and remove all writeback requests that are ready (i.e. have no pending cycles)
+    size_t n_completed = 0;
     auto it = writeback_queue.begin();
     while (it != writeback_queue.end()) {
       auto &wb = *it;
-      if (wb.pending_cycles == 0) {
-        completeWriteback(wb);
-        it = writeback_queue.erase(it);
-      }
+      if (wb.pending_cycles != 0) break;
+      completeWriteback(wb);
+      ++n_completed;
+      it = writeback_queue.erase(it);
     }
 
-    ASSERT(writeback_queue.empty());
+    ASSERT(n_ready == n_completed);
   }
 
   void handleRequest(address_t address, enum icemu::HookMemory::memory_type mem_type,
@@ -165,6 +205,7 @@ class AsyncWriteBackCache {
     ASSERT(!miss);
     ASSERT(collisions == 0);
 
+    updateCacheLastUsed(*line);
     enqueueWriteback(*line);
   }
 
@@ -440,8 +481,7 @@ class AsyncWriteBackCache {
     const auto addr = reconstructAddress(line);
 
     // Enqueue the new writeback request
-    // TODO: allow dynamic configuration of number of cycles
-    writeback_queue.emplace_back(2, addr, line.blocks.data, line.blocks.size);
+    writeback_queue.emplace_back(writeback_delay, addr, line.blocks.data, line.blocks.size);
   }
 
   void completeWriteback(const WriteBackRequest &wb) {

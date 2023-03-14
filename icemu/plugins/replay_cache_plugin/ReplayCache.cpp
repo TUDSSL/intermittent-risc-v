@@ -349,7 +349,7 @@ class ReplayCacheMemoryAccess : public HookMemory {
 // Function that registers the hook
 static void registerMyCodeHook(Emulator &emu, HookManager &HM) {
   // Create the cache, which is shared between the two hooks
-  auto cache = std::make_shared<_Cache>(emu);
+  auto cache = std::make_shared<_Cache>(_Cache::fromImplicitConfig(emu));
 
   // Register the hooks with ICEmu
   HM.add(new ReplayCacheIntrinsics(emu, cache));

@@ -31,6 +31,19 @@ class LocalMemory {
 
  public:
   LocalMemory() = default;
+  LocalMemory(const LocalMemory &) = delete;
+  LocalMemory(LocalMemory &&o)
+      : reads(std::move(o.reads)),
+        writes(std::move(o.writes)),
+        MainMemSegment(o.MainMemSegment),
+        LocalMem(o.LocalMem),
+        EmuMem(o.EmuMem),
+        mem(o.mem) {
+    o.MainMemSegment = nullptr;
+    o.LocalMem = nullptr;
+    o.EmuMem = nullptr;
+    o.mem = nullptr;
+  }
   ~LocalMemory() { delete[] LocalMem; }
 
   // Initialize the local memory and store a copy of the same
