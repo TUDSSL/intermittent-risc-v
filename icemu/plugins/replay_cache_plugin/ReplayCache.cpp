@@ -39,6 +39,7 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   bool is_region_active = false;
+  unsigned int region_instruction_count = 0;
   std::vector<insn_t> replay_instructions;
   arch_addr_t last_region_register_value = 0;
   arch_addr_t last_store_address = 0;
@@ -78,10 +79,12 @@ class ReplayCacheIntrinsics : public HookCode {
       createCheckpoint();
       resetProcessorAndCache();
       restoreCheckpoint();
-      // Don't clear the replay instructions; they are still valid
+      // Don't clear the region instruction count and replay instruction list; they are still valid
 
       return;
     }
+
+    if (is_region_active) ++region_instruction_count;
 
     const auto cyclesBefore = pipeline.getTotalCycles();
     pipeline.add(arg->address, arg->size);
@@ -202,12 +205,21 @@ class ReplayCacheIntrinsics : public HookCode {
 
   void endRegion() {
     assert(is_region_active);
+
+    stats.incRegionEnds();
+    stats.addRegionSize(region_instruction_count);
+    stats.addStoresPerRegion(replay_instructions.size());
+
     is_region_active = false;
+    region_instruction_count = 0;
     replay_instructions.clear();
   }
 
   void startRegion() {
     assert(!is_region_active);
+
+    stats.incRegionStarts();
+
     is_region_active = true;
     assert(replay_instructions.empty());
   }
@@ -291,6 +303,8 @@ class ReplayCacheIntrinsics : public HookCode {
     p_debug << printLeader() << " replaying " << registerNameFriendly(store.r_src)
                              << " to " << registerNameFriendly(store.r_base) << " + " << store.offset
                              << " (size " << store.size << ")" << std::endl;
+
+    stats.incReplays();
 
     // Get the register values from the QuickRecall storage area
     stats.incNVMReads(4);

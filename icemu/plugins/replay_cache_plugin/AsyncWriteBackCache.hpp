@@ -193,6 +193,7 @@ class AsyncWriteBackCache {
       if (wb.pending_cycles != 0) break;
       completeWriteback(wb);
       ++n_completed;
+      if (stats) stats->incCacheWritebacksCompletedBeforeFence();
       it = writeback_queue.erase(it);
     }
 
@@ -215,6 +216,8 @@ class AsyncWriteBackCache {
    * If the corresponding cache line is not found, this will cause an assertion error.
    */
   void clwb(const arch_addr_t address, const address_t size) {
+    if (stats) stats->incCacheClwb();
+
     // Simulate a read request so we can find the correct cache line
     configureRequest(address, 0, icemu::HookMemory::MEM_READ, size);
 
@@ -249,6 +252,11 @@ class AsyncWriteBackCache {
       completeWriteback(wb);
     }
     writeback_queue.clear();
+
+    if (stats) {
+      stats->incCacheFence();
+      stats->addCacheFenceWaitCycles(max_cycles);
+    }
 
     return max_cycles;
   }
@@ -383,8 +391,8 @@ class AsyncWriteBackCache {
 
     switch (req.type) {
       case HookMemory::MEM_READ:
-        if (stats) stats->incCacheReads(line.blocks.size);
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * line.blocks.size);
+        if (stats) stats->incCacheReads(req.size);
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * req.size);
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
@@ -397,12 +405,12 @@ class AsyncWriteBackCache {
 
         writeToCache(line);
 
-        if (stats) stats->incCacheWrites(line.blocks.size);
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
+        if (stats) stats->incCacheWrites(req.size);
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at Cache: " << hex
+        p_debug << "Data at NVM: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
@@ -424,10 +432,10 @@ class AsyncWriteBackCache {
         // We read the whole line
         line.blocks.size = 4;
 
-        if (stats) stats->incNVMReads(line.blocks.size);
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * line.blocks.size);
+        if (stats) stats->incNVMReads(req.size);
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * req.size);
 
-        if (stats) stats->incCacheReads(line.blocks.size);
+        if (stats) stats->incCacheReads(req.size);
         // NOTE: reading from cache is NOT counted (TODO: is it true that on a READ MISS it's 'free'?)
 
         p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
@@ -445,8 +453,8 @@ class AsyncWriteBackCache {
           if (stats) stats->incNVMReads(remaining_bytes);
         }
 
-        if (stats) stats->incCacheWrites(line.blocks.size);
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * line.blocks.size);
+        if (stats) stats->incCacheWrites(req.size);
+        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
         p_debug << "Cache before write: " << hex << line.blocks.data << dec
                 << endl;
@@ -456,7 +464,7 @@ class AsyncWriteBackCache {
 
         p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at Cache: " << hex
+        p_debug << "Data at NVM: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
         p_debug << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
@@ -498,6 +506,7 @@ class AsyncWriteBackCache {
     auto evict_address = reconstructAddress(*evicted_line);
 
     p_debug << "Evicting address: " << std::hex << evict_address << std::dec << std::endl;
+    if (stats) stats->incCacheEvictions();
 
     // Perform the eviction
     if (evicted_line->dirty) {
@@ -527,10 +536,13 @@ class AsyncWriteBackCache {
 
     // Enqueue the new writeback request
     writeback_queue.emplace_back(writeback_delay, addr, line.blocks.data, line.blocks.size);
+    if (stats) stats->incCacheWritebacksEnqueued();
   }
 
   void completeWriteback(const WriteBackRequest &wb) {
     ASSERT(wb.pending_cycles == 0);
+
+    if (stats) stats->incCacheWritebacksCompleted();
 
     p_debug << "Completing writeback for address: "
             << std::hex << wb.addr << std::dec << std::endl;
