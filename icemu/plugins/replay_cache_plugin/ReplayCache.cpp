@@ -90,13 +90,13 @@ class ReplayCacheIntrinsics : public HookCode {
     pipeline.add(arg->address, arg->size);
     const auto pipelineCycleEst = pipeline.getTotalCycles() - cyclesBefore;
 
-    cache->tick(pipelineCycleEst);
-
-    processInstructions(arg->address, arg->size);
+    // Only tick the cache if a non-cache related instruction was executed
+    if (!processInstructions(arg->address, arg->size))
+      cache->tick(pipelineCycleEst);
   }
 
  private:
-  void processInstructions(address_t address, address_t size) {
+  bool processInstructions(address_t address, address_t size) {
     // Process the instruction
     uint8_t instruction[size];
 
@@ -116,7 +116,7 @@ class ReplayCacheIntrinsics : public HookCode {
       assert(false);
     }
 
-    checkInstruction(std::move(insn));
+    return checkInstruction(std::move(insn));
   }
 
   bool checkInstruction(insn_t insn) {
@@ -135,6 +135,7 @@ class ReplayCacheIntrinsics : public HookCode {
           const auto imm1_value = imm20.imm;
           p_debug << printLeader() << " AUIPC x31, " << imm1_value << ": ";
 
+          bool was_cache_instr = false;
           switch (imm1_value) {
             case 0: p_debug << "start region" << std::endl;
               // Store the PC for verification
@@ -152,9 +153,11 @@ class ReplayCacheIntrinsics : public HookCode {
               break;
             case 2: p_debug << "CLWB" << std::endl;
               executeCLWB();
+              was_cache_instr = true;
               break;
             case 3: p_debug << "FENCE" << std::endl;
               executeFence();
+              was_cache_instr = true;
               break;
             case 4: p_debug << "power failure next" << std::endl;
               power_failure_generator.failNext();
@@ -165,6 +168,8 @@ class ReplayCacheIntrinsics : public HookCode {
           }
           // Adjust for any effects that this special AUIPC instruction might have had
           setRegisterValue(_Arch::Register::REG_X31, last_region_register_value);
+          if (was_cache_instr)
+            return true;
           break;
         }
         break;
@@ -179,7 +184,6 @@ class ReplayCacheIntrinsics : public HookCode {
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
           p_debug << printLeader() << " stored instruction for replay" << std::endl;
-          return true;
         }
         break;
       }
@@ -225,7 +229,8 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void executeCLWB() {
-    cache->clwb(last_store_address, last_store_size);
+    const auto clwb_cycles = cache->clwb(last_store_address, last_store_size);
+    pipeline.addToCycles(clwb_cycles);
   }
 
   void executeFence() {

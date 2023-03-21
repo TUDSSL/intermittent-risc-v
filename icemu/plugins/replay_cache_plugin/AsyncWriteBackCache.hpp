@@ -13,12 +13,13 @@
 #include "../includes/Utils.hpp"
 #include "Stats.hpp"
 
+// Copied from icemu/plugins/includes/CycleCostCalculator.hpp
 constexpr int COST_PER_BYTE_READ_FROM_CACHE = 2;
 constexpr int COST_PER_BYTE_WRITTEN_TO_CACHE = 2;
 constexpr int COST_PER_BYTE_READ_FROM_NVM = 6;
 constexpr int COST_PER_BYTE_WRITTEN_TO_NVM = 6;
-// TODO: Maybe eviction is free?
-constexpr int COST_PER_EVICTION = 1;
+// Note: a eviction is currently assumed to be free unless WB enqueueing takes time
+constexpr int COST_PER_EVICTION = 0;
 
 template <class _Arch>
 class AsyncWriteBackCache {
@@ -50,6 +51,8 @@ class AsyncWriteBackCache {
   uint32_t no_of_sets;
   const uint32_t no_of_lines;
   const unsigned int writeback_delay; // in cycles
+  const unsigned int writeback_queue_size; // in slots
+  const unsigned int writeback_parallelism;
 
   /* Processing */
 
@@ -65,13 +68,17 @@ class AsyncWriteBackCache {
                       enum CacheHashMethod hash_method,
                       uint32_t capacity,
                       uint32_t no_of_lines,
-                      unsigned int writeback_delay)
+                      unsigned int writeback_delay,
+                      unsigned int writeback_queue_size,
+                      unsigned int writeback_parallelism)
       : emu(emu),
         policy(policy),
         hash_method(hash_method),
         capacity(capacity),
         no_of_lines(no_of_lines),
-        writeback_delay(writeback_delay) {
+        writeback_delay(writeback_delay),
+        writeback_queue_size(writeback_queue_size),
+        writeback_parallelism(writeback_parallelism) {
     nvm.initMem(&emu.getMemory());
 
     p_debug << "Hash method: " << hash_method << endl;
@@ -100,6 +107,8 @@ class AsyncWriteBackCache {
         no_of_sets(o.no_of_sets),
         no_of_lines(o.no_of_lines),
         writeback_delay(o.writeback_delay),
+        writeback_queue_size(o.writeback_queue_size),
+        writeback_parallelism(o.writeback_parallelism),
         dirty_ratio(o.dirty_ratio),
         req(o.req),
         sets(std::move(o.sets)),
@@ -113,6 +122,8 @@ class AsyncWriteBackCache {
     const auto arg_cache_size_val = PluginArgumentParsing::GetArguments(emu, "cache-size=");
     const auto arg_cache_lines_val = PluginArgumentParsing::GetArguments(emu, "cache-lines=");
     const auto arg_writeback_delay_val = PluginArgumentParsing::GetArguments(emu, "writeback-delay=");
+    const auto arg_writeback_queue_size_val = PluginArgumentParsing::GetArguments(emu, "writeback-queue-size=");
+    const auto arg_writeback_parallelism_val = PluginArgumentParsing::GetArguments(emu, "writeback-parallelism=");
 
     const auto arg_cache_hash_method = arg_cache_hash_method_val.empty()
         ? SET_ASSOCIATIVE
@@ -124,10 +135,16 @@ class AsyncWriteBackCache {
         ? 2
         : std::stoul(arg_cache_lines_val[0]);
     const auto arg_writeback_delay = arg_writeback_delay_val.empty()
-        ? 2
+        ? (COST_PER_BYTE_WRITTEN_TO_NVM * 4)
         : std::stoul(arg_writeback_delay_val[0]);
+    const auto arg_writeback_queue_size = arg_writeback_queue_size_val.empty()
+        ? 1
+        : std::stoul(arg_writeback_queue_size_val[0]);
+    const auto arg_writeback_parallelism = arg_writeback_parallelism_val.empty()
+        ? 1
+        : std::stoul(arg_writeback_parallelism_val[0]);
 
-    return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay);
+    return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay, arg_writeback_queue_size, arg_writeback_parallelism);
   }
 
   /**
@@ -173,37 +190,21 @@ class AsyncWriteBackCache {
    * This may complete some pending writeback requests, or otherwise decrease the amount of
    * pending cycles.
    */
-  void tick(unsigned int cycles_passed) {
-    // Decrease the pending cycles of all writeback requests
-    size_t n_ready = 0;
-    for (auto &wb: writeback_queue) {
-      if (wb.pending_cycles > cycles_passed) {
-        wb.pending_cycles -= cycles_passed;
-      } else {
-        wb.pending_cycles = 0;
-      }
-      if (wb.pending_cycles == 0) ++n_ready;
-    }
-
-    // Complete and remove all writeback requests that are ready (i.e. have no pending cycles)
-    size_t n_completed = 0;
-    auto it = writeback_queue.begin();
-    while (it != writeback_queue.end()) {
-      auto &wb = *it;
-      if (wb.pending_cycles != 0) break;
-      completeWriteback(wb);
-      ++n_completed;
-      if (stats) stats->incCacheWritebacksCompletedBeforeFence();
-      it = writeback_queue.erase(it);
-    }
-
-    ASSERT(n_ready == n_completed);
+  void tick(unsigned int cycles_passed, bool internal = false) {
+    const auto n_wbs_completed = completeWritebacksForCycles(cycles_passed);
+    if (stats) stats->incCacheWritebacksCompletedBeforeFence(n_wbs_completed);
   }
 
   void handleRequest(address_t address, enum icemu::HookMemory::memory_type mem_type,
                      address_t *value_req, const address_t size_req) {
+    const auto cyclesBefore = pipeline ? pipeline->getTotalCycles() : 0;
+
     configureRequest(address, *value_req, mem_type, size_req);
     processRequest();
+
+    const auto cyclesAfter = pipeline ? pipeline->getTotalCycles() : 0;
+    const auto cyclesPassed = cyclesAfter - cyclesBefore;
+    tick(cyclesPassed, true);
   }
 
   void handleReplay(arch_addr_t address, arch_addr_t value, const address_t size) {
@@ -214,8 +215,10 @@ class AsyncWriteBackCache {
   /**
    * @brief Perform a Cache Line Write Back (CLWB) operation on the given address and size.
    * If the corresponding cache line is not found, this will cause an assertion error.
+   * @return The number of cycles spent on waiting for earlier writebacks to complete
+   *         to free up space in the writeback queue. May be zero.
    */
-  void clwb(const arch_addr_t address, const address_t size) {
+  unsigned int clwb(const arch_addr_t address, const address_t size) {
     if (stats) stats->incCacheClwb();
 
     // Simulate a read request so we can find the correct cache line
@@ -234,7 +237,7 @@ class AsyncWriteBackCache {
     ASSERT(collisions == 0);
 
     updateCacheLastUsed(*line);
-    enqueueWriteback(*line);
+    return enqueueWriteback(*line);
   }
 
   /**
@@ -242,23 +245,26 @@ class AsyncWriteBackCache {
    * @return The number of cycles it would cost to complete all pending writebacks.
    */
   unsigned int fence() {
-    // Tracker for how many cycles were spent waiting for writebacks at most.
-    // Even if there are multiple writebacks, we only need to wait for the longest one.
-    unsigned int max_cycles = 0;
+    unsigned int cycles = 0;
 
-    for (auto &wb: writeback_queue) {
-      max_cycles = std::max(max_cycles, wb.pending_cycles);
-      wb.pending_cycles = 0;
-      completeWriteback(wb);
+    // Enqueue all dirty cache lines as writebacks
+    for (auto &set: sets) {
+      for (auto &line: set.lines) {
+        if (!line.valid) continue;
+        if (!line.dirty) continue;
+        cycles += enqueueWriteback(line);
+      }
     }
-    writeback_queue.clear();
+
+    // Wait for all writebacks to complete
+    cycles += completeWritebacksUntilQueueSize(0);
 
     if (stats) {
       stats->incCacheFence();
-      stats->addCacheFenceWaitCycles(max_cycles);
+      stats->addCacheFenceWaitCycles(cycles);
     }
 
-    return max_cycles;
+    return cycles;
   }
 
  private:
@@ -298,7 +304,8 @@ class AsyncWriteBackCache {
          ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)))) >>
         NUM_BITS(CACHE_BLOCK_SIZE);
 
-    p_debug << "REQ: " << hex << req.addr << " VALUE: " << req.value << dec
+    p_debug << (mem_type == HookMemory::MEM_READ ? "READ" : "WRITE")
+            << " REQ: " << hex << req.addr << " VALUE: " << req.value << dec
             << " OFFSET: " << req.mem_id.offset << " SIZE: " << req.size
             << endl;
   }
@@ -446,9 +453,9 @@ class AsyncWriteBackCache {
         // If we don't write a full cache line, we first need to read it to fill
         // in the missing bytes
         if (req.size != 4) {
-          // TODO: in CacheMem.hpp, all 4 bytes are read, here we only read the remaining bytes.
-          //       Is that behavior correct?
-          const auto remaining_bytes = 4 - req.size;
+          // Read the missing bytes from NVM.
+          // Note: we waste some bytes, but this behavior is most realistic, see CacheMem.hpp
+          const auto remaining_bytes = 4;
           if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * remaining_bytes);
           if (stats) stats->incNVMReads(remaining_bytes);
         }
@@ -511,12 +518,13 @@ class AsyncWriteBackCache {
     // Perform the eviction
     if (evicted_line->dirty) {
       // Enqueue a writeback request
-      enqueueWriteback(*evicted_line);
+      const auto enqueue_cycles = enqueueWriteback(*evicted_line);
 
       nvm.localWrite(evict_address, evicted_line->blocks.data,
                      evicted_line->blocks.size);
 
       if (stats) stats->incCacheDirtyEvictions();
+      if (pipeline) pipeline->addToCycles(enqueue_cycles);
     } else {
       if (stats) stats->incCacheCleanEvictions();
     }
@@ -527,16 +535,30 @@ class AsyncWriteBackCache {
     return *evicted_line;
   }
 
-  void enqueueWriteback(CacheLine &line) {
+  /**
+   * @brief Enqueue a writeback request for the given line.
+   * @return The number of cycles spent waiting for the request to be enqueued.
+   */
+  unsigned int enqueueWriteback(CacheLine &line) {
     // Writing back a line that is not dirty is illegal
     ASSERT(line.dirty);
     clearBit(DIRTY, line);
+
+    // Wait for the writeback queue to have enough space
+    const auto enqueue_stall_cycles = writeback_queue_size == 0
+      ? 0 // if queue is unlimited, never wait
+      : completeWritebacksUntilQueueSize(writeback_queue_size - 1);
 
     const auto addr = reconstructAddress(line);
 
     // Enqueue the new writeback request
     writeback_queue.emplace_back(writeback_delay, addr, line.blocks.data, line.blocks.size);
     if (stats) stats->incCacheWritebacksEnqueued();
+
+    // Sanity check on queue size
+    ASSERT(writeback_queue_size == 0 || writeback_queue.size() <= writeback_queue_size);
+
+    return enqueue_stall_cycles;
   }
 
   void completeWriteback(const WriteBackRequest &wb) {
@@ -549,6 +571,57 @@ class AsyncWriteBackCache {
 
     nvm.localWrite(wb.addr, wb.data, wb.size);
     if (stats) stats->incNVMWrites(wb.size);
+  }
+
+  /**
+   * @brief Process writeback requests for up to the given amount of cycles.
+   * @return The number of writebacks that were completed.
+   */
+  unsigned int completeWritebacksForCycles(unsigned int cycles) {
+    unsigned int n_completed = 0;
+
+    // Loop once for each cycle, or until all writebacks are completed
+    for (auto it = writeback_queue.begin(); cycles > 0 && it != writeback_queue.end(); --cycles) {
+      // Consider up to writeback_parallelism (or infinite if zero) writebacks per cycle, or until the end of the queue is reached
+      auto itt = it;
+      for (unsigned int i = 0; (writeback_parallelism == 0 || i < writeback_parallelism) && itt != writeback_queue.end(); ++i) {
+        auto &wb = *itt;
+
+        if (wb.pending_cycles <= 1) {
+          wb.pending_cycles = 0;
+          completeWriteback(wb);
+          ++n_completed;
+          it = itt = writeback_queue.erase(itt);
+        } else {
+          wb.pending_cycles -= 1;
+          ++itt;
+        }
+      }
+    }
+
+    return n_completed;
+  }
+
+  /**
+   * @brief Complete pending writebacks from the queue until the queue size is
+   * at most the desired size.
+   * @return The number of cycles spent. May be zero if the queue is already small enough.
+   */
+  unsigned int completeWritebacksUntilQueueSize(unsigned int desired_queue_size) {
+    const auto initial_wb_queue_size = writeback_queue.size();
+
+    unsigned int cycles_spent = 0;
+    unsigned int writebacks_completed = 0;
+    while (writeback_queue.size() > desired_queue_size) {
+      writebacks_completed += completeWritebacksForCycles(1);
+      cycles_spent++;
+    }
+
+    // Sanity checks
+    ASSERT(writeback_queue.size() <= desired_queue_size);
+    ASSERT(writeback_queue.size() + writebacks_completed == initial_wb_queue_size);
+
+    return cycles_spent;
   }
 
   /********************************************

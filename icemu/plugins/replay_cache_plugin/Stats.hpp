@@ -73,7 +73,7 @@ class Stats {
   void incCacheClwb() { cache.clwb++; }
   void incCacheWritebacksEnqueued() { cache.writebacks_enqueued++; }
   void incCacheWritebacksCompleted() { cache.writebacks_completed++; }
-  void incCacheWritebacksCompletedBeforeFence() { cache.writebacks_completed_before_fence++; }
+  void incCacheWritebacksCompletedBeforeFence(int n = 1) { cache.writebacks_completed_before_fence += n; }
   void incCacheFence() { cache.fence++; }
   void addCacheFenceWaitCycles(int cycles) { cache.fence_wait_cycles.push_back(cycles); }
 
