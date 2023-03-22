@@ -178,6 +178,11 @@ class AsyncWriteBackCache {
       }
     }
 
+    // Write back 0xDEADBEEF to all pending writebacks
+    for (const auto &wb : writeback_queue) {
+      nvm.emulatorWrite(wb.addr, 0xDEADBEEF, wb.size);
+    }
+
     // Clear the cache
     zeroCacheContent();
 
@@ -208,8 +213,7 @@ class AsyncWriteBackCache {
   }
 
   void handleReplay(arch_addr_t address, arch_addr_t value, const address_t size) {
-    configureRequest(address, value, icemu::HookMemory::MEM_WRITE, size);
-    processRequest();
+    handleRequest(address, icemu::HookMemory::MEM_READ, &value, size);
   }
 
   /**
@@ -520,9 +524,6 @@ class AsyncWriteBackCache {
       // Enqueue a writeback request
       const auto enqueue_cycles = enqueueWriteback(*evicted_line);
 
-      nvm.localWrite(evict_address, evicted_line->blocks.data,
-                     evicted_line->blocks.size);
-
       if (stats) stats->incCacheDirtyEvictions();
       if (pipeline) pipeline->addToCycles(enqueue_cycles);
     } else {
@@ -540,6 +541,8 @@ class AsyncWriteBackCache {
    * @return The number of cycles spent waiting for the request to be enqueued.
    */
   unsigned int enqueueWriteback(CacheLine &line) {
+    // The line must be valid
+    ASSERT(line.valid);
     // Writing back a line that is not dirty is illegal
     ASSERT(line.dirty);
     clearBit(DIRTY, line);
@@ -587,12 +590,13 @@ class AsyncWriteBackCache {
       for (unsigned int i = 0; (writeback_parallelism == 0 || i < writeback_parallelism) && itt != writeback_queue.end(); ++i) {
         auto &wb = *itt;
 
-        if (wb.pending_cycles <= 1) {
+        if (wb.pending_cycles == 1) {
           wb.pending_cycles = 0;
           completeWriteback(wb);
           ++n_completed;
           it = itt = writeback_queue.erase(itt);
         } else {
+          ASSERT(wb.pending_cycles > 1); // sanity check, because we should never have a writeback with 0 pending cycles
           wb.pending_cycles -= 1;
           ++itt;
         }
