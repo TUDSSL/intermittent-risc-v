@@ -44,6 +44,7 @@ class ReplayCacheIntrinsics : public HookCode {
   arch_addr_t last_region_register_value = 0;
   arch_addr_t last_store_address = 0;
   address_t last_store_size = 0;
+  bool last_cycle_was_pf = false;
 
   std::shared_ptr<_Cache> cache;
 
@@ -76,6 +77,9 @@ class ReplayCacheIntrinsics : public HookCode {
     if (power_failure_generator.shouldReset(pipeline, checkpoint)) {
       std::cout << printLeader() << " power failure at cycle " << pipeline.getTotalCycles() << std::endl;
 
+      ASSERT(!last_cycle_was_pf && "Immediate power failure after reset, restoration might take too long");
+      last_cycle_was_pf = true;
+
       createCheckpoint();
       resetProcessorAndCache();
       restoreCheckpoint();
@@ -84,6 +88,7 @@ class ReplayCacheIntrinsics : public HookCode {
       return;
     }
 
+    last_cycle_was_pf = false;
     if (is_region_active) ++region_instruction_count;
 
     const auto cyclesBefore = pipeline.getTotalCycles();
