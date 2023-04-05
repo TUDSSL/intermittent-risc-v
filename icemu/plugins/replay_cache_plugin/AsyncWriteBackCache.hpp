@@ -213,7 +213,8 @@ class AsyncWriteBackCache {
   }
 
   void handleReplay(arch_addr_t address, arch_addr_t value, const address_t size) {
-    handleRequest(address, icemu::HookMemory::MEM_READ, &value, size);
+    auto value_req = (address_t)value;
+    handleRequest(address, icemu::HookMemory::MEM_WRITE, &value_req, size);
   }
 
   /**
