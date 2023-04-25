@@ -21,5 +21,5 @@ echo "Building ICEmu plugins"
 pushd plugins
 echo "$(pwd)"
 rm -rf build
-CMAKE_GENERATOR= ./build.sh
+./build.sh
 popd
