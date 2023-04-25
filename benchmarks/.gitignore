@@ -5,3 +5,5 @@ results/
 
 /**/*build-*/
 .ipynb_checkpoints/*
+
+/run*.txt

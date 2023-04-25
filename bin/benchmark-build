@@ -71,14 +71,8 @@ function build_benchmark() {
     local build_dir="build-$benchmark_name"
     echo "Building benchmark $benchmark_name in $build_dir"
 
-    rm -rf "$build_dir"
-    mkdir -p "$build_dir"
-    pushd "$build_dir"
-
-    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" ../
-    make
-
-    popd
+    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -B "$build_dir"
+    cmake --build "$build_dir"
 }
 
 target="$1"
