@@ -1,0 +1,5 @@
+/llvm/tools/clang
+/llvm/tools/lld
+
+/build
+/install

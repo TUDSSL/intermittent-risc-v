@@ -37,7 +37,7 @@ PHONIES+=clean-llvm-downloads
 
 clean-llvm:
 	@echo "Cleaning LLVM directory"
-	rm -rf llvm/llvm-9.0.1/build
+	rm -rf llvm/llvm-*/build
 PHONIES+=clean-llvm
 
 

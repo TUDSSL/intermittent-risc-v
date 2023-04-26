@@ -8,7 +8,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # Install dependencies
 RUN apt-get update && \
     apt-get install -y build-essential cmake python3 libboost-filesystem-dev  \
-    libboost-system-dev libboost-program-options-dev git ninja-build clang \
+    libboost-system-dev libboost-program-options-dev git ninja-build clang-12 \
     gcc-arm-none-eabi wget golang \
     python3-distutils python3-tabulate python3-pip cm-super dvipng \
     vim neovim cscope ctags curl sudo
