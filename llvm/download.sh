@@ -1,9 +1,9 @@
 #!/bin/bash
 
-VER="9.0.1"
+VER="16.0.2"
 DOWNLOAD="wget"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-LLVM_SRC_DIR="$DIR/llvm-9.0.1/llvm"
+LLVM_SRC_DIR="$DIR/llvm-$VER/llvm"
 
 function download_extract {
     fn="$1-$VER.src"
@@ -17,15 +17,11 @@ function download_extract {
 }
 
 # File that marks that we downloaded and extracted all components
-rm -f .download_llvm
+rm -f .download_llvm_$VER
 
 pushd "$LLVM_SRC_DIR/tools"
 download_extract "clang"
-# Add the ability to specify ld.lld as the linker using -fuse-ld=lld
-# https://reviews.llvm.org/D74704
-cp "$DIR/patch/riscv-fuse-ld.patch" ./
-patch -p0 -i riscv-fuse-ld.patch
-rm ./riscv-fuse-ld.patch
+download_extract "lld"
 
 popd
 
@@ -34,16 +30,13 @@ download_extract "compiler-rt"
 download_extract "libcxx"
 download_extract "libcxxabi"
 download_extract "libunwind"
-download_extract "lld"
 download_extract "openmp"
 download_extract "polly"
 
-# Apply glibc patch for compiler-rt
-# https://bugs.gentoo.org/708430
-cp "$DIR/patch/compiler-rt-glibc.patch" ./
-patch -p0 -i compiler-rt-glibc.patch
-rm ./compiler-rt-glibc.patch
-
 popd
 
-echo "Downloaded llvm components @$(date)" > .download_llvm
+# Address https://discourse.llvm.org/t/unable-to-package-llvm-version-12-0-0-1-as-rpm-in-rhel7/4874 (see https://github.com/llvmenv/llvmenv/issues/115)
+#ln -s "$LLVM_SRC_DIR/projects/libunwind/include/mach-o" "$LLVM_SRC_DIR/projects/lld/MachO/mach-o"
+
+
+echo "Downloaded llvm components @$(date)" > .download_llvm_$VER

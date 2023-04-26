@@ -9,11 +9,11 @@ set -e
 echo "Building ICEmu"
 pushd icemu
 # Build the dependencies
-./setup-lib.sh
+CMAKE_GENERATOR= ./setup-lib.sh
 # Build ICEmu
 rm -rf build
 rm -rf plugins/build
-mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ../ && make -j"$(nproc)"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 echo "Done building ICEmu"
 popd
 
