@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -11,7 +11,7 @@ RUN apt-get update && \
     libboost-system-dev libboost-program-options-dev git ninja-build clang-12 \
     gcc-arm-none-eabi wget golang \
     python3-distutils python3-tabulate python3-pip cm-super dvipng \
-    vim neovim cscope ctags curl sudo
+    vim neovim cscope exuberant-ctags curl sudo
 
 # Install components required for plotting
 RUN apt-get install -y texlive texlive-latex-extra texlive-extra-utils
