@@ -9,7 +9,7 @@ set -e
 echo "Building ICEmu"
 pushd icemu
 # Build the dependencies
-CMAKE_GENERATOR= ./setup-lib.sh
+./setup-lib.sh
 # Build ICEmu
 rm -rf build
 rm -rf plugins/build
