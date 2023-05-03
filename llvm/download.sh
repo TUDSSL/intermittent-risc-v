@@ -19,10 +19,14 @@ function download_extract {
 # File that marks that we downloaded and extracted all components
 rm -f .download_llvm_$VER
 
+$DOWNLOAD "https://github.com/llvm/llvm-project/releases/download/llvmorg-$VER/clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+tar -xf "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+rm "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
+mv "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04" "llvm-$VER-bin"
+
 pushd "$LLVM_SRC_DIR/tools"
 download_extract "clang"
 download_extract "lld"
-
 popd
 
 pushd "$LLVM_SRC_DIR/projects"
@@ -32,7 +36,6 @@ download_extract "libcxxabi"
 download_extract "libunwind"
 download_extract "openmp"
 download_extract "polly"
-
 popd
 
 # Address https://discourse.llvm.org/t/unable-to-package-llvm-version-12-0-0-1-as-rpm-in-rhel7/4874 (see https://github.com/llvmenv/llvmenv/issues/115)
