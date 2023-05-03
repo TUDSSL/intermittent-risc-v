@@ -105,9 +105,9 @@ struct CacheBlock {
   address_t size;
   MemId bits;
 
-  // Overload the = operator to compare evicted blocks
+  // Overload the == operator to compare evicted blocks
   bool operator==(const CacheBlock &other) const {
-    return (bits.tag == other.bits.tag 
+    return (bits.tag == other.bits.tag
             && bits.index == other.bits.index
             && bits.offset == other.bits.offset);
   }

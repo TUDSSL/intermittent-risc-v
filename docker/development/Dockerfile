@@ -13,8 +13,9 @@ RUN apt-get update && \
     python3-distutils python3-tabulate python3-pip cm-super dvipng \
     vim neovim cscope ctags curl sudo
 
-RUN pip install matplotlib==3.5.1
-RUN pip install pandas==1.4.1
+# Install components required for plotting
+RUN apt-get install -y texlive texlive-latex-extra texlive-extra-utils
+RUN pip install matplotlib==3.5.2 pandas==1.4.4 nbconvert==6.5.4 ipykernel
 
 # Create a new user
 RUN addgroup --gid $GROUP_ID user
