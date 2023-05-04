@@ -98,6 +98,7 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   markSuperRegs(Reserved, RISCV::X4); // tp
   if (TFI->hasFP(MF))
     markSuperRegs(Reserved, RISCV::X8); // fp
+  markSuperRegs(Reserved, RISCV::X31); // ReplayCache region register
   // Reserve the base register if we need to realign the stack and allocate
   // variable-sized objects at runtime.
   if (TFI->hasBP(MF))

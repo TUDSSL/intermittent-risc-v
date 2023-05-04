@@ -4,6 +4,8 @@ VER="16.0.2"
 DOWNLOAD="wget"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 LLVM_SRC_DIR="$DIR/llvm-$VER/llvm"
+LLVM_BIN_DIR="$DIR/llvm-$VER-bin"
+LLVM_REF_DIR="$DIR/llvm-$VER-ref"
 
 function download_extract {
     fn="$1-$VER.src"
@@ -19,10 +21,16 @@ function download_extract {
 # File that marks that we downloaded and extracted all components
 rm -f .download_llvm_$VER
 
+rm -rf "$LLVM_BIN_DIR" *.tar.xz
 $DOWNLOAD "https://github.com/llvm/llvm-project/releases/download/llvmorg-$VER/clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
 tar -xf "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
 rm "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04.tar.xz"
-mv "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04" "llvm-$VER-bin"
+mv "clang+llvm-$VER-x86_64-linux-gnu-ubuntu-22.04" "$LLVM_BIN_DIR"
+
+mkdir -p "$LLVM_REF_DIR"
+pushd "$LLVM_REF_DIR"
+download_extract "llvm"
+popd
 
 pushd "$LLVM_SRC_DIR/tools"
 download_extract "clang"
