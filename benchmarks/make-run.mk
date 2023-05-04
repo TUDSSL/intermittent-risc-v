@@ -79,6 +79,9 @@ PROWL_CONFIGURATIONS += \
 CLANK_CONFIGURATIONS += \
   		clank
 
+REPLAY_CACHE_CONFIGURATIONS += \
+		replay-cache
+
 PLAINC_CONFIGURATIONS += \
   		plain-c
 
@@ -90,6 +93,7 @@ ALL_CONFIGURATIONS += \
 		$(NACHO_CLANK_CONFIGURATIONS) \
 		$(PROWL_CONFIGURATIONS) \
 		$(CLANK_CONFIGURATIONS) \
+		$(REPLAY_CACHE_CONFIGURATIONS) \
 		$(PLAINC_CONFIGURATIONS)
 
 
@@ -145,10 +149,13 @@ $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(PLAINC_CONFIGURATIONS), \
 
 endef
 
-# Generate all the possible configurations
-$(foreach build-config, $(BUILD_CONFIGURATIONS), \
+# Generate all the possible configurations, except for "replay-cache", which is a special configuration
+$(foreach build-config, $(filter-out replay-cache,$(BUILD_CONFIGURATIONS)), \
 	$(eval $(call generate_run_targets_build_configuration,$(build-config))))
 
+# Generate the configuration for the special "replay-cache" configuration
+$(foreach bench,$(BENCHMARKS), $(foreach run-config, $(REPLAY_CACHE_CONFIGURATIONS), \
+	$(eval $(call generate_run_target_configurations,$(bench),replay-cache,$(run-config)))))
 
 # Generate power failure options
 # 1 = benchmark
@@ -179,6 +186,10 @@ $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
 # Clank
 $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
 	$(eval $(call generate_pf_run_target_configurations,$(bench),uninstrumented,clank,$(on-duration)))))
+
+# ReplayCache
+$(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
+	$(eval $(call generate_pf_run_target_configurations,$(bench),replay-cache,replay-cache,$(on-duration)))))
 
 show-pf-targets:
 	@echo "$(PF_TARGETS)"
@@ -254,8 +265,14 @@ run-targets-prowl: $(TARGETS-prowl)
 #
 # PlainC has only one config called 'plainc' which is already a target
 
+$(foreach target, $(REPLAY_CACHE_CONFIGURATIONS), $(eval $(call generate_target_group,replay-cache,$(target))))
+show-targets-replay-cache:
+	@echo "$(TARGETS-replay-cache)"
 
-all: $(TARGETS)
+run-targets-replay-cache: $(TARGETS-replay-cache)
+	@echo "$(HLB)Done running replay-cache targets$(HLE)"
+
+all: run-targets run-pf-targets
 
 show-all-configurations:
 	@echo "$(ALL_CONFIGURATIONS)"

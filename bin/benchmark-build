@@ -20,8 +20,13 @@ fi
 # Uninstrumented
 # This is the plain default configuration
 function uninstrumented() {
-    # No changes to the environment
-    :
+    export PATH="$LLVM_BIN_ROOT/bin:$PATH"
+}
+
+# ReplayCache
+# This it the ReplayCache-specific configuration with a patched LLVM version
+function replay-cache() {
+    export PATH="$LLVM_RC_ROOT/bin:$PATH"
 }
 
 

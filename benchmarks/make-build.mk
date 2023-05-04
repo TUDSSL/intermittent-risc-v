@@ -40,6 +40,9 @@ all: build
 build: $(TARGETS_BUILD_ALL)
 	@echo "$(HLS)Done building all benchmarks$(HLE)"
 
+clean:
+	rm -rf */build-*
+
 show-benchmarks:
 		@echo "Benchmarks: $(BENCHMARKS)"
 
@@ -49,5 +52,5 @@ show-build-targets:
 show-targets:
 		@echo "Targets: $(TARGETS)"
 
-.PHONY: all build show-benchmarks show-build-targets show-targets \
+.PHONY: all build clean show-benchmarks show-build-targets show-targets \
 		$(TARGETS_BUILD_ALL) $(TARGETS)

@@ -154,6 +154,19 @@ function prowl() {
         $elf
 }
 
+function replay-cache() {
+    on_duration=$1
+    # TODO: specify more (or all available) configuration options
+    # TODO: specify log file
+    run-elf \
+        -p replay_cache_plugin.so \
+        -a on-duration=$on_duration \
+        $elf
+
+    # TODO: temporary to indicate that the run is done
+    touch $LOGDIR/$name-$compile_config-run-replay_cache-$on_duration
+}
+
 function plain-c() {
 	run-elf \
         -p memory_stats_plugin.so \
@@ -162,7 +175,7 @@ function plain-c() {
 }
 
 function help() {
-    echo "Usage: benchmark-run [target]"
+    echo "Usage: benchmark-run [target] [elf] [compile_config]"
     echo ""
 
     # Other
@@ -198,7 +211,7 @@ echo "Running target: $comp_target"
 $comp_target $elf $bench_name
 
 # Copy the elf file to the binaries directory
-cp "$elf" "$LOGDIR/binaries/$compile_config-$elf"
+cp "$elf" "$LOGDIR/binaries/$compile_config-$name.elf"
 
 exit 0
 

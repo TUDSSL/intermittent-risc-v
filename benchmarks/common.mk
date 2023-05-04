@@ -8,7 +8,8 @@ BENCHMARKS := \
 		picojpeg
 
 BUILD_CONFIGURATIONS := \
-		uninstrumented
+		uninstrumented \
+		replay-cache
 
 # Note that the checkpoint period in the benchmarks is on_duration/2
 # 250000   =>   5ms @ 50MHz
