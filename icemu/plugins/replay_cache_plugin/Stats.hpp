@@ -109,56 +109,52 @@ class Stats {
 
   /* Print statistics */
 
-  void printAll() {
-    std::cout << "\n-------------------------------------" << std::endl;
-
-    std::cout << "CACHE STATS" << std::endl;
-    std::cout << " Misses: " << cache.misses << std::endl;
-    std::cout << " Hits: " << cache.hits << std::endl;
-    std::cout << " Evictions: " << cache.evictions << std::endl;
-    std::cout << " Reads: " << cache.reads << std::endl;
-    std::cout << " Writes: " << cache.writes << std::endl;
-    std::cout << " Clean evictions: " << cache.clean_evictions << std::endl;
-    std::cout << " Dirty evictions: " << cache.dirty_evictions << std::endl;
-    std::cout << " CLWB: " << cache.clwb << std::endl;
-    std::cout << " Writebacks enqueued: " << cache.writebacks_enqueued << std::endl;
-    std::cout << " Writebacks completed: " << cache.writebacks_completed << std::endl;
-    std::cout << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << std::endl;
-    std::cout << " FENCE: " << cache.fence << std::endl;
-    std::cout << " FENCE wait cycles: ";
+  void printAll(std::ostream &out) const {
+    out << "CACHE STATS" << std::endl;
+    out << " Misses: " << cache.misses << std::endl;
+    out << " Hits: " << cache.hits << std::endl;
+    out << " Evictions: " << cache.evictions << std::endl;
+    out << " Reads: " << cache.reads << std::endl;
+    out << " Writes: " << cache.writes << std::endl;
+    out << " Clean evictions: " << cache.clean_evictions << std::endl;
+    out << " Dirty evictions: " << cache.dirty_evictions << std::endl;
+    out << " CLWB: " << cache.clwb << std::endl;
+    out << " Writebacks enqueued: " << cache.writebacks_enqueued << std::endl;
+    out << " Writebacks completed: " << cache.writebacks_completed << std::endl;
+    out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << std::endl;
+    out << " FENCE: " << cache.fence << std::endl;
+    out << " FENCE wait cycles: ";
     for (auto cycles : cache.fence_wait_cycles)
-      std::cout << cycles << " ";
-    std::cout << std::endl;
+      out << cycles << " ";
+    out << std::endl;
 
-    std::cout << "NVM STATS" << std::endl;
-    std::cout << " Reads: " << nvm.reads << std::endl;
-    std::cout << " Writes: " << nvm.writes << std::endl;
+    out << "NVM STATS" << std::endl;
+    out << " Reads: " << nvm.reads << std::endl;
+    out << " Writes: " << nvm.writes << std::endl;
 
-    std::cout << "CHECKPOINT STATS" << std::endl;
-    std::cout << " Checkpoints: " << checkpoint.checkpoints << std::endl;
-    std::cout << " Due to period: " << checkpoint.due_to_period << std::endl;
-    std::cout << " Due to explicit: " << checkpoint.due_to_explicit << std::endl;
-    std::cout << " Restores: " << checkpoint.restores << std::endl;
+    out << "CHECKPOINT STATS" << std::endl;
+    out << " Checkpoints: " << checkpoint.checkpoints << std::endl;
+    out << " Due to period: " << checkpoint.due_to_period << std::endl;
+    out << " Due to explicit: " << checkpoint.due_to_explicit << std::endl;
+    out << " Restores: " << checkpoint.restores << std::endl;
 
-    std::cout << "REPLAYCACHE STATS" << std::endl;
-    std::cout << " Region starts: " << replay_cache.region_starts << std::endl;
-    std::cout << " Region ends: " << replay_cache.region_ends << std::endl;
-    std::cout << " Region sizes: ";
+    out << "REPLAYCACHE STATS" << std::endl;
+    out << " Region starts: " << replay_cache.region_starts << std::endl;
+    out << " Region ends: " << replay_cache.region_ends << std::endl;
+    out << " Region sizes: ";
     for (auto size : replay_cache.region_sizes)
-      std::cout << size << " ";
-    std::cout << std::endl;
-    std::cout << " Stores per region: ";
+      out << size << " ";
+    out << std::endl;
+    out << " Stores per region: ";
     for (auto stores : replay_cache.stores_per_region)
-      std::cout << stores << " ";
-    std::cout << std::endl;
-    std::cout << " Replays: " << replay_cache.replays << std::endl;
+      out << stores << " ";
+    out << std::endl;
+    out << " Replays: " << replay_cache.replays << std::endl;
 
-    std::cout << "MISC STATS" << std::endl;
-    std::cout << " Max dirty ratio: " << misc.max_dirty_ratio << std::endl;
-    std::cout << " Dirty ratio (last): " << misc.dirty_ratio << std::endl;
-    std::cout << " On duration: " << misc.on_duration << std::endl;
-
-    std::cout << "-------------------------------------" << std::endl;
+    out << "MISC STATS" << std::endl;
+    out << " Max dirty ratio: " << misc.max_dirty_ratio << std::endl;
+    out << " Dirty ratio (last): " << misc.dirty_ratio << std::endl;
+    out << " On duration: " << misc.on_duration << std::endl;
   }
 
   void logAll(std::ofstream &out) {

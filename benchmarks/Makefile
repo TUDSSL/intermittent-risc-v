@@ -1,23 +1,20 @@
-build = $(MAKE) -f make-build.mk
-run = $(MAKE) -f make-run.mk
-
 build:
 	@echo "Building all benchmarks"
-	OPT_LEVEL="-O3" $(build) all
+	OPT_LEVEL="-O3" $(MAKE) -f make-build.mk all
 
 run:
 	@echo "Running all benchmarks using all configurations"
-	$(run) all
+	$(MAKE) -f make-run.mk all
 
 analyze:
 	@echo "Analyzing results"
 	cd ../plotting && ./build.sh
 
 clean-build:
-	$(build) clean
+	$(MAKE) -f make-build.mk clean
 
 clean-run:
-	$(run) clean
+	$(MAKE) -f make-run.mk clean
 
 clean: clean-build clean-run
 

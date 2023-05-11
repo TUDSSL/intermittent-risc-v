@@ -67,7 +67,11 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   ~ReplayCacheIntrinsics() {
-    stats.printAll();
+    std::cout << "\n-------------------------------------" << std::endl;
+    cache->printConfig(std::cout);
+    std::cout << "-------------------------------------" << std::endl;
+    stats.printAll(std::cout);
+    std::cout << "-------------------------------------" << std::endl;
     std::cout << printLeader() << " total cycle count: " << pipeline.getTotalCycles() << std::endl;
 
     // TODO: log stats to file
@@ -235,11 +239,13 @@ class ReplayCacheIntrinsics : public HookCode {
 
   void executeCLWB() {
     const auto clwb_cycles = cache->clwb(last_store_address, last_store_size);
+    p_debug << printLeader() << " CLWB cycles: " << clwb_cycles << std::endl;
     pipeline.addToCycles(clwb_cycles);
   }
 
   void executeFence() {
     const auto fence_cycles = cache->fence();
+    p_debug << printLeader() << " FENCE cycles: " << fence_cycles << std::endl;
     pipeline.addToCycles(fence_cycles);
   }
 
@@ -317,9 +323,9 @@ class ReplayCacheIntrinsics : public HookCode {
     stats.incReplays();
 
     // Get the register values from the QuickRecall storage area
-    stats.incNVMReads(4);
+    stats.incNVMReads(4); // CPU cycles are accounted for later
     const auto src_value = getCheckpointedRegisterValue(store.r_src);
-    stats.incNVMReads(4);
+    stats.incNVMReads(4); // CPU cycles are accounted for later
     const auto base_value = getCheckpointedRegisterValue(store.r_base);
 
     // Calculate the actual destination address, respecting the offset
@@ -328,17 +334,27 @@ class ReplayCacheIntrinsics : public HookCode {
     p_debug << printLeader() << " replay 0x" << std::hex << std::setw(8) << std::setfill('0') << src_value
             << " to 0x" << std::hex << std::setw(8) << std::setfill('0') << addr << std::dec << std::endl;
 
-    // Inform the cache about the replay
+    // Tick the cache with the amount of cycles spent on reading the to-be-replayed value
+    const auto cost_read_replay_value =
+        6 * store.size // NVM read of the source register
+      + 6 * 4;         // NVM read of the base register
+    pipeline.addToCycles(cost_read_replay_value);
+    cache->tick(cost_read_replay_value);
+
+    // Inform the cache about the replay-store instruction
     cache->handleReplay(addr, src_value, store.size);
 
-    // Cost of a single replay is between 34 and 58 cycles
-    pipeline.addToCycles(6 * store.size); // NVM read of the source register
-    pipeline.addToCycles(6 * 4); // NVM read of the base register
-    // replaing the store into the cache is already counted in the cache->handleReplay() call
-    pipeline.addToCycles(1); // decrementing the replay counter
-    pipeline.addToCycles(1); // checking if the replay counter is zero
+    // Call CLWB on the replayed store
+    // NOTE: This is *not* mentioned in the paper, but the authors have confirmed
+    //       that it was merely omitted from Figure 6 for brevity.
+    pipeline.addToCycles(1 + cache->clwb(addr, store.size));
 
-    // No need to tick the cache here, as there cannot be any writebacks yet
+    // Account for post-replay instructions
+    const auto cost_post_replay =
+        1  // decrementing the replay counter
+      + 1; // checking if the replay counter is zero
+    pipeline.addToCycles(cost_post_replay);
+    cache->tick(cost_post_replay);
   }
 
   void quickRecallRestore() {

@@ -147,6 +147,18 @@ class AsyncWriteBackCache {
     return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay, arg_writeback_queue_size, arg_writeback_parallelism);
   }
 
+  void printConfig(std::ostream &out) const {
+    out << "ASYNC WRITEBACK CACHE CONFIGURATION" << endl;
+    out << "  Policy: " << policy << endl;
+    out << "  Hash method: " << hash_method << endl;
+    out << "  Capacity: " << capacity << endl;
+    out << "  Sets: " << no_of_sets << endl;
+    out << "  Lines: " << no_of_lines << endl;
+    out << "  Writeback delay: " << writeback_delay << endl;
+    out << "  Writeback queue size: " << writeback_queue_size << endl;
+    out << "  Writeback parallelism: " << writeback_parallelism << endl;
+  }
+
   /**
    * @brief Set a pipeline instance.
    * If no pipeline is set, no cycle statistics will be available.
