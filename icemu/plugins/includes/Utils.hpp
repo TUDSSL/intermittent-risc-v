@@ -29,7 +29,7 @@ static const int NO_OF_CACHE_BLOCKS = 4;
 #ifdef PRINT_DEBUG
 #define p_debug cout
 #else
-std::ofstream p_debug("/dev/null");
+#define p_debug if (false) cout
 ;
 #endif
 
