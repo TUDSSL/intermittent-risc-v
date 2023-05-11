@@ -34,6 +34,10 @@ class PowerFailureGenerator {
     stats.updateOnDuration(on_duration);
   }
 
+  auto getOnDuration() const {
+    return on_duration;
+  }
+
   bool shouldReset(_Pipeline &pipeline, Checkpoint &checkpoint) {
     if (fail_next ||
         (reset_cycle_target > 0 && pipeline.getTotalCycles() >= reset_cycle_target)) {

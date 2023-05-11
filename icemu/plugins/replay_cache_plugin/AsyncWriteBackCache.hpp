@@ -147,6 +147,14 @@ class AsyncWriteBackCache {
     return AsyncWriteBackCache(emu, LRU, arg_cache_hash_method, arg_cache_size, arg_cache_lines, arg_writeback_delay, arg_writeback_queue_size, arg_writeback_parallelism);
   }
 
+  auto getCapacity() const {
+    return capacity;
+  }
+
+  auto getNoOfLines() const {
+    return no_of_lines;
+  }
+
   void printConfig(std::ostream &out) const {
     out << "ASYNC WRITEBACK CACHE CONFIGURATION" << endl;
     out << "  Policy: " << policy << endl;

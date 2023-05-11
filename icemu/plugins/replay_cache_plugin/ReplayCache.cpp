@@ -53,6 +53,8 @@ class ReplayCacheIntrinsics : public HookCode {
   Checkpoint checkpoint;
   _PFG power_failure_generator;
 
+  std::ofstream logger_cont, logger_final;
+
  public:
   explicit ReplayCacheIntrinsics(Emulator &emu, const std::shared_ptr<_Cache> &cache)
       : HookCode(emu, "replay_cache"),
@@ -64,9 +66,24 @@ class ReplayCacheIntrinsics : public HookCode {
     pipeline.setVerifyNextInstructionGuess(false);
     cache->setPipeline(&pipeline);
     cache->setStats(&stats);
+
+    std::string filename_base = "replay_cache_log";
+    const auto args = PluginArgumentParsing::GetArguments(emu, "log-file=");
+    if (args.size())
+      filename_base = args[0];
+    filename_base += "-" + std::to_string(cache->getCapacity());
+    filename_base += "-" + std::to_string(cache->getNoOfLines());
+    filename_base += "-" + std::to_string(power_failure_generator.getOnDuration());
+    filename_base += "-0"; // checkpoint period unused, for compatibility
+    std::cout << printLeader() << " Log file: " << filename_base << std::endl;
+
+    logger_cont.open(filename_base + "-cont", std::ios::out | std::ios::trunc);
+    logger_cont << "checkpoints,cycle count,last checkpoint,dirty ratio,cause\n";
+    logger_final.open(filename_base + "-final", std::ios::out | std::ios::trunc);
   }
 
   ~ReplayCacheIntrinsics() {
+    // Print stats & config summary to stdout
     std::cout << "\n-------------------------------------" << std::endl;
     cache->printConfig(std::cout);
     std::cout << "-------------------------------------" << std::endl;
@@ -74,7 +91,8 @@ class ReplayCacheIntrinsics : public HookCode {
     std::cout << "-------------------------------------" << std::endl;
     std::cout << printLeader() << " total cycle count: " << pipeline.getTotalCycles() << std::endl;
 
-    // TODO: log stats to file
+    // Formally store stats in the log file
+    stats.logAll(logger_final);
   }
 
   void run(hook_arg *arg) {
@@ -250,7 +268,8 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void createCheckpoint() {
-    stats.incCheckpoints();
+    stats.incCheckpoints(pipeline.getTotalCycles());
+    logger_cont << stats.getContinuousLine() << "\n"; // "\n" instead of std::endl to avoid immediate flushing
 
     const auto n_registers_checkpointed = checkpoint.create();
     const auto n_bytes_transferred = n_registers_checkpointed * 4;

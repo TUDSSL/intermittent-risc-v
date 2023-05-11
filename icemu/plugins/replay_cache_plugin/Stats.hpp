@@ -29,7 +29,7 @@ struct NVMStats {
 };
 
 struct CheckpointStats {
-  int checkpoints;
+  std::vector<unsigned int> checkpoints; //< Cycle count per checkpoint
   int due_to_period;
   int due_to_explicit;
   int restores;
@@ -84,7 +84,7 @@ class Stats {
 
   /* Checkpoint statistics updates */
 
-  void incCheckpoints() { checkpoint.checkpoints++; }
+  void incCheckpoints(unsigned int cycle_count) { checkpoint.checkpoints.emplace_back(cycle_count); }
   void incCheckpointsDueToPeriod() { checkpoint.due_to_period++; }
   void incCheckpointsDueToExplicit() { checkpoint.due_to_explicit++; }
   void incRestores() { checkpoint.restores++; }
@@ -133,7 +133,7 @@ class Stats {
     out << " Writes: " << nvm.writes << std::endl;
 
     out << "CHECKPOINT STATS" << std::endl;
-    out << " Checkpoints: " << checkpoint.checkpoints << std::endl;
+    out << " Checkpoints: " << checkpoint.checkpoints.size() << std::endl;
     out << " Due to period: " << checkpoint.due_to_period << std::endl;
     out << " Due to explicit: " << checkpoint.due_to_explicit << std::endl;
     out << " Restores: " << checkpoint.restores << std::endl;
@@ -157,7 +157,7 @@ class Stats {
     out << " On duration: " << misc.on_duration << std::endl;
   }
 
-  void logAll(std::ofstream &out) {
+  void logAll(std::ofstream &out) const {
     out << "cache_miss:" << cache.misses << std::endl;
     out << "cache_hit:" << cache.hits << std::endl;
     out << "cache_eviction:" << cache.evictions << std::endl;
@@ -178,7 +178,7 @@ class Stats {
     out << "nvm_reads:" << nvm.reads << std::endl;
     out << "nvm_writes:" << nvm.writes << std::endl;
 
-    out << "checkpoint:" << checkpoint.checkpoints << std::endl;
+    out << "checkpoint:" << checkpoint.checkpoints.size() << std::endl;
     out << "checkpoint_period:" << checkpoint.due_to_period << std::endl;
     out << "checkpoint_explicit:" << checkpoint.due_to_explicit << std::endl;
     out << "restore:" << checkpoint.restores << std::endl;
@@ -198,6 +198,31 @@ class Stats {
     out << "max_dirty_ratio:" << misc.max_dirty_ratio << std::endl;
     out << "dirty_ratio:" << misc.dirty_ratio << std::endl;
     out << "on_duration_cycles:" << misc.on_duration << std::endl;
+  }
+
+  std::string getContinuousLine() const {
+    std::string res;
+
+    // "checkpoints"
+    res += std::to_string(checkpoint.checkpoints.size());
+    res += ',';
+    // "cycle count"
+    res += std::to_string(checkpoint.checkpoints.back());
+    res += ',';
+    // "last checkpoint" (difference in cycles since last checkpoint, or the total cycle count if this is the first checkpoint)
+    if (checkpoint.checkpoints.size() > 1) {
+      res += std::to_string(checkpoint.checkpoints.back() - checkpoint.checkpoints[checkpoint.checkpoints.size() - 2]);
+    } else {
+      res += std::to_string(checkpoint.checkpoints.back());
+    }
+    res += ',';
+    // "dirty ratio"
+    res += std::to_string(misc.dirty_ratio);
+    res += ',';
+    // "cause", always 3 for ReplayCache
+    res += "3";
+
+    return res;
   }
 
 };

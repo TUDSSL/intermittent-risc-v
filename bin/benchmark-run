@@ -157,14 +157,11 @@ function prowl() {
 function replay-cache() {
     on_duration=$1
     # TODO: specify more (or all available) configuration options
-    # TODO: specify log file
     run-elf \
         -p replay_cache_plugin.so \
+        -a log-file=$LOGDIR/$name-$compile_config-run-replay_cache \
         -a on-duration=$on_duration \
         $elf
-
-    # TODO: temporary to indicate that the run is done
-    touch $LOGDIR/$name-$compile_config-run-replay_cache-$on_duration
 }
 
 function plain-c() {

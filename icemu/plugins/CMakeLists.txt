@@ -27,7 +27,7 @@ set(PLUGIN_COMPILE_OPTIONS
     -Wextra
     -g
     -O3
-    -std=c++11
+    -std=c++17
     -shared
     -fPIC
     )
