@@ -80,7 +80,7 @@ CLANK_CONFIGURATIONS += \
   		clank
 
 REPLAY_CACHE_CONFIGURATIONS += \
-		replay-cache
+		replay-cache+8192+2
 
 PLAINC_CONFIGURATIONS += \
   		plain-c
@@ -292,7 +292,7 @@ clean:
 
 .PHONY: all clean \
 	show-targets show-benchmarks \
-	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-plain-c show-targets-prowl \
-	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-plain-c run-targets-prowl \
+	show-targets-nacho-naive show-targets-nacho-pw show-targets-nacho-clank show-targets-plain-c show-targets-prowl show-targets-replay-cache \
+	run-targets-nacho-naive run-targets-nacho-pw run-targets-nacho-clank run-targets-plain-c run-targets-prowl run-targets-replay-cache \
 	show-pf-targets run-pf-targets \
 	$(TARGETS)

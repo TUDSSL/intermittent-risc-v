@@ -21,12 +21,16 @@ fi
 # This is the plain default configuration
 function uninstrumented() {
     export PATH="$LLVM_BIN_ROOT/bin:$PATH"
+    export LLVM_COMPILER_PATH="$LLVM_BIN_ROOT/bin"
+    export LLVM_CC_NAME=clang-16
 }
 
 # ReplayCache
 # This it the ReplayCache-specific configuration with a patched LLVM version
 function replay-cache() {
     export PATH="$LLVM_RC_ROOT/bin:$PATH"
+    export LLVM_COMPILER_PATH="$LLVM_RC_ROOT/bin"
+    export LLVM_CC_NAME=clang-16
 }
 
 
@@ -63,7 +67,7 @@ function build_benchmark() {
     # Allow target configuration to apply its changes
     "$benchmark_name" "$benchmark_name"
 
-    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -B "$build_dir"
+    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=TRUE -B "$build_dir"
     cmake --build "$build_dir"
 }
 

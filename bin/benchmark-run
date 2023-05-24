@@ -155,10 +155,16 @@ function prowl() {
 }
 
 function replay-cache() {
-    on_duration=$1
-    # TODO: specify more (or all available) configuration options
+    cache=$1
+    lines=$2
+    on_duration=$3
     run-elf \
         -p replay_cache_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=$cache \
+        -a cache-lines=$lines \
+        -a writeback-queue-size=16 \
+        -a writeback-parallelism=1 \
         -a log-file=$LOGDIR/$name-$compile_config-run-replay_cache \
         -a on-duration=$on_duration \
         $elf

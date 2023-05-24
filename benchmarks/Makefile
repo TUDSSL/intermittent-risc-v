@@ -2,7 +2,7 @@ build:
 	@echo "Building all benchmarks"
 	OPT_LEVEL="-O3" $(MAKE) -f make-build.mk all
 
-run:
+run: build
 	@echo "Running all benchmarks using all configurations"
 	$(MAKE) -f make-run.mk all
 
