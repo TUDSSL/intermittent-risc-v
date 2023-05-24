@@ -189,7 +189,7 @@ $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
 
 # ReplayCache
 $(foreach bench,$(BENCHMARKS), $(foreach on-duration,$(ON_DURATIONS), \
-	$(eval $(call generate_pf_run_target_configurations,$(bench),replay-cache,replay-cache,$(on-duration)))))
+	$(eval $(call generate_pf_run_target_configurations,$(bench),replay-cache,replay-cache+8192+2,$(on-duration)))))
 
 show-pf-targets:
 	@echo "$(PF_TARGETS)"
