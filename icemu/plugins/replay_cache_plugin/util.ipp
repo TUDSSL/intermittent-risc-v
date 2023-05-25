@@ -97,10 +97,10 @@ struct StoreParsed {
 
     if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_SH || insn->id == RISCV_INS_SB) {
       assert(insn->detail->riscv.op_count == 2);
-      
+
       const auto o_mem = insn->detail->riscv.operands[1];
       assert(o_mem.type == RISCV_OP_MEM);
-      
+
       store.r_base = fromCapstone(o_mem.mem.base);
       store.offset = o_mem.mem.disp;
       if (insn->id == RISCV_INS_SW) {
@@ -119,7 +119,7 @@ struct StoreParsed {
       assert(o_offset.type == RISCV_OP_IMM);
 
       store.r_base = fromCapstone(o_base.reg);
-      store.offset = o_offset.imm * 4;
+      store.offset = o_offset.imm;
       store.size = 4;
     } else {
       assert(false && "invalid store instruction to decode");

@@ -259,7 +259,8 @@ class AsyncWriteBackCache {
     ASSERT(line);
     ASSERT(hit);
     ASSERT(!miss);
-    ASSERT(collisions == 0);
+    // As the cache line must be found, there must at most be one non-colliding line
+    ASSERT(collisions < no_of_lines);
 
     updateCacheLastUsed(*line);
     return enqueueWriteback(*line);
