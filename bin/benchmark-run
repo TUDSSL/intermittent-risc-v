@@ -163,7 +163,7 @@ function replay-cache() {
         -a hash-method=0 \
         -a cache-size=$cache \
         -a cache-lines=$lines \
-        -a writeback-queue-size=16 \
+        -a writeback-queue-size=8 \
         -a writeback-parallelism=1 \
         -a log-file=$LOGDIR/$name-$compile_config-run-replay_cache \
         -a on-duration=$on_duration \

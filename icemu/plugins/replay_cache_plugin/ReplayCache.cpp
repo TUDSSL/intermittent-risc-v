@@ -173,20 +173,15 @@ class ReplayCacheIntrinsics : public HookCode {
                 endRegion();
               startRegion();
               break;
-            case 1: p_debug << "end region" << std::endl;
-              // End a region without starting a new one.
-              // Issued before a branch, but after the fence.
-              endRegion();
-              break;
-            case 2: p_debug << "CLWB" << std::endl;
+            case 1: p_debug << "CLWB" << std::endl;
               executeCLWB();
               was_cache_instr = true;
               break;
-            case 3: p_debug << "FENCE" << std::endl;
+            case 2: p_debug << "FENCE" << std::endl;
               executeFence();
               was_cache_instr = true;
               break;
-            case 4: p_debug << "power failure next" << std::endl;
+            case 3: p_debug << "power failure next" << std::endl;
               power_failure_generator.failNext();
               break;
             default:
