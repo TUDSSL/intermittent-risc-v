@@ -38,6 +38,10 @@ class AsyncWriteBackCache {
 
  private:
 
+  static std::string printLeader() {
+    return "[awbc] ";
+  }
+
   icemu::Emulator &emu;
   LocalMemory nvm;
   RiscvE21Pipeline *pipeline = nullptr;
@@ -81,7 +85,7 @@ class AsyncWriteBackCache {
         writeback_parallelism(writeback_parallelism) {
     nvm.initMem(&emu.getMemory());
 
-    p_debug << "Hash method: " << hash_method << endl;
+    p_debug << printLeader() << "Hash method: " << hash_method << endl;
     if (hash_method == SKEW_ASSOCIATIVE)
       policy = SKEW;
 
@@ -89,9 +93,9 @@ class AsyncWriteBackCache {
     no_of_sets = capacity / (no_of_lines * NO_OF_CACHE_BLOCKS);
 
     // Initialize the cache
-    p_debug << "CAPACITY: " << capacity << endl;
-    p_debug << "SETS: " << no_of_sets << endl;
-    p_debug << "Lines: " << no_of_lines << endl;
+    p_debug << printLeader() << "CAPACITY: " << capacity << endl;
+    p_debug << printLeader() << "SETS: " << no_of_sets << endl;
+    p_debug << printLeader() << "Lines: " << no_of_lines << endl;
     zeroCacheContent();
   }
 
@@ -330,7 +334,7 @@ class AsyncWriteBackCache {
          ~(GET_MASK(NUM_BITS(CACHE_BLOCK_SIZE)))) >>
         NUM_BITS(CACHE_BLOCK_SIZE);
 
-    p_debug << (mem_type == HookMemory::MEM_READ ? "READ" : "WRITE")
+    p_debug << printLeader() << (mem_type == HookMemory::MEM_READ ? "READ" : "WRITE")
             << " REQ: " << hex << req.addr << " VALUE: " << req.value << dec
             << " OFFSET: " << req.mem_id.offset << " SIZE: " << req.size
             << endl;
@@ -390,13 +394,13 @@ class AsyncWriteBackCache {
           cacheHash(req.mem_id.tag, req.mem_id.index, hash_method, i);
       CacheLine &line = sets.at(hashed_index).lines[i];
 
-      p_debug << "Checking IDX: " << hex << hashed_index << dec << " WAY: " << i
+      p_debug << printLeader() << "Checking IDX: " << hex << hashed_index << dec << " WAY: " << i
               << endl;
 
       // New cache entry for the line.
       if (line.valid == false) {
         miss = true;
-        p_debug << "Cache create, stored at IDX: " << hex << hashed_index << dec
+        p_debug << printLeader() << "Cache create, stored at IDX: " << hex << hashed_index << dec
                 << " WAY: " << i << endl;
         return &line;
       }
@@ -406,11 +410,11 @@ class AsyncWriteBackCache {
         if (reconstructAddress(line) ==
             reconstructAddress(req.mem_id.tag, req.mem_id.index)) {
           hit = true;
-          p_debug << "Cache hit, stored at IDX: " << hex << hashed_index << dec
+          p_debug << printLeader() << "Cache hit, stored at IDX: " << hex << hashed_index << dec
                   << " WAY: " << i << endl;
           return &line;
         } else {
-          p_debug << "Cache miss for Addr: " << hex << req.addr << dec << endl;
+          p_debug << printLeader() << "Cache miss for Addr: " << hex << req.addr << dec << endl;
           collisions++;
         }
       }
@@ -427,13 +431,13 @@ class AsyncWriteBackCache {
         if (stats) stats->incCacheReads(req.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * req.size);
 
-        p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
+        p_debug << printLeader() << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
 
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
 
-        p_debug << "Cache before write: " << hex << line.blocks.data << dec
+        p_debug << printLeader() << "Cache before write: " << hex << line.blocks.data << dec
                 << endl;
 
         writeToCache(line);
@@ -441,11 +445,11 @@ class AsyncWriteBackCache {
         if (stats) stats->incCacheWrites(req.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
-        p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
+        p_debug << printLeader() << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at NVM: " << hex
+        p_debug << printLeader() << "Data at NVM: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
-        p_debug << "Data at EMULATOR: " << hex
+        p_debug << printLeader() << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
         break;
     }
@@ -471,7 +475,7 @@ class AsyncWriteBackCache {
         if (stats) stats->incCacheReads(req.size);
         // NOTE: reading from cache is NOT counted (TODO: is it true that on a READ MISS it's 'free'?)
 
-        p_debug << "Cache read req, read DATA: " << line.blocks.data << endl;
+        p_debug << printLeader() << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;
       case HookMemory::MEM_WRITE:
         setBit(DIRTY, line);
@@ -489,17 +493,17 @@ class AsyncWriteBackCache {
         if (stats) stats->incCacheWrites(req.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
-        p_debug << "Cache before write: " << hex << line.blocks.data << dec
+        p_debug << printLeader() << "Cache before write: " << hex << line.blocks.data << dec
                 << endl;
 
         // In case of a write, copy the value from the CPU to the data
         writeToCache(line);
 
-        p_debug << "Cache write req, written DATA: " << hex << line.blocks.data
+        p_debug << printLeader() << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
-        p_debug << "Data at NVM: " << hex
+        p_debug << printLeader() << "Data at NVM: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
-        p_debug << "Data at EMULATOR: " << hex
+        p_debug << printLeader() << "Data at EMULATOR: " << hex
                 << nvm.emulatorRead(reconstructAddress(line), 4) << dec << endl;
 
         break;
@@ -527,7 +531,7 @@ class AsyncWriteBackCache {
                                            sets.at(hashed_index).lines.end()));
         break;
       case SKEW:
-        p_err << "SKEW policy not implemented yet" << endl;
+        p_err << printLeader() << "SKEW policy not implemented yet" << endl;
         ASSERT(false);
         break;
     }
@@ -538,7 +542,7 @@ class AsyncWriteBackCache {
     // Reconstruct the address
     auto evict_address = reconstructAddress(*evicted_line);
 
-    p_debug << "Evicting address: " << std::hex << evict_address << std::dec << std::endl;
+    p_debug << printLeader() << "Evicting address: " << std::hex << evict_address << std::dec << std::endl;
     if (stats) stats->incCacheEvictions();
 
     // Perform the eviction
@@ -591,7 +595,7 @@ class AsyncWriteBackCache {
 
     if (stats) stats->incCacheWritebacksCompleted();
 
-    p_debug << "Completing writeback for address: "
+    p_debug << printLeader() << "Completing writeback for address: "
             << std::hex << wb.addr << std::dec << std::endl;
 
     nvm.localWrite(wb.addr, wb.data, wb.size);
@@ -736,11 +740,11 @@ class AsyncWriteBackCache {
           foundData = true;
 
           // Debug prints
-          p_debug << "Data from emulator memory, at ADDR: " << hex << req.addr
+          p_debug << printLeader() << "Data from emulator memory, at ADDR: " << hex << req.addr
                   << " DATA: " << valueFromEmuMem << dec << endl;
-          p_debug << "Data stored in cache, at ADDR: " << hex << req.addr
+          p_debug << printLeader() << "Data stored in cache, at ADDR: " << hex << req.addr
                   << " DATA: " << data << dec << endl;
-          p_debug << "Data from local NVM memory, at ADDR: " << hex
+          p_debug << printLeader() << "Data from local NVM memory, at ADDR: " << hex
                   << req.addr
                   << " DATA: " << nvm.localRead(reconstructAddress(line), 4)
                   << dec << endl
@@ -775,14 +779,14 @@ class AsyncWriteBackCache {
             req.mem_id.offset, req.size);
 
         if (mem_data != valueFromEmuMem) {
-          p_err << hex << "From local: " << mem_data
+          p_err << printLeader() << hex << "From local: " << mem_data
                 << " From emulator: " << valueFromEmuMem
                 << " at addr: " << req.addr << dec << " size:" << req.size
                 << endl;
           ASSERT(false);
         }
       } else {
-        p_err << hex << "From local: " << data
+        p_err << printLeader() << hex << "From local: " << data
               << " From emulator: " << valueFromEmuMem
               << " at addr: " << req.addr << dec << " size:" << req.size
               << endl;
@@ -895,11 +899,11 @@ class AsyncWriteBackCache {
           ASSERT(dirty_ratio >= 0.0f && dirty_ratio <= 1.0f);
           if (stats) stats->updateDirtyRatio(dirty_ratio);
         }
-        // p_debug << "Setting dirty bit: " << line.blocks.set_bits << " to " <<
+        // p_debug << printLeader() << "Setting dirty bit: " << line.blocks.set_bits << " to " <<
         // dirty_ratio << endl;
         break;
       default:
-        p_err << "Only VALID and DIRTY should be set through here" << std::endl;
+        p_err << printLeader() << "Only VALID and DIRTY should be set through here" << std::endl;
         ASSERT(false);
     }
   }
@@ -930,7 +934,7 @@ class AsyncWriteBackCache {
         }
         break;
       default:
-        p_err << "Only VALID and DIRTY are supported through here" << std::endl;
+        p_err << printLeader() << "Only VALID and DIRTY are supported through here" << std::endl;
         ASSERT(false);
         break;
     }
