@@ -40,6 +40,7 @@ class ReplayCacheIntrinsics : public HookCode {
 
   bool is_region_active = false;
   unsigned int region_instruction_count = 0;
+  unsigned int store_count_after_fence = 0;
   std::vector<insn_t> replay_instructions;
   arch_addr_t last_region_register_value = 0;
   arch_addr_t last_store_address = 0;
@@ -203,6 +204,11 @@ class ReplayCacheIntrinsics : public HookCode {
       case RISCV_INS_C_SWSP: {
         recordLastStore(insn);
         if (is_region_active) {
+          // Increase the store counter.
+          // Only when a region is active, to exclude stores that occurred before the first
+          // region was activated
+          ++store_count_after_fence;
+
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
           p_debug << printLeader() << " stored instruction for replay" << std::endl;
@@ -248,6 +254,11 @@ class ReplayCacheIntrinsics : public HookCode {
 
     is_region_active = true;
     assert(replay_instructions.empty());
+
+    // Sanity check for compiler-generated code.
+    // Any ReplayCache region can only safely be started when no stores have been
+    // performed since the last FENCE instruction
+    assert(store_count_after_fence == 0);
   }
 
   void executeCLWB() {
@@ -260,6 +271,7 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto fence_cycles = cache->fence();
     p_debug << printLeader() << " FENCE cycles: " << fence_cycles << std::endl;
     pipeline.addToCycles(fence_cycles);
+    store_count_after_fence = 0;
   }
 
   void createCheckpoint() {
