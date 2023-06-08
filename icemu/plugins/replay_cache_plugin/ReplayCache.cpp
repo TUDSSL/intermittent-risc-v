@@ -150,21 +150,21 @@ class ReplayCacheIntrinsics : public HookCode {
   bool checkInstruction(insn_t insn) {
     const auto rvinsn = (riscv_insn)insn->id;
     switch (rvinsn) {
-      case RISCV_INS_AUIPC: {
+      case RISCV_INS_C_LI: {
         // Extract the operands
         const auto rd = insn->detail->riscv.operands[0];
-        const auto imm20 = insn->detail->riscv.operands[1];
+        const auto imm = insn->detail->riscv.operands[1];
         assert(rd.type == RISCV_OP_REG);
-        assert(imm20.type == RISCV_OP_IMM);
+        assert(imm.type == RISCV_OP_IMM);
 
         // Process in case rd is x31 (t6)
         if (rd.reg == RISCV_REG_X31) {
           // Read the immediate value
-          const auto imm1_value = imm20.imm;
-          p_debug << printLeader() << " AUIPC x31, " << imm1_value << ": ";
+          const auto imm_value = imm.imm;
+          p_debug << printLeader() << " C.LI x31, " << imm_value << ": ";
 
           bool was_cache_instr = false;
-          switch (imm1_value) {
+          switch (imm_value) {
             case 0: p_debug << "start region" << std::endl;
               // Store the PC for verification
               last_region_register_value = getRegisterValue(_Arch::Register::REG_PC);
@@ -186,10 +186,10 @@ class ReplayCacheIntrinsics : public HookCode {
               power_failure_generator.failNext();
               break;
             default:
-              assert(false && "AUIPC immediate for region register not recognized");
+              assert(false && "C.LI immediate for region register not recognized");
               break;
           }
-          // Adjust for any effects that this special AUIPC instruction might have had
+          // Adjust for any effects that this special instruction might have had
           setRegisterValue(_Arch::Register::REG_X31, last_region_register_value);
           if (was_cache_instr)
             return true;
