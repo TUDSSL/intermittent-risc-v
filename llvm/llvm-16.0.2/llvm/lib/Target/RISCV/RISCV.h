@@ -75,6 +75,9 @@ InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVSubtarget &,
                                                     RISCVRegisterBankInfo &);
 void initializeRISCVDAGToDAGISelPass(PassRegistry &);
+
+FunctionPass *createReplayCacheFinalPass();
+void initializeReplayCacheFinalPass(PassRegistry &);
 } // namespace llvm
 
 #endif

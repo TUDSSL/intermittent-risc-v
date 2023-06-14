@@ -82,6 +82,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
   initializeRISCVDAGToDAGISelPass(*PR);
+  initializeReplayCacheFinalPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -336,6 +337,8 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandAtomicPseudoPass());
+
+  addPass(createReplayCacheFinalPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
