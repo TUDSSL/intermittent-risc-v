@@ -56,7 +56,7 @@ static void StartRegionInBB(MachineBasicBlock &MBB) {
 bool ReplayCacheFinal::runOnMachineFunction(MachineFunction &MF) {
   // Skip naked functions
   // TODO: determine eligible functions in an earlier pass
-  if (MF.getFunction().hasFnAttribute("naked"))
+  if (MF.getFunction().hasFnAttribute(Attribute::Naked))
     return false;
 
   auto &TII = *MF.getSubtarget().getInstrInfo();
@@ -93,16 +93,19 @@ bool ReplayCacheFinal::runOnMachineFunction(MachineFunction &MF) {
         }
       }
 
-      switch (MI.getOpcode()) {
-      default:
-        break;
-      case RISCV::SW:
-      case RISCV::SH:
-      case RISCV::SB:
-      case RISCV::C_SW:
-      case RISCV::C_SWSP:
-        BuildRC(MBB, MI.getNextNode(), MI.getDebugLoc(), CLWB);
-        break;
+      auto NextMI = MI.getNextNode();
+      if (NextMI) {
+        switch (MI.getOpcode()) {
+        default:
+          break;
+        case RISCV::SW:
+        case RISCV::SH:
+        case RISCV::SB:
+        case RISCV::C_SW:
+        case RISCV::C_SWSP:
+          BuildRC(MBB, NextMI, MI.getDebugLoc(), CLWB);
+          break;
+        }
       }
     }
   }
