@@ -68,43 +68,48 @@ bool ReplayCacheFinal::runOnMachineFunction(MachineFunction &MF) {
 
     for (auto &MI : MBB) {
 
+      // Skip any instructions that were already inserted by this pass
       if (IsRC(MI))
         continue;
 
+      auto NextMI = MI.getNextNode();
+
       if (MI.isCall()) {
+        // End region before call and start a new one when callee returns
         BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
-        auto Next = MI.getNextNode();
-        if (Next) {
-          BuildRC(MBB, Next, Next->getDebugLoc(), START_REGION);
+        if (NextMI) {
+          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION);
         }
       } else if (MI.isReturn()) {
+        // End region before return
         BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
       } else if (MI.isBranch()) {
-        BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
+        // Create boundaries around branches
         MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
         SmallVector<MachineOperand, 4> Cond;
         if (!TII.analyzeBranch(MBB, TBB, FBB, Cond)) {
+          BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
           if (TBB)
             StartRegionInBB(*TBB);
           if (FBB)
             StartRegionInBB(*FBB);
         } else {
-          // TODO: is this is a problen?
+          // TODO: is this is a problem?
         }
-      }
-
-      auto NextMI = MI.getNextNode();
-      if (NextMI) {
-        switch (MI.getOpcode()) {
-        default:
-          break;
-        case RISCV::SW:
-        case RISCV::SH:
-        case RISCV::SB:
-        case RISCV::C_SW:
-        case RISCV::C_SWSP:
-          BuildRC(MBB, NextMI, MI.getDebugLoc(), CLWB);
-          break;
+      } else {
+        // Insert CLWB after stores
+        if (NextMI) {
+          switch (MI.getOpcode()) {
+          default:
+            break;
+          case RISCV::SW:
+          case RISCV::SH:
+          case RISCV::SB:
+          case RISCV::C_SW:
+          case RISCV::C_SWSP:
+            BuildRC(MBB, NextMI, MI.getDebugLoc(), CLWB);
+            break;
+          }
         }
       }
     }
