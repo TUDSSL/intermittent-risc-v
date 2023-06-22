@@ -50,6 +50,7 @@ static void StartRegionInBB(MachineBasicBlock &MBB) {
   auto &EntryInstr = *FirstNonPHI;
   if (IsRC(EntryInstr))
     return;
+  BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), FENCE);
   BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), START_REGION);
 }
 
@@ -75,27 +76,42 @@ bool ReplayCacheFinal::runOnMachineFunction(MachineFunction &MF) {
       auto NextMI = MI.getNextNode();
 
       if (MI.isCall()) {
-        // End region before call and start a new one when callee returns
-        BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
+        // Start a new region when callee returns
         if (NextMI) {
+          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION);
+        } else {
+          // If there is no next instruction, the callee returns to the
+          // fallthrough
+          auto Fallthrough = MBB.getFallThrough();
+          if (Fallthrough)
+            StartRegionInBB(*Fallthrough);
+          // If there is no fallthrough, this is the last block in the function
+          // and the call is probably a tail call.
         }
       } else if (MI.isReturn()) {
-        // End region before return
-        BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
-      } else if (MI.isBranch()) {
+        // No need to 'explicitly' end a region when returning,
+        // because the caller is expected to do that already
+      } else if (MI.isConditionalBranch()) {
         // Create boundaries around branches
-        MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
-        SmallVector<MachineOperand, 4> Cond;
-        if (!TII.analyzeBranch(MBB, TBB, FBB, Cond)) {
-          BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
-          if (TBB)
-            StartRegionInBB(*TBB);
-          if (FBB)
-            StartRegionInBB(*FBB);
+        auto TrueDest = TII.getBranchDestBlock(MI);
+        MachineBasicBlock *FalseDest = nullptr;
+
+        if (NextMI) {
+          // If the next instruction is an unconditional branch, where it jumps
+          // to should be interpreted as the false branch
+          if (NextMI->isUnconditionalBranch()) {
+            FalseDest = TII.getBranchDestBlock(*NextMI);
+          }
+          // else: nothing of interest (?)
         } else {
-          // TODO: is this is a problem?
+          // If there is no next instruction, the false branch is the fallthrough
+          FalseDest = MBB.getFallThrough();
         }
+
+        StartRegionInBB(*TrueDest);
+        if (FalseDest)
+          StartRegionInBB(*FalseDest);
       } else {
         // Insert CLWB after stores
         if (NextMI) {
