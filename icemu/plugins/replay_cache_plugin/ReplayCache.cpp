@@ -1,6 +1,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <set>
 
 #include "capstone/capstone.h"
 
@@ -42,6 +43,7 @@ class ReplayCacheIntrinsics : public HookCode {
   unsigned int region_instruction_count = 0;
   unsigned int store_count_after_fence = 0;
   std::vector<insn_t> replay_instructions;
+  std::set<_Arch::Register> region_store_operand_registers;
   arch_addr_t last_region_register_value = 0;
   arch_addr_t last_store_address = 0;
   address_t last_store_size = 0;
@@ -147,7 +149,32 @@ class ReplayCacheIntrinsics : public HookCode {
     return checkInstruction(std::move(insn));
   }
 
+  std::string insnDebugLeader(const insn_t &insn) {
+    std::stringstream ss;
+    const auto pc = getRegisterValue(_Arch::Register::REG_PC);
+    ss << printLeader() << " ";
+    ss << std::hex << std::setfill('0') << std::setw(8) << pc << "/";
+    ss << std::hex << std::setfill('0') << std::setw(8) << insn->address << " ";
+    ss << insn->mnemonic << " " << insn->op_str;
+    return ss.str();
+  }
+
   bool checkInstruction(insn_t insn) {
+    // Verify that the registers that this instruction writes to are not used in any of the
+    // instructions that were stored for replay
+    // In RISCV, for all instructions other than stores, if the first operand is a register,
+    // it is the destination register
+    if (insn->detail->riscv.op_count > 0 && insn->detail->riscv.operands[0].type == RISCV_OP_REG &&
+        insn->id != RISCV_INS_SW && insn->id != RISCV_INS_SH && insn->id != RISCV_INS_SB &&
+        insn->id != RISCV_INS_C_SW && insn->id != RISCV_INS_C_SWSP) {
+      const auto rd = fromCapstone(insn->detail->riscv.operands[0].reg);
+      if (region_store_operand_registers.find(rd) != region_store_operand_registers.end()) {
+        std::cerr << insnDebugLeader(insn) << ": instruction writes to register '" << registerNameFriendly(rd)
+                  << "' which is used as a store operand in the current region before this instruction" << std::endl;
+        assert(false);
+      }
+    }
+
     const auto rvinsn = (riscv_insn)insn->id;
     switch (rvinsn) {
       case RISCV_INS_C_LI: {
@@ -202,12 +229,17 @@ class ReplayCacheIntrinsics : public HookCode {
       case RISCV_INS_SB:
       case RISCV_INS_C_SW:
       case RISCV_INS_C_SWSP: {
-        recordLastStore(insn);
+        const auto store = StoreParsed::parse(insn);
+        recordLastStore(store);
         if (is_region_active) {
           // Increase the store counter.
           // Only when a region is active, to exclude stores that occurred before the first
           // region was activated
           ++store_count_after_fence;
+
+          // Mark the operands as not being allowed to be modified in any further instruction
+          region_store_operand_registers.insert(store.r_src);
+          region_store_operand_registers.insert(store.r_base);
 
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
@@ -218,12 +250,11 @@ class ReplayCacheIntrinsics : public HookCode {
       default:
         break;
     }
+
     return false;
   }
 
-  void recordLastStore(const insn_t &insn) {
-    const auto store = StoreParsed::parse(insn);
-
+  void recordLastStore(const StoreParsed &store) {
     // Get only the base value, the source register is irrelevant
     const auto base_value = getRegisterValue(store.r_base);
 
@@ -245,6 +276,7 @@ class ReplayCacheIntrinsics : public HookCode {
     is_region_active = false;
     region_instruction_count = 0;
     replay_instructions.clear();
+    region_store_operand_registers.clear();
   }
 
   void startRegion() {
