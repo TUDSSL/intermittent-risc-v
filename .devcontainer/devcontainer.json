@@ -1,0 +1,20 @@
+{
+	"name": "NACHO IRV Development",
+	"build": {
+		"dockerfile": "../docker/development/Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools-extension-pack",
+				"llvm-vs-code-extensions.vscode-mlir",
+				"jakob-erzar.llvm-tablegen",
+				"ZixuanWang.linkerscript",
+				"GitHub.copilot",
+				"ms-vscode.makefile-tools",
+				"ms-python.python",
+				"ms-toolsai.jupyter"
+			]
+		}
+	}
+}

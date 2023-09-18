@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/llvm/llvm-16.0.2/build/include",
+                "${workspaceFolder}/llvm/llvm-16.0.2/build/lib/**",
+                "${workspaceFolder}/llvm/llvm-16.0.2/llvm/include",
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang-12",
+            "cStandard": "c17",
+            "cppStandard": "c++14",
+            "intelliSenseMode": "linux-clang-x64"
+        }
+    ],
+    "version": 4
+}
