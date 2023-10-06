@@ -16,7 +16,9 @@
 
 #undef strcmp
 
+__attribute__ ((used))
 volatile uint32_t tohost;
+__attribute__ ((used))
 volatile uint32_t fromhost;
 
 static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t arg2)
@@ -29,7 +31,7 @@ static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t
   __sync_synchronize();
 
   tohost = (uintptr_t)magic_mem;
-  
+
 #ifdef SYSCALL_FROMHOST_WAIT
   while (fromhost == 0)
     ;
@@ -40,8 +42,8 @@ static uintptr_t syscall(uintptr_t which, uint32_t arg0, uint32_t arg1, uint32_t
   return magic_mem[0];
 }
 
-__attribute__((noreturn)) 
-__attribute__((noinline)) 
+__attribute__((noreturn))
+__attribute__((noinline))
 void tohost_exit(uintptr_t code)
 {
   tohost = (code << 1) | 1;
@@ -167,7 +169,7 @@ int puts(const char *str) {
     putchar(str[i]);
   }
   putchar('\n');
-  
+
   return 0;
 }
 

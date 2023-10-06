@@ -2,7 +2,7 @@
 # Pass the .elf file (and optional extra arguments) to this script
 
 # Run the ICEmu emulator with the appropriate flags
-icemu \
+exec icemu \
     -p mock_clockfunc_plugin.so \
     -p riscv32_rocketchip_syscall_plugin.so \
     -p custom_cache_plugin.so \
@@ -13,4 +13,3 @@ icemu \
     -a enable-pw-bit=0 \
     -a enable-stack-tracking=0 \
     "$@"
-

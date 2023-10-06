@@ -538,9 +538,9 @@ class Cache {
   }
 
   /**
-   * @brief Write the value received from the CPU to the cache.
+   * @brief Read a value from a cache data block.
    * This has to be done taking into account the offset and the
-   * size of the data received.
+   * size of the data requested.
    */
   uint32_t readFromCache(uint64_t dataToRead, address_t offset,
                          address_t size) {

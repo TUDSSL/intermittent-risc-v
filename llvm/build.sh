@@ -1,8 +1,10 @@
 #!/bin/bash
 
+set -e
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-LLVM_SRC_DIR="$DIR/llvm-9.0.1"
+LLVM_SRC_DIR="$DIR/llvm-16.0.2"
 BUILD_DIR="$LLVM_SRC_DIR/build"
 INSTALL_DIR="$LLVM_SRC_DIR/install"
 
@@ -13,26 +15,29 @@ echo "Install dir: $INSTALL_DIR"
 # Configure step (only runs the first time)
 echo "Configuring LLVM"
 if [ ! -d "$BUILD_DIR" ]; then
-    mkdir -p "$BUILD_DIR"
-    pushd "$BUILD_DIR"
-    CXX=clang++ CC=clang cmake  \
+    CXX=clang++-12 CC=clang-12 cmake  \
         -Wno-dev \
-        -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DLLVM_TARGETS_TO_BUILD="ARM;X86;RISCV" \
+        -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_BUILD_TESTS=OFF \
         -DLLVM_INCLUDE_BENCHMARKS=OFF \
         -DLLVM_BUILD_BENCHMARKS=OFF \
         -DLLVM_BUILD_DOCS=OFF \
         -DLLVM_PARALLEL_LINK_JOBS=4 \
+        -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
+        -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+        -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
     	-DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-        ../llvm
-    popd
+        -S "$LLVM_SRC_DIR"/llvm \
+        -B "$BUILD_DIR"
 fi
+
+# Address https://github.com/llvmenv/llvmenv/issues/115
+ln -sf "$LLVM_SRC_DIR/llvm/projects/libunwind/include/mach-o" \
+       "$LLVM_SRC_DIR/llvm/tools/lld/MachO/mach-o"
 
 # build step
 echo "Building LLVM"
-pushd "$BUILD_DIR"
-ninja -j$(nproc)
-ninja -j$(nproc) install
-popd
+cmake --build "$BUILD_DIR"
+cmake --install "$BUILD_DIR"

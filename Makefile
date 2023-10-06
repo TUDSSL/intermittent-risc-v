@@ -5,11 +5,11 @@
 # Phony targets
 PNONIES=""
 
-all: llvm noelle icemu
+all: llvm icemu
 	echo "Done building all"
 
 # All downloads
-download: download-llvm download-noelle download-icemu
+download: download-llvm download-icemu
 	echo "Done downloading files"
 
 # LLVM
@@ -37,24 +37,8 @@ PHONIES+=clean-llvm-downloads
 
 clean-llvm:
 	@echo "Cleaning LLVM directory"
-	rm -rf llvm/llvm-9.0.1/build
+	rm -rf llvm/llvm-*/build
 PHONIES+=clean-llvm
-
-
-# Noelle
-download-noelle:
-ifdef nodownload
-	@echo "Skipping download"
-else
-	git submodule update --init --recursive noelle/noelle
-	@echo "Noelle submodule up-to-date"
-endif
-PHONIES+=donwnload-noelle
-
-noelle: llvm
-	cd noelle && ./build.sh
-	@echo "Noelle build completed"
-PHONIES+=noelle
 
 
 # ICEmu

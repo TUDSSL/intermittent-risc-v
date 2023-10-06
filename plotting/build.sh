@@ -1,16 +1,18 @@
 #!/bin/bash
 
+set -e
+
 function run_ipynb {
     notebook="$1"
     echo "Running notebook: $notebook"
-    #jupyter nbconvert --execute --to html "$notebook"
-    jupyter nbconvert --execute --to notebook "$notebook"
+    jupyter nbconvert --to notebook --execute "$notebook"
 }
 
-# Run all the notebooks (that generate the plots)
-run_ipynb PrimaryStoryLine.ipynb
-
-# Copy all the notebooks to a 'notebooks' directory
-#mkdir -p notebooks
-#mv ./*.html notebooks/
-
+# Run notebook actions on each notebook in the current directory
+for notebook in ./*.ipynb; do
+    # Skip if this is a converted (executed) notebook
+    if [[ "$notebook" == *.nbconvert.ipynb ]]; then
+        continue
+    fi
+    run_ipynb "$notebook"
+done

@@ -13,7 +13,7 @@ pushd icemu
 # Build ICEmu
 rm -rf build
 rm -rf plugins/build
-mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release ../ && make -j"$(nproc)"
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 echo "Done building ICEmu"
 popd
 

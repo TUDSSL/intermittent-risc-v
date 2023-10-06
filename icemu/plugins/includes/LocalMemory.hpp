@@ -31,6 +31,19 @@ class LocalMemory {
 
  public:
   LocalMemory() = default;
+  LocalMemory(const LocalMemory &) = delete;
+  LocalMemory(LocalMemory &&o)
+      : reads(std::move(o.reads)),
+        writes(std::move(o.writes)),
+        MainMemSegment(o.MainMemSegment),
+        LocalMem(o.LocalMem),
+        EmuMem(o.EmuMem),
+        mem(o.mem) {
+    o.MainMemSegment = nullptr;
+    o.LocalMem = nullptr;
+    o.EmuMem = nullptr;
+    o.mem = nullptr;
+  }
   ~LocalMemory() { delete[] LocalMem; }
 
   // Initialize the local memory and store a copy of the same
@@ -101,8 +114,25 @@ class LocalMemory {
     // MainMemSegment->origin << dec << endl;
   }
 
+  // Write the value of the given size to the emulator memory
+  void emulatorWrite(address_t address, address_t value, address_t size) {
+    p_debug << "[NVM Write] writing to addr: " << hex << address
+            << " data: " << value << dec << endl;
+    address_t address_idx = address - MainMemSegment->origin;
+    for (address_t i = 0; i < size; i++) {
+      uint64_t byte = (value >> (8 * i)) & 0xFF; // Get the bytes
+      EmuMem[address_idx + i] = byte;
+    }
+    // cout << "[emu write] wrote " << hex << (address_t)EmuMem[address_idx] <<
+    // " to mem: " << hex << address_idx + MainMemSegment->origin << dec <<
+    // endl;
+  }
+
   // Read the local memory copy from the address specified
   uint64_t localRead(address_t address, address_t size) {
+    ASSERT(address >= MainMemSegment->origin);
+    ASSERT(address + size <= MainMemSegment->origin + MainMemSegment->length);
+
     address_t address_idx = address - MainMemSegment->origin;
     uint64_t data = 0;
     for (address_t i = 0; i < size; i++) {
@@ -115,6 +145,9 @@ class LocalMemory {
 
   // Read the value from the emulator memory
   uint64_t emulatorRead(address_t address, address_t size) {
+    ASSERT(address >= MainMemSegment->origin);
+    ASSERT(address + size <= MainMemSegment->origin + MainMemSegment->length);
+
     address_t address_idx = address - MainMemSegment->origin;
     uint64_t data = 0;
     for (address_t i = 0; i < size; i++) {

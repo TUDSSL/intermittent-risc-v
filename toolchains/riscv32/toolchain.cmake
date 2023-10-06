@@ -14,7 +14,7 @@ set(LINKER_SCRIPT "${CONFIG_DIR}/linkerscript.ld")
 set(SYSCALL_CODE "${CONFIG_DIR}/syscalls.c")
 set(PRINTF_CODE "${CONFIG_DIR}/printf.c")
 
-set(ALL_TOOLCHAIN_CODE 
+set(ALL_TOOLCHAIN_CODE
     "${SYSCALL_CODE}"
     "${PRINTF_CODE}"
     )
@@ -57,7 +57,7 @@ add_link_options(
     -nodefaultlibs
     -nostdlib
     -static
-    -T${CONFIG_DIR}/linkerscript.ld
+    -T${LINKER_SCRIPT}
 
     ## Add the config dir
     -L${CONFIG_DIR}

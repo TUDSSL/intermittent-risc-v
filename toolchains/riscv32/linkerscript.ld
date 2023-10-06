@@ -29,14 +29,14 @@ SECTIONS
   .tohost : { *(.tohost) }
 
   . = ALIGN(0x1000);
-  .text : { 
+  .text : {
       *(.text)
       *(.rodata)
       *(.rodata*)
   }
 
   /* data segment */
-  .data : { 
+  .data : {
     . = ALIGN(4);
     _sdata = .;
     *(.data)

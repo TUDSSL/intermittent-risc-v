@@ -14,30 +14,23 @@ else
 fi
 
 #
-# The base target configuration for intermittent computing
-#
-
-BASE_ICLANG_CODEGEN_FLAGS=""
-
-#
-# The different target configurations
+# Target configurations
 #
 
 # Uninstrumented
-# Does not perform any transformations but does go trough the pipeline
+# This is the plain default configuration
 function uninstrumented() {
-    # Configure the benchmark
-    export ICLANG_NO_PASSES="YES"
-
-    # Build the benchmark
-    build_benchmark "${FUNCNAME[0]}"
+    export PATH="$LLVM_BIN_ROOT/bin:$PATH"
+    export LLVM_COMPILER_PATH="$LLVM_BIN_ROOT/bin"
+    export LLVM_CC_NAME=clang-16
 }
 
-# Cache Hint
-# Applies the cache hint transformations
-function cachehints() {
-    # Build the benchmark
-    build_benchmark "${FUNCNAME[0]}"
+# ReplayCache
+# This it the ReplayCache-specific configuration with a patched LLVM version
+function replay-cache() {
+    export PATH="$LLVM_RC_ROOT/bin:$PATH"
+    export LLVM_COMPILER_PATH="$LLVM_RC_ROOT/bin"
+    export LLVM_CC_NAME=clang-16
 }
 
 
@@ -71,14 +64,11 @@ function build_benchmark() {
     local build_dir="build-$benchmark_name"
     echo "Building benchmark $benchmark_name in $build_dir"
 
-    rm -rf "$build_dir"
-    mkdir -p "$build_dir"
-    pushd "$build_dir"
+    # Allow target configuration to apply its changes
+    "$benchmark_name" "$benchmark_name"
 
-    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" ../
-    make
-
-    popd
+    cmake $OPT_LEVEL_ARG -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -DCMAKE_INTERPROCEDURAL_OPTIMIZATION:BOOL=TRUE -B "$build_dir"
+    cmake --build "$build_dir"
 }
 
 target="$1"
@@ -90,16 +80,9 @@ fi
 
 # Run the function that generates the target
 if [[ $(type -t $target) == function ]]; then
-    $target "$target"
-
-elif [[ $target =~ loop-unroll-.+ ]]; then
-    cnt="${target//loop-unroll-/}"
-    loop-unroll "$cnt"
-
+    build_benchmark "$target"
 else
     echo "Target '$target' does not exist"
     help
     exit
 fi
-
-

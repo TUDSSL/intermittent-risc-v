@@ -1,1 +1,7 @@
-.download_llvm
+# CLion build files
+/llvm-*/llvm/cmake-build-*
+
+# Downloaded files
+/llvm-*-bin
+/llvm-*-ref
+/.download_llvm*

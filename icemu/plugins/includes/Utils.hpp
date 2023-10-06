@@ -29,7 +29,7 @@ static const int NO_OF_CACHE_BLOCKS = 4;
 #ifdef PRINT_DEBUG
 #define p_debug cout
 #else
-std::ofstream p_debug("/dev/null");
+#define p_debug if (false) cout
 ;
 #endif
 
@@ -105,9 +105,9 @@ struct CacheBlock {
   address_t size;
   MemId bits;
 
-  // Overload the = operator to compare evicted blocks
+  // Overload the == operator to compare evicted blocks
   bool operator==(const CacheBlock &other) const {
-    return (bits.tag == other.bits.tag 
+    return (bits.tag == other.bits.tag
             && bits.index == other.bits.index
             && bits.offset == other.bits.offset);
   }
