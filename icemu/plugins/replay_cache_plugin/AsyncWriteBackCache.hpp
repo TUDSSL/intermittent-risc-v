@@ -278,6 +278,7 @@ class AsyncWriteBackCache {
     unsigned int cycles = 0;
 
     // Enqueue all dirty cache lines as writebacks
+    // TODO: I don´t think we need this because all stores should have clwb??
     for (auto &set: sets) {
       for (auto &line: set.lines) {
         if (!line.valid) continue;

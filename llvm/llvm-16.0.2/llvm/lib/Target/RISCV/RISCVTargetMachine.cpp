@@ -82,7 +82,10 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
   initializeRISCVDAGToDAGISelPass(*PR);
-  initializeReplayCacheFinalPass(*PR);
+  initializeReplayCacheInitialRegionsPass(*PR);
+  initializeReplayCacheRegisterRegionPartitioningPass(*PR);
+  initializeReplayCacheRegisterPreservationPass(*PR);
+  initializeReplayCacheStackSpillPreventionPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -327,7 +330,8 @@ bool RISCVPassConfig::addGlobalInstructionSelect() {
 void RISCVPassConfig::addPreSched2() {}
 
 void RISCVPassConfig::addPreEmitPass() {
-  addPass(createReplayCacheFinalPass());
+  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
+  addPass(createReplayCacheInitialRegionsPass());
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }
@@ -356,11 +360,18 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+
+  // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
+  addPass(createReplayCacheRegisterRegionPartitioningPass());
+  addPass(createReplayCacheRegisterPreservationPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
+
+  // REPLAYCACHE: Prevent store registers from spilling to the stack AFTER register allocation.
+  addPass(createReplayCacheStackSpillPreventionPass());
 }
 
 yaml::MachineFunctionInfo *

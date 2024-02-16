@@ -421,7 +421,7 @@ class ReplayCacheIntrinsics : public HookCode {
 
     stats.incNVMReads(n_bytes_transferred);
     pipeline.addToCycles(6 * n_bytes_transferred); // NVM reads, assuming reads did not go through the cache
-    pipeline.addToCycles(2 * n_registers_restored); // QuickRecall logic overhead (TODO: currently just a guess)
+    pipeline.addToCycles(2 * n_registers_restored); // QuickRecall logic overhead // TODO: currently just a guess
   }
 
   arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {

@@ -76,8 +76,14 @@ InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVRegisterBankInfo &);
 void initializeRISCVDAGToDAGISelPass(PassRegistry &);
 
-FunctionPass *createReplayCacheFinalPass();
-void initializeReplayCacheFinalPass(PassRegistry &);
+FunctionPass *createReplayCacheInitialRegionsPass();
+void initializeReplayCacheInitialRegionsPass(PassRegistry &);
+FunctionPass *createReplayCacheRegisterRegionPartitioningPass();
+void initializeReplayCacheRegisterRegionPartitioningPass(PassRegistry &);
+FunctionPass *createReplayCacheRegisterPreservationPass();
+void initializeReplayCacheRegisterPreservationPass(PassRegistry &);
+FunctionPass *createReplayCacheStackSpillPreventionPass();
+void initializeReplayCacheStackSpillPreventionPass(PassRegistry &);
 } // namespace llvm
 
 #endif
