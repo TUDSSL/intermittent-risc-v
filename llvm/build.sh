@@ -25,6 +25,7 @@ if [ ! -d "$BUILD_DIR" ]; then
         -DLLVM_BUILD_BENCHMARKS=OFF \
         -DLLVM_BUILD_DOCS=OFF \
         -DLLVM_PARALLEL_LINK_JOBS=4 \
+        -DLLVM_ENABLE_ASSERTIONS=ON \
         -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
         -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
         -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
@@ -39,5 +40,6 @@ ln -sf "$LLVM_SRC_DIR/llvm/projects/libunwind/include/mach-o" \
 
 # build step
 echo "Building LLVM"
+cmake . "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_UNWIND_TABLES=ON
 cmake --build "$BUILD_DIR"
 cmake --install "$BUILD_DIR"

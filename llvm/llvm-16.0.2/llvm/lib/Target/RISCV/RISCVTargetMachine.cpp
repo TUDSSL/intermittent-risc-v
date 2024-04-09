@@ -67,6 +67,16 @@ static cl::opt<int> RVVVectorBitsMinOpt(
              "autovectorization with fixed width vectors."),
     cl::init(-1), cl::Hidden);
 
+static cl::opt<bool>
+    ReplayCacheDisableRRP("replaycache-disable-rrp",
+                          cl::desc("Disable ReplayCache Register-aware region partitioning."),
+                          cl::init(false), cl::Hidden);
+
+static cl::opt<bool>
+    ReplayCacheDisableIRP("replaycache-disable-irp",
+                          cl::desc("Disable ReplayCache initial region partitioning."),
+                          cl::init(false), cl::Hidden);
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   RegisterTargetMachine<RISCVTargetMachine> X(getTheRISCV32Target());
   RegisterTargetMachine<RISCVTargetMachine> Y(getTheRISCV64Target());
@@ -84,8 +94,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVDAGToDAGISelPass(*PR);
   initializeReplayCacheInitialRegionsPass(*PR);
   initializeReplayCacheRegisterRegionPartitioningPass(*PR);
-  initializeReplayCacheRegisterPreservationPass(*PR);
-  initializeReplayCacheStackSpillPreventionPass(*PR);
+  initializeReplayCacheCLWBInserterPass(*PR);
+  // initializeReplayCacheStackSpillPreventionPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -330,10 +340,10 @@ bool RISCVPassConfig::addGlobalInstructionSelect() {
 void RISCVPassConfig::addPreSched2() {}
 
 void RISCVPassConfig::addPreEmitPass() {
-  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
-  addPass(createReplayCacheInitialRegionsPass());
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
+  // REPLAYCACHE: Add CLWB instructions to all store.
+  addPass(createReplayCacheCLWBInserterPass());
 }
 
 void RISCVPassConfig::addPreEmitPass2() {
@@ -356,14 +366,18 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
+  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
+  if (!ReplayCacheDisableIRP)
+    addPass(createReplayCacheInitialRegionsPass());
+
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
 
   // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
-  addPass(createReplayCacheRegisterRegionPartitioningPass());
-  addPass(createReplayCacheRegisterPreservationPass());
+  if (!ReplayCacheDisableRRP)
+    addPass(createReplayCacheRegisterRegionPartitioningPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
@@ -371,7 +385,7 @@ void RISCVPassConfig::addPostRegAlloc() {
     addPass(createRISCVRedundantCopyEliminationPass());
 
   // REPLAYCACHE: Prevent store registers from spilling to the stack AFTER register allocation.
-  addPass(createReplayCacheStackSpillPreventionPass());
+  // addPass(createReplayCacheStackSpillPreventionPass());
 }
 
 yaml::MachineFunctionInfo *

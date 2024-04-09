@@ -120,7 +120,8 @@
         "latch": "cpp",
         "numbers": "cpp",
         "semaphore": "cpp",
-        "source_location": "cpp"
+        "source_location": "cpp",
+        "stop_token": "cpp"
     },
     "cmake.sourceDirectory": "${workspaceFolder}/llvm/llvm-16.0.2/llvm",
     "cmake.buildDirectory": "/tmp/llvm-16.0.2-build",

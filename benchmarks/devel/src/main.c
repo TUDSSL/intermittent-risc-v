@@ -1,37 +1,38 @@
-// #include <stdio.h>
-// #include <stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-// extern void rc_test();
-// extern void tohost_exit(uintptr_t code);
-
-// static int cntr = 0;
-
-// int scanf(const char *fmt, ...){
-//   printf("scanf: %s\n", fmt);
-//   return fmt[0];
-// }
-
-// int main()
-// {
-//   char str[10] = {0};
-//   scanf("%s", str);
-
-//   for (char *strptr = str; *strptr != '\0'; ++strptr) {
-//     cntr++;
-//     printf("Hello World!\n");
-//   }
-
-//   rc_test();
-//   tohost_exit(5);
-//   return 0;
-// }
+extern void rc_test();
+extern void tohost_exit(uintptr_t code);
 
 int main()
 {
-  int a = 0xABC;
-  int b = 0xDEF;
+  int a = 1;
+  int b = 2;
+  int c = 3;
+  int d = 4;
+  int e = 5;
+  int f = 6;
+  int g = 7;
 
-  a = b;
+  volatile int g1 = g;
+  g += 849;
+  g1 = g;
 
-  return a;
+  volatile int a1 = a;
+  volatile int b1 = b;
+  volatile int c1 = c;
+  volatile int d1 = d;
+  volatile int e1 = e;
+  volatile int f1 = f;
+  volatile int a2 = a;
+  volatile int b2 = b;
+  volatile int c2 = c;
+  volatile int d2 = d;
+  volatile int e2 = e;
+  volatile int f2 = f;
+
+  a += 80;
+  volatile int z = a;
+
+  return 0;
 }

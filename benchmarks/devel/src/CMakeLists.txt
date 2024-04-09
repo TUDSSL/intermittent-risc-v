@@ -11,10 +11,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ${OUTPUT_SUFFIX})
 # Compiler options for this project
 target_compile_options(${PROJECT_NAME} PUBLIC
     -Wall
-    -nostdlib
     -g
-    -O0
-    -save-temps=obj
+    -O1
     )
 
 # Linker options for this project

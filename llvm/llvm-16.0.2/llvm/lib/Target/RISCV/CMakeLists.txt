@@ -49,8 +49,10 @@ add_llvm_target(RISCVCodeGen
   ReplayCache/ReplayCacheShared.cpp
   ReplayCache/ReplayCacheInitialRegions.cpp
   ReplayCache/ReplayCacheRegisterRegionPartitioning.cpp
-  ReplayCache/ReplayCacheRegisterPreservation.cpp
-  ReplayCache/ReplayCacheStackSpillPrevention.cpp
+  ReplayCache/ReplayCacheCLWBInserter.cpp
+  # ReplayCache/ReplayCacheStackSpillPrevention.cpp
+  ReplayCache/Region/ReplayCacheRegion.cpp
+  ReplayCache/Region/ReplayCacheRegionAnalysis.cpp
 
   LINK_COMPONENTS
   Analysis

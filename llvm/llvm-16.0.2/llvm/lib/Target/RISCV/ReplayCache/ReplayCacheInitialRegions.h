@@ -13,6 +13,8 @@ public:
 
 private:
   bool runOnMachineFunction(MachineFunction &MF) override;
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override;
 };
 } // namespace llvm
 

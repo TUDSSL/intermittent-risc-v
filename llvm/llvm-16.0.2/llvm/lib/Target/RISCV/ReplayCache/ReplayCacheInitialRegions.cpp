@@ -14,11 +14,23 @@ raw_ostream &output0 = llvm::outs();
 
 char ReplayCacheInitialRegions::ID = 0;
 
+void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
+{
+    AU.setPreservesCFG();
+    AU.setPreservesAll();
+
+    MachineFunctionPass::getAnalysisUsage(AU);
+}
+
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
+  output0 << "INITIAL REGION START\n";
+
   // Skip naked functions
   // TODO: determine eligible functions in an earlier pass
   if (MF.getFunction().hasFnAttribute(Attribute::Naked))
     return false;
+
+  // TODO: make sure this only runs once
 
   auto &TII = *MF.getSubtarget().getInstrInfo();
 
@@ -58,7 +70,12 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // No need to 'explicitly' end a region when returning,
         // because the caller is expected to do that already
       } else if (MI.isConditionalBranch()) {
-        // Create boundaries around branches
+        // Create boundaries BEFORE branches
+        BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
+        BuildRC(MBB, MI, MI.getDebugLoc(), START_REGION);
+
+        // Create boundaries at the start of branch basic blocks
+
         auto TrueDest = TII.getBranchDestBlock(MI);
         MachineBasicBlock *FalseDest = nullptr;
 
@@ -73,29 +90,14 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           // If there is no next instruction, the false branch is the fallthrough
           FalseDest = MBB.getFallThrough();
         }
-
+          
         StartRegionInBB(*TrueDest);
         if (FalseDest)
           StartRegionInBB(*FalseDest);
-      } else {
-        // Insert CLWB after stores
-        if (NextMI) {
-          switch (MI.getOpcode()) {
-          default:
-            break;
-          case RISCV::SW:
-          case RISCV::SH:
-          case RISCV::SB:
-          case RISCV::C_SW:
-          case RISCV::C_SWSP:
-            BuildRC(MBB, NextMI, MI.getDebugLoc(), CLWB);
-            output0 << "Add CLWB instruction!\n";
-            break;
-          }
-        }
       }
     }
   }
+  output0 << "INITIAL REGION END\n";
 
   return true;
 }

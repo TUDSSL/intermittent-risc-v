@@ -22,10 +22,11 @@ add_compile_options(
     ${OPT_LEVEL}
     )
 
+    add_subdirectory(src)
+
 # Linker options for this project
 add_link_options(
     -Wl,-Map=${PROJECT_NAME}.map
     )
 
 
-add_subdirectory(src)

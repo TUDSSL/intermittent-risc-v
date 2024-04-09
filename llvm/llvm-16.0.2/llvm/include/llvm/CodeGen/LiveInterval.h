@@ -194,6 +194,10 @@ namespace llvm {
         return !(*this == Other);
       }
 
+      void print(llvm::raw_ostream &stream) {
+        stream << "Start: " << start << ", End: " << end;
+      }
+
       void dump() const;
     };
 
