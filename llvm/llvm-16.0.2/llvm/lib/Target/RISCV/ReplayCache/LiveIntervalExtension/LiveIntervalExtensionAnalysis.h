@@ -3,6 +3,9 @@
 #include "ExtendedLiveInterval.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/CodeGen/LiveIntervals.h"
+#include "../Region/ReplayCacheRegionAnalysis.h"
 
 class LiveIntervalExtensionAnalysis : public MachineFunctionPass
 {
@@ -12,7 +15,15 @@ private:
     BumpPtrAllocator ExtensionAllocator_;
     ExtendedLiveIntervalMap ExtensionMap_;
 
-    void computeExtensionFromLI(LiveInterval &LI);
+    ReplayCacheRegionAnalysis *RRA_;
+    LiveIntervals *LIS_;
+    SlotIndexes *SLIS_;
+
+    ReplayCacheRegion *CurrentRegion_;
+
+    void computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI);
+    std::vector<SlotInterval> getSlotIntervalsInRegionFrom(MachineInstr &MI);
+    std::vector<SlotInterval> removeOverlappingIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
 public:
     static char ID;
 
@@ -23,5 +34,7 @@ public:
     bool runOnMachineFunction(MachineFunction &MF) override;
 
     ExtendedLiveInterval &getExtensionFromLI(LiveInterval &LI);
-    void recomputeExtension(ExtendedLiveInterval &EX);
+    void recomputeActiveExtensions(SlotIndex SI);
+
+    unsigned getExtensionPressureAt(MachineInstr &MI);
 };

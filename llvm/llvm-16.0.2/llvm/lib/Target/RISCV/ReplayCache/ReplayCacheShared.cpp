@@ -1,4 +1,6 @@
 #include "ReplayCacheShared.h"
+#include "RISCVSubtarget.h"
+#include "RISCVTargetMachine.h"
 
 void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr) {
@@ -14,15 +16,15 @@ void BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
       .addImm(Instr);
 }
 
-void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI)
+void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr)
 {
-  BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::START_REGION);
+  BuildRC(MBB, MI, MI.getDebugLoc(), Instr);
 }
 
-void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI)
+void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr)
 {
   BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE);
-  BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::START_REGION);
+  BuildRC(MBB, MI, MI.getDebugLoc(), Instr);
 }
 
 /**
@@ -38,14 +40,14 @@ bool IsRC(const MachineInstr &MI) {
 
 bool IsStartRegion(const MachineInstr &MI)
 {
-  return IsRC(MI) && static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) == ReplayCacheInstruction::START_REGION;
+  return IsRC(MI) && (static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) <= ReplayCacheInstruction::START_REGION_BRANCH_DEST);
 }
 bool IsFence(const MachineInstr &MI)
 {
   return IsRC(MI) && static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) == ReplayCacheInstruction::FENCE;
 }
 
-void StartRegionInBB(MachineBasicBlock &MBB) {
+void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr) {
   auto FirstNonPHI = MBB.getFirstNonPHI();
   if (FirstNonPHI == MBB.instr_end())
     return;
@@ -53,7 +55,7 @@ void StartRegionInBB(MachineBasicBlock &MBB) {
   if (IsRC(EntryInstr))
     return;
   BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), FENCE);
-  BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), START_REGION);
+  BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), Instr);
 }
 
 bool isStoreInstruction(MachineInstr &MI)

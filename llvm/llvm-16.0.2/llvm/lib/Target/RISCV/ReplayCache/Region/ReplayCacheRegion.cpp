@@ -20,7 +20,7 @@ ReplayCacheRegion::ReplayCacheRegion(unsigned ID, RegionInstr StartRegionInstr, 
 
 void ReplayCacheRegion::terminateAt(RegionInstr FenceInstr, RegionBlock FenceBlock)
 {
-    assert(IsFence(*FenceInstr) && "End instruction is not FENCE");
+    // assert(IsFence(*FenceInstr) && "End instruction is not FENCE");
 
     InstrEnd_ = FenceInstr;
     BlockEnd_ = FenceBlock;
@@ -28,9 +28,9 @@ void ReplayCacheRegion::terminateAt(RegionInstr FenceInstr, RegionBlock FenceBlo
 
 bool ReplayCacheRegion::containsInstr(MachineInstr MI)
 {
-    for (auto MI_Region : *this)
+    for (auto &MI_Region : *this)
     {
-        if (MI_Region == &MI)
+        if (&MI_Region == &MI)
         {
             return true;
         }

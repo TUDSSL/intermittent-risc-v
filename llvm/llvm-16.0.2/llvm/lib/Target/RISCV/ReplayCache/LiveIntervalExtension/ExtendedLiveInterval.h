@@ -2,18 +2,11 @@
 
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/SlotIndexes.h"
+#include "../ReplayCacheShared.h"
 #include <vector>
 
 namespace llvm
 {
-
-struct SlotInterval
-{
-    SlotIndex first;
-    SlotIndex last;
-
-    unsigned getSize() { return first.distance(last); }
-}
 
 class ExtendedLiveInterval
 {
@@ -27,7 +20,10 @@ public:
     LiveInterval &getInterval();
 
     void addSlotInterval(SlotInterval SIT);
+    void setSlotIntervals(std::vector<SlotInterval> &SITS);
     void clearSlotIntervals();
+
+    bool isLiveAt(SlotIndex &SI);
 
     unsigned getSize() const;
 };

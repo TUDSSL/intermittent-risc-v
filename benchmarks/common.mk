@@ -1,5 +1,5 @@
 BENCHMARKS := \
-		crc
+		devel
 		# devel \
 		# quicksort \
 		# coremark \

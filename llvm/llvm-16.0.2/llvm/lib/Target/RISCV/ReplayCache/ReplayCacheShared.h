@@ -1,9 +1,8 @@
 #ifndef REPLAYCACHE_SHARED_H
 #define REPLAYCACHE_SHARED_H
 
-#include "RISCVSubtarget.h"
-#include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include <iostream>
 
 #define DEBUG_TYPE "replaycache"
@@ -12,9 +11,22 @@ using namespace llvm;
 
 enum ReplayCacheInstruction {
   START_REGION = 0,
-  CLWB = 1,
-  FENCE = 2,
-  POWER_FAILURE_NEXT = 3,
+  START_REGION_RETURN = 1,
+  START_REGION_EXTENSION = 2,
+  START_REGION_BRANCH = 3,
+  START_REGION_BRANCH_DEST = 4,
+  FENCE = 7,
+  CLWB = 8,
+  POWER_FAILURE_NEXT = 9
+};
+
+struct SlotInterval
+{
+    SlotIndex first;
+    SlotIndex last;
+
+    unsigned getSize() const { return first.distance(last); }
+    bool contains(SlotIndex &SI) const { return SI >= first && SI <= last; }
 };
 
 void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
@@ -23,8 +35,8 @@ void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
 void BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr);
 
-void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI);
-void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI);
+void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION);
+void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION);
 
 /**
  * Check if the instruction is a ReplayCache instruction.
@@ -35,7 +47,7 @@ bool IsRC(const MachineInstr &MI);
 bool IsStartRegion(const MachineInstr &MI);
 bool IsFence(const MachineInstr &MI);
 
-void StartRegionInBB(MachineBasicBlock &MBB);
+void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr = START_REGION);
 
 
 bool isStoreInstruction(MachineInstr &MI);

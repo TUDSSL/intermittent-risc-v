@@ -47,8 +47,8 @@ bool ReplayCacheRegisterRegionPartitioning::runOnMachineFunction(MachineFunction
     SIS = &getAnalysis<SlotIndexes>();
     RRS = &getAnalysis<ReplayCacheRegionAnalysis>();
 
-    MachineInstr *last_instruction = nullptr;
-    MachineBasicBlock *last_mbb = nullptr;
+    // MachineInstr *last_instruction = nullptr;
+    // MachineBasicBlock *last_mbb = nullptr;
 
     // for (auto Region = RRS->begin(); Region != RRS->end(); Region++)
     // {
@@ -56,27 +56,27 @@ bool ReplayCacheRegisterRegionPartitioning::runOnMachineFunction(MachineFunction
     //     (*Region)->print(output);
     //     output.flush();
     // }
-    int ctr = 0;
+    // int ctr = 0;
 
-    for (auto Region : *RRS)
-    {
-        // Region->print(output);
-        // output.flush();
+    // for (auto Region : *RRS)
+    // {
+    //     // Region->print(output);
+    //     // output.flush();
         
-        for (auto MI : *Region)
-        {
-            // output << "New MI\n";
-            // if (ctr == 0)
-            // {
-            //     MI->getParent()->print(output);
-            //     ctr++;
-            // }
-            // MI->print(output);
-            // output.flush();
-        }
+    //     for (auto MI : *Region)
+    //     {
+    //         // output << "New MI\n";
+    //         // if (ctr == 0)
+    //         // {
+    //         //     MI->getParent()->print(output);
+    //         //     ctr++;
+    //         // }
+    //         // MI->print(output);
+    //         // output.flush();
+    //     }
 
-        ctr = 0;
-    }
+    //     ctr = 0;
+    // }
 
     // for (auto &MBB : MF) {
     //     // output << "Entering block\n" << MBB;

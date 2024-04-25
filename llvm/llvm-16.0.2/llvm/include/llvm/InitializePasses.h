@@ -419,6 +419,10 @@ void initializeWinEHPreparePass(PassRegistry&);
 void initializeWriteBitcodePassPass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
 
+/*** REPLAY CACHE ***/
+void initializeLiveIntervalExtensionAnalysisPass(PassRegistry&);
+void initializeReplayCacheRegionAnalysisPass(PassRegistry&);
+
 } // end namespace llvm
 
 #endif // LLVM_INITIALIZEPASSES_H

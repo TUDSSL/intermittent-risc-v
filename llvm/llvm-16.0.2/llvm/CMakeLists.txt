@@ -1107,7 +1107,7 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-include_directories( ${LLVM_INCLUDE_DIR} ${LLVM_MAIN_INCLUDE_DIR})
+include_directories( ${LLVM_INCLUDE_DIR} ${LLVM_MAIN_INCLUDE_DIR} ${LLVM_MAIN_SRC_DIR}/lib/Target/RISCV ${CMAKE_BINARY_DIR}/lib/Target/RISCV)
 
 # when crosscompiling import the executable targets from a file
 if(LLVM_USE_HOST_TOOLS)

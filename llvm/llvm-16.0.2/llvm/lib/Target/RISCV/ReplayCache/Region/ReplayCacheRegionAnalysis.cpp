@@ -46,16 +46,16 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
     /* Insert instructions. */
-    InsertRegionBoundaryBefore(*MBB, *MI);
+    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION);
     SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
-    return createRegionAtBoundary(MBB, --MI);
+    return createRegionAtBoundary(MBB, --MI, Region);
 }
 
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
 {
     ReplayCacheRegion *NewRegion = new (RegionAllocator_) ReplayCacheRegion(RegionsSize, StartRegionInstr, StartRegionBlock);
-    output1 << "Created region " << RegionsSize << "\n";
-    output1.flush();
+    // output1 << "Created region " << RegionsSize << "\n";
+    // output1.flush();
 
     if (PrevRegion == nullptr)
     {
@@ -106,8 +106,8 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCache
     return *NewRegion;
 }
 
-FunctionPass *llvm::createReplayCacheRegionAnalysisPass() {
-    return new ReplayCacheRegionAnalysis();
-}
+// FunctionPass *llvm::createReplayCacheRegionAnalysisPass() {
+//     return new ReplayCacheRegionAnalysis();
+// }
 
 INITIALIZE_PASS(ReplayCacheRegionAnalysis, DEBUG_TYPE, PASS_NAME, false, true)

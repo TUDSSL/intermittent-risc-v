@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "ReplayCache/LiveIntervalExtension/LiveIntervalExtensionAnalysis.h"
+#include "ReplayCache/Region/ReplayCacheRegionAnalysis.h"
 #include "RegAllocGreedy.h"
 #include "AllocationOrder.h"
 #include "InterferenceCache.h"
@@ -164,6 +166,8 @@ INITIALIZE_PASS_DEPENDENCY(SpillPlacement)
 INITIALIZE_PASS_DEPENDENCY(MachineOptimizationRemarkEmitterPass)
 INITIALIZE_PASS_DEPENDENCY(RegAllocEvictionAdvisorAnalysis)
 INITIALIZE_PASS_DEPENDENCY(RegAllocPriorityAdvisorAnalysis)
+INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
+INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_END(RAGreedy, "greedy",
                 "Greedy Register Allocator", false, false)
 
@@ -221,6 +225,10 @@ void RAGreedy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<MachineOptimizationRemarkEmitterPass>();
   AU.addRequired<RegAllocEvictionAdvisorAnalysis>();
   AU.addRequired<RegAllocPriorityAdvisorAnalysis>();
+  AU.addRequired<ReplayCacheRegionAnalysis>();
+  AU.addPreserved<ReplayCacheRegionAnalysis>();
+  AU.addRequired<LiveIntervalExtensionAnalysis>();
+  AU.addPreserved<LiveIntervalExtensionAnalysis>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 

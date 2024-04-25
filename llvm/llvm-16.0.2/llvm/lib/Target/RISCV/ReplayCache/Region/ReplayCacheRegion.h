@@ -1,6 +1,7 @@
 #pragma once
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "../ReplayCacheShared.h"
 #include <vector>
 #include <iterator>
@@ -39,9 +40,10 @@ public:
     class rcr_inst_iterator : public std::iterator<std::forward_iterator_tag, MachineInstrTy *> {
     public:
         // Constructors.
-        explicit rcr_inst_iterator(const ReplayCacheRegion &Region, const bool isEnd = false)    :
+        explicit rcr_inst_iterator(const ReplayCacheRegion &Region, const bool isEnd = false) :
             Region_(&Region), 
-            Valid_(!isEnd && Region.InstrStart_ != Region.InstrEnd_), 
+            Valid_(!isEnd && Region.InstrStart_ != Region.InstrEnd_),
+            InstrFinalIsSentinel_(false), 
             InstrStart_(Region.InstrStart_),
             InstrEnd_(isEnd ? Region.InstrEnd_ : Region.InstrStart_),
             InstrIt_(isEnd ? Region.InstrEnd_ : Region.InstrStart_), 
@@ -50,10 +52,19 @@ public:
             BlockEnd_(Region.BlockEnd_),
             BlockIt_(isEnd ? Region.BlockEnd_ : Region.BlockStart_)
         {
+            /* Figure out if the final instruction is a sentinel. */
+            for (auto BlockIt = BlockStart_; BlockIt != BlockEnd_; BlockIt++)
+            {
+                if (InstrFinal_ == BlockIt->end())
+                {
+                    InstrFinalIsSentinel_ = true;
+                }
+            }
+
             /* Make InstrEnd_ go to the end of the current basic block, OR the final instruction
             * if that is in the same basic block.
             */
-            while (!isEnd && InstrEnd_ != (*Region.BlockStart_).end() && InstrEnd_ != InstrFinal_)
+            while (!isEnd && !(InstrEnd_ == Region.BlockStart_->end() || InstrEnd_ == InstrFinal_))
             {
                 ++InstrEnd_;
             }
@@ -72,9 +83,18 @@ public:
         rcr_inst_iterator<MachineInstrTy> operator++(int) { rcr_inst_iterator Tmp = *this; ++*this; return Tmp; };
 
         // Dereference.
-        MachineInstrTy *operator*() const { return &(*InstrIt_); };
+        MachineInstrTy &operator*() const { return *InstrIt_; };
+        MachineInstrTy *operator->() const { return &*InstrIt_; };
+        RegionInstr getInstrIt() const { return InstrIt_; };
 
-        MachineBasicBlock *getMBB() const { return InstrIt_->getParent(); };
+        MachineBasicBlock *getMBB() const { return Valid_ ? InstrIt_->getParent() : nullptr; };
+        RegionBlock getMBBIt() const { return BlockIt_; };
+
+        MachineBasicBlock::iterator getIterator() const { return InstrIt_; };
+
+        SlotInterval getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart = nullptr) const;
+
+        void stop();
 
         // Debugging.
         void print(raw_ostream &OS) const { (*InstrIt_).print(OS); };
@@ -82,6 +102,8 @@ public:
     private:
         const ReplayCacheRegion *Region_;
         bool Valid_;
+
+        bool InstrFinalIsSentinel_;
         
         MachineBasicBlock::iterator InstrStart_;
         MachineBasicBlock::iterator InstrEnd_;
@@ -116,6 +138,8 @@ public:
 
     bool containsInstr(MachineInstr MI);
 
+    SlotInterval getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart = nullptr) const;
+
     bool hasNext();
     bool hasPrev();
 
@@ -139,22 +163,13 @@ template <typename MachineInstrTy>
 ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy> &
 ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
 {
-    raw_ostream &output4 = llvm::outs();
     assert(Valid_ && "iterating past end condition");
-
-    output4 << "Adding iterator.\n";
-    output4.flush();
-
+    
     ++InstrIt_;
-
-    output4 << "Added iterator.\n";
-    output4.flush();
 
     if (InstrIt_ == InstrFinal_)
     {
         Valid_ = false;
-        output4 << "FINAL reached.\n";
-        output4.flush();
     }
     else if (InstrIt_ == InstrEnd_)
     {
@@ -168,9 +183,6 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
 
         if (BlockIt_ != BlockEnd_)
         {
-            output4 << "Iterated blocks.\n";
-            output4.flush();
-            
             /* Set Instr iterator to first instruction in new MBB. */
             InstrIt_ = BlockIt_->begin();
 
@@ -180,21 +192,59 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
             {
                 ++InstrEnd_;
             }
-            output4 << "Iterated instrs.\n";
-            output4.flush();
         }
         else
         {
-            BlockIt_->print(output4);
-            output4.flush();
             Valid_ = false;
         }
     }
-
-    output4 << "Valid: " << Valid_ << ".\n";
-    output4.flush();
     
     return *this;
+}
+
+template <typename MachineInstrTy>
+SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart) const
+{
+    assert(Valid_ && "Iterator invalid");
+
+    MachineBasicBlock *MBB = getMBB();
+    SlotInterval SI;
+
+    /* Return invalid SlotIndices if MBB is empty.*/
+    if (MBB->empty())
+    {
+        return SI;
+    }
+
+    if (MIStart == nullptr)
+    {
+        SI.first = SLIS.getMBBStartIdx(MBB);
+    }
+    else
+    {
+        /* Check if MIStart is in current basic block. */
+        assert(MIStart->getParent() == MBB);
+        
+        SI.first = SLIS.getInstructionIndex(*MIStart).getRegSlot();
+    }
+
+    if (!InstrFinalIsSentinel_ && InstrFinal_->getParent() == MBB)
+    {
+        SI.last = SLIS.getInstructionIndex(*InstrFinal_).getRegSlot();
+    }
+    else
+    {
+        SI.last = SLIS.getMBBEndIdx(MBB);
+    }
+    
+    return SI;
+}
+
+template <typename MachineInstrTy>
+void ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::stop()
+{
+    InstrIt_ = --InstrFinal_;
+    InstrEnd_ = ++InstrFinal_;
 }
 
 }

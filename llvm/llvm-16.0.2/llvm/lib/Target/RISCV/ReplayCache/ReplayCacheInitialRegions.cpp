@@ -55,14 +55,14 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // Start a new region when callee returns
         if (NextMI) {
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
-          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION);
+          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
           output0 << "NEW region started (callee return)!\n";
         } else {
           // If there is no next instruction, the callee returns to the
           // fallthrough
           auto Fallthrough = MBB.getFallThrough();
           if (Fallthrough)
-            StartRegionInBB(*Fallthrough);
+            StartRegionInBB(*Fallthrough, START_REGION_RETURN);
           // If there is no fallthrough, this is the last block in the function
           // and the call is probably a tail call.
         }
@@ -72,7 +72,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
       } else if (MI.isConditionalBranch()) {
         // Create boundaries BEFORE branches
         BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
-        BuildRC(MBB, MI, MI.getDebugLoc(), START_REGION);
+        BuildRC(MBB, MI, MI.getDebugLoc(), START_REGION_BRANCH);
 
         // Create boundaries at the start of branch basic blocks
 
@@ -91,9 +91,9 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           FalseDest = MBB.getFallThrough();
         }
           
-        StartRegionInBB(*TrueDest);
+        StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST);
         if (FalseDest)
-          StartRegionInBB(*FalseDest);
+          StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST);
       }
     }
   }

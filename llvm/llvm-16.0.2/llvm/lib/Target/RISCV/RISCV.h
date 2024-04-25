@@ -76,6 +76,11 @@ InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVRegisterBankInfo &);
 void initializeRISCVDAGToDAGISelPass(PassRegistry &);
 
+
+FunctionPass *createRegisterPressureAwareRegionPartitioningPass();
+void initializeRegisterPressureAwareRegionPartitioningPass(PassRegistry &);
+FunctionPass *createLiveIntervalExtensionAnalysisPass();
+void initializeLiveIntervalExtensionAnalysisPass(PassRegistry &);
 FunctionPass *createReplayCacheRegionAnalysisPass();
 void initializeReplayCacheRegionAnalysisPass(PassRegistry &);
 FunctionPass *createReplayCacheInitialRegionsPass();

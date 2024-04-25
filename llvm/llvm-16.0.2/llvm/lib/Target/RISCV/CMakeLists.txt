@@ -53,6 +53,9 @@ add_llvm_target(RISCVCodeGen
   # ReplayCache/ReplayCacheStackSpillPrevention.cpp
   ReplayCache/Region/ReplayCacheRegion.cpp
   ReplayCache/Region/ReplayCacheRegionAnalysis.cpp
+  ReplayCache/LiveIntervalExtension/ExtendedLiveInterval.cpp
+  ReplayCache/LiveIntervalExtension/LiveIntervalExtensionAnalysis.cpp
+  ReplayCache/LiveIntervalExtension/RegisterPressureAwareRegionPartitioning.cpp
 
   LINK_COMPONENTS
   Analysis

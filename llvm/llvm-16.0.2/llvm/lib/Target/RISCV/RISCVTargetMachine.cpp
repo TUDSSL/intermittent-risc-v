@@ -95,7 +95,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeReplayCacheInitialRegionsPass(*PR);
   initializeReplayCacheRegisterRegionPartitioningPass(*PR);
   initializeReplayCacheCLWBInserterPass(*PR);
-  // initializeReplayCacheStackSpillPreventionPass(*PR);
+  initializeRegisterPressureAwareRegionPartitioningPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -366,18 +366,19 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
-  if (!ReplayCacheDisableIRP)
-    addPass(createReplayCacheInitialRegionsPass());
 
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+  
+  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
+  if (!ReplayCacheDisableIRP)
+    addPass(createReplayCacheInitialRegionsPass());
 
   // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
   if (!ReplayCacheDisableRRP)
-    addPass(createReplayCacheRegisterRegionPartitioningPass());
+    addPass(createRegisterPressureAwareRegionPartitioningPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {

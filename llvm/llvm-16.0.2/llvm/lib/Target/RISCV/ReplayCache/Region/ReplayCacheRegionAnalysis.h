@@ -48,7 +48,7 @@ public:
         rcra_rr_iterator<ReplayCacheRegionTy> operator++(int) { rcra_rr_iterator Tmp = *this; ++*this; return Tmp; };
 
         // Dereference.
-        ReplayCacheRegionTy *operator*() const { return It_; };
+        ReplayCacheRegionTy &operator*() const { assert(It_ != nullptr); return *It_; };
 
     private:
         const ReplayCacheRegionAnalysis *RR_;
