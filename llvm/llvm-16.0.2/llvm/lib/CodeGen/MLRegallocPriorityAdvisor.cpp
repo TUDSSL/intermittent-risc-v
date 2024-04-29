@@ -88,7 +88,7 @@ protected:
   // error, and we shouldn't be asking for it here.
   const MLModelRunner &getRunner() const { return *Runner; }
   float getPriorityImpl(const LiveInterval &LI) const;
-  unsigned getPriority(const LiveInterval &LI) const override;
+  unsigned getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA = nullptr) const override;
 
 private:
   const DefaultPriorityAdvisor DefaultAdvisor;
@@ -281,7 +281,7 @@ float MLPriorityAdvisor::getPriorityImpl(const LiveInterval &LI) const {
   return Runner->evaluate<float>();
 }
 
-unsigned MLPriorityAdvisor::getPriority(const LiveInterval &LI) const {
+unsigned MLPriorityAdvisor::getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA) const {
   return static_cast<unsigned>(getPriorityImpl(LI));
 }
 

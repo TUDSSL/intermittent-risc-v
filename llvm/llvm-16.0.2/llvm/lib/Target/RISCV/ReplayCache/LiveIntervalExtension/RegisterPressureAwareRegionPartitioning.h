@@ -2,7 +2,7 @@
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
-#include "LiveIntervalExtensionAnalysis.h"
+#include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
 
 class RegisterPressureAwareRegionPartitioning : public MachineFunctionPass
 {

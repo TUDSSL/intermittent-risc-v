@@ -9,6 +9,7 @@
 #ifndef LLVM_CODEGEN_REGALLOCPRIORITYADVISOR_H
 #define LLVM_CODEGEN_REGALLOCPRIORITYADVISOR_H
 
+#include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
 #include "RegAllocEvictionAdvisor.h"
 #include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/Pass.h"
@@ -29,7 +30,7 @@ public:
 
   /// Find the priority value for a live range. A float value is used since ML
   /// prefers it.
-  virtual unsigned getPriority(const LiveInterval &LI) const = 0;
+  virtual unsigned getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA = nullptr) const = 0;
 
   RegAllocPriorityAdvisor(const MachineFunction &MF, const RAGreedy &RA,
                           SlotIndexes *const Indexes);
@@ -53,7 +54,7 @@ public:
       : RegAllocPriorityAdvisor(MF, RA, Indexes) {}
 
 private:
-  unsigned getPriority(const LiveInterval &LI) const override;
+  unsigned getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA = nullptr) const override;
 };
 
 class RegAllocPriorityAdvisorAnalysis : public ImmutablePass {

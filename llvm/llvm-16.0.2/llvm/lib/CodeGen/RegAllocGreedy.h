@@ -12,6 +12,8 @@
 #ifndef LLVM_CODEGEN_REGALLOCGREEDY_H_
 #define LLVM_CODEGEN_REGALLOCGREEDY_H_
 
+#include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
+#include "llvm/CodeGen/ReplayCache/ReplayCacheRegionAnalysis.h"
 #include "InterferenceCache.h"
 #include "RegAllocBase.h"
 #include "RegAllocEvictionAdvisor.h"
@@ -180,6 +182,8 @@ private:
   EdgeBundles *Bundles;
   SpillPlacement *SpillPlacer;
   LiveDebugVariables *DebugVars;
+  LiveIntervalExtensionAnalysis *LIEA;
+  ReplayCacheRegionAnalysis *RRA;
 
   // state
   std::unique_ptr<Spiller> SpillerInstance;

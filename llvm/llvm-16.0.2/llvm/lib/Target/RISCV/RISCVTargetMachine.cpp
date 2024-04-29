@@ -93,7 +93,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVInsertVSETVLIPass(*PR);
   initializeRISCVDAGToDAGISelPass(*PR);
   initializeReplayCacheInitialRegionsPass(*PR);
-  initializeReplayCacheRegisterRegionPartitioningPass(*PR);
+  // initializeReplayCacheRegisterRegionPartitioningPass(*PR);
   initializeReplayCacheCLWBInserterPass(*PR);
   initializeRegisterPressureAwareRegionPartitioningPass(*PR);
 }

@@ -1,10 +1,13 @@
 #include "RegisterPressureAwareRegionPartitioning.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/CodeGen/RegisterPressure.h"
+#include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
+#include "RISCV.h"
 #include <algorithm>
 
 using namespace llvm;
 
+#define DEBUG_TYPE "replaycache"
 #define PASS_NAME "ReplayCache_RegisterPressureAwareRegionPartitioning"
 
 char RegisterPressureAwareRegionPartitioning::ID = 5;

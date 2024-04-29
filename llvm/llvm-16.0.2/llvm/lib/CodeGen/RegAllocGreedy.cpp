@@ -11,8 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "ReplayCache/LiveIntervalExtension/LiveIntervalExtensionAnalysis.h"
-#include "ReplayCache/Region/ReplayCacheRegionAnalysis.h"
 #include "RegAllocGreedy.h"
 #include "AllocationOrder.h"
 #include "InterferenceCache.h"
@@ -80,6 +78,8 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "regalloc"
+
+raw_ostream &output_regalloc = llvm::outs();
 
 STATISTIC(NumGlobalSplits, "Number of split global live ranges");
 STATISTIC(NumLocalSplits,  "Number of split local live ranges");
@@ -298,15 +298,26 @@ void RAGreedy::enqueue(PQueue &CurQueue, const LiveInterval *LI) {
     ExtraInfo->setStage(Reg, Stage);
   }
 
-  unsigned Ret = PriorityAdvisor->getPriority(*LI);
+  unsigned Ret = PriorityAdvisor->getPriority(*LI, LIEA);
 
   // The virtual register number is a tie breaker for same-sized ranges.
   // Give lower vreg numbers higher priority to assign them first.
   CurQueue.push(std::make_pair(Ret, ~Reg));
 }
 
-unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
-  const unsigned Size = LI.getSize();
+unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA) const {
+  unsigned ExtensionSize = 0;
+  if (LIEA != nullptr)
+  {
+    auto ext = LIEA->getExtensionFromLI(LI);
+    if (ext != nullptr)
+    {
+      ExtensionSize = ext->getSize();
+    }
+  }
+  
+
+  const unsigned Size = LI.getSize() + ExtensionSize;
   const Register Reg = LI.reg();
   unsigned Prio;
   LiveRangeStage Stage = RA.getExtraInfo().getStage(LI);
@@ -379,6 +390,14 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
     // Boost ranges that have a physical register hint.
     if (VRM->hasKnownPreference(Reg))
       Prio |= (1u << 30);
+  }
+
+
+
+  if (ExtensionSize > 0)
+  {
+    output_regalloc << "EXTENSION SIZE: " << ExtensionSize << "\n";
+    output_regalloc << "TOTAL SIZE:     " << Size << "\n";
   }
 
   return Prio;
@@ -2635,6 +2654,8 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
   Bundles = &getAnalysis<EdgeBundles>();
   SpillPlacer = &getAnalysis<SpillPlacement>();
   DebugVars = &getAnalysis<LiveDebugVariables>();
+  LIEA = &getAnalysis<LiveIntervalExtensionAnalysis>();
+  RRA = &getAnalysis<ReplayCacheRegionAnalysis>();
 
   initializeCSRCost();
 

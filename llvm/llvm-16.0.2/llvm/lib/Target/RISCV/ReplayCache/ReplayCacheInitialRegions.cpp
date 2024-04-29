@@ -7,6 +7,7 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "replaycache"
 #define PASS_NAME "ReplayCache_InitialRegions"
 
 

@@ -246,6 +246,12 @@ add_llvm_component_library(LLVMCodeGen
   LiveDebugValues/VarLocBasedImpl.cpp
   LiveDebugValues/InstrRefBasedImpl.cpp
 
+  ReplayCache/ExtendedLiveInterval.cpp
+  ReplayCache/LiveIntervalExtensionAnalysis.cpp
+  ReplayCache/ReplayCacheRegion.cpp
+  ReplayCache/ReplayCacheRegionAnalysis.cpp
+  ReplayCache/ReplayCacheShared.cpp
+
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen/PBQP
