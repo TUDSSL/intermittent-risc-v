@@ -1,6 +1,6 @@
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
-#include "ReplayCacheShared.h"
+#include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
 #include "ReplayCacheCLWBInserter.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include <iostream>

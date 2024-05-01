@@ -25,6 +25,7 @@ struct SlotInterval
 
     unsigned getSize() const { return first.distance(last); }
     bool contains(SlotIndex &SI) const { return SI >= first && SI <= last; }
+    void print(raw_ostream &s) const { s << first << ", " << last; }
 };
 
 void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,

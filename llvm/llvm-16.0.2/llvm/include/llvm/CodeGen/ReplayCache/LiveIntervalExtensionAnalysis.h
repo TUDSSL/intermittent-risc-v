@@ -24,6 +24,7 @@ private:
     void computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI);
     std::vector<SlotInterval> getSlotIntervalsInRegionFrom(MachineInstr &MI);
     std::vector<SlotInterval> removeOverlappingIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
+    void addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveInterval *ELR);
 public:
     static char ID;
 

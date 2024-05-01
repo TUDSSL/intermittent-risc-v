@@ -55,10 +55,24 @@ bool LiveIntervalExtensionAnalysis::runOnMachineFunction(MachineFunction &MF)
                 auto Reg = MI.getOperand(0).getReg();
                 LiveInterval &LI = LIS_->getInterval(Reg);
 
+                // output_llex << "Store instr: " << MI;
+                // output_llex << "Operand:     " << MI.getOperand(0) << "\n";
+                // output_llex << "LI:          " << LI << "\n";
+                // output_llex.flush();
+
                 computeExtensionFromLI(MI, LI);
             }
         }
     }
+
+    addExtensionsToIntervals();
+
+    // output_llex << "Added " << ExtensionMap_.size() << " extensions.\n";
+    // for (const auto &[reg, ex] : ExtensionMap_)
+    // {
+    //     output_llex << "LI:          " << ex->getInterval() << "\n";
+    // }
+    // output_llex.flush(); 
     
     return true;
 }
@@ -68,6 +82,8 @@ void LiveIntervalExtensionAnalysis::computeExtensionFromLI(MachineInstr &MI, Liv
     /* Extension already in map, skip. */
     if (ExtensionMap_.find(LI.reg()) != ExtensionMap_.end())
     {
+        output_llex << "Extension already exists\n";
+        output_llex.flush();
         return;
     }
     
@@ -175,16 +191,46 @@ ExtendedLiveInterval *LiveIntervalExtensionAnalysis::getExtensionFromLI(const Li
     return it->second;
 }
 
-void LiveIntervalExtensionAnalysis::recomputeActiveExtensions(SlotIndex SI)
+void LiveIntervalExtensionAnalysis::recomputeActiveExtensions(SlotIndex FinalIndex)
 {
+    LiveRangeUpdater LRU;
+
     for (const auto &[reg, ex] : ExtensionMap_)
     {
-        if (ex->isLiveAt(SI))
+        if (ex->isLiveAt(FinalIndex))
         {
-            auto &lastSlotInterval = ex->SITS_.back();
-            lastSlotInterval.last = SI;
+            LiveRange &LR = ex->getInterval();
+
+            /* Remove all extension intervals from live range. */
+            for (auto &SI : ex->SITS_)
+            {
+                LR.removeSegment(SI.first, SI.last, true);
+            }
+
+            /* Trim extension interval to stop at the FinalIndex. */
+            bool found = false;
+
+            // for (auto &SlotInterval : ex->SITS_)
+            for (auto it = ex->SITS_.begin(); it != ex->SITS_.end(); it++)
+            {
+                if (found)
+                {
+                    ex->SITS_.erase(it);
+                }
+
+                if (it->contains(FinalIndex))
+                {
+                    it->last = FinalIndex;
+                    found = true;
+                }
+            }
+
+            /* Re-add extension to live range. */
+            addExtensionToInterval(LRU, ex);
         }
     }
+
+    LRU.flush();
 }
 
 unsigned LiveIntervalExtensionAnalysis::getExtensionPressureAt(MachineInstr &MI)
@@ -194,6 +240,11 @@ unsigned LiveIntervalExtensionAnalysis::getExtensionPressureAt(MachineInstr &MI)
 
     for (const auto &[reg, ex] : ExtensionMap_)
     {
+        // output_llex << "First, last: ";
+        // ex->SITS_.front().print(output_llex);
+        // ex->SITS_.back().print(output_llex);
+        // output_llex << "\n";
+        // output_llex.flush();
         if (ex->isLiveAt(SI))
         {
             Pressure++;
@@ -203,20 +254,31 @@ unsigned LiveIntervalExtensionAnalysis::getExtensionPressureAt(MachineInstr &MI)
     return Pressure;
 }
 
-// void LiveIntervalExtensionAnalysis::addExtensionsToIntervals()
-// {
-//     LiveRangeUpdater LRU();
-//     for (const auto &[reg, ex] : ExtensionMap_)
-//     {
-//         LiveRange &LR = ex->getInterval();
-//         LRU.setDest(LR);
-//         for (auto &Seg : ex->SITS_)
-//         {
-//             LRU.add(Seg.first, Seg.last, LR.);
-//         }
-//     }
+void LiveIntervalExtensionAnalysis::addExtensionsToIntervals()
+{
+    LiveRangeUpdater LRU;
+    for (const auto &[reg, ex] : ExtensionMap_)
+    {
+        addExtensionToInterval(LRU, ex);
+    }
     
-// }
+    LRU.flush();
+}
+
+void LiveIntervalExtensionAnalysis::addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveInterval *ELR)
+{
+    LiveRange &LR = ELR->getInterval();
+    LRU.setDest(&LR);
+
+    for (auto &Seg : ELR->SITS_)
+    {
+        if (Seg.first < Seg.last)
+        {
+            VNInfo *VN = LR.getNextValue(Seg.first, LIS_->getVNInfoAllocator());
+            LRU.add(Seg.first, Seg.last, VN);
+        }
+    }
+}
 
 // FunctionPass *llvm::createLiveIntervalExtensionAnalysisPass() {
 //     return new LiveIntervalExtensionAnalysis();

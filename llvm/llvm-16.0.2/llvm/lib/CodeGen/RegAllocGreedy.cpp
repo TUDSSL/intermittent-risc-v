@@ -306,18 +306,18 @@ void RAGreedy::enqueue(PQueue &CurQueue, const LiveInterval *LI) {
 }
 
 unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA) const {
-  unsigned ExtensionSize = 0;
-  if (LIEA != nullptr)
-  {
-    auto ext = LIEA->getExtensionFromLI(LI);
-    if (ext != nullptr)
-    {
-      ExtensionSize = ext->getSize();
-    }
-  }
+  // unsigned ExtensionSize = 0;
+  // if (LIEA != nullptr)
+  // {
+  //   auto ext = LIEA->getExtensionFromLI(LI);
+  //   if (ext != nullptr)
+  //   {
+  //     ExtensionSize = ext->getSize();
+  //   }
+  // }
   
 
-  const unsigned Size = LI.getSize() + ExtensionSize;
+  const unsigned Size = LI.getSize();
   const Register Reg = LI.reg();
   unsigned Prio;
   LiveRangeStage Stage = RA.getExtraInfo().getStage(LI);
@@ -394,11 +394,11 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI, LiveInterva
 
 
 
-  if (ExtensionSize > 0)
-  {
-    output_regalloc << "EXTENSION SIZE: " << ExtensionSize << "\n";
-    output_regalloc << "TOTAL SIZE:     " << Size << "\n";
-  }
+  // if (ExtensionSize > 0)
+  // {
+  //   output_regalloc << "EXTENSION SIZE: " << ExtensionSize << "\n";
+  //   output_regalloc << "TOTAL SIZE:     " << Size << "\n";
+  // }
 
   return Prio;
 }

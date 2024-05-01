@@ -236,6 +236,8 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     {
         SI.last = SLIS.getMBBEndIdx(MBB);
     }
+
+    assert(SI.first <= SI.last && "First slot interval is after last slot interval!");
     
     return SI;
 }

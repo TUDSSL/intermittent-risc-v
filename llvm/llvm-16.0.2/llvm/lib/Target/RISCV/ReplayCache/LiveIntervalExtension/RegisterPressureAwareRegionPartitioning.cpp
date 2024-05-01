@@ -43,7 +43,7 @@ void RegisterPressureAwareRegionPartitioning::releaseMemory()
 
 bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFunction &MF)
 {
-    static constexpr unsigned NUM_INTERVAL_THRESHOLD = 31;
+    static constexpr unsigned NUM_INTERVAL_THRESHOLD = 27;
 
     LIEA_ = &getAnalysis<LiveIntervalExtensionAnalysis>();
     RRA_ = &getAnalysis<ReplayCacheRegionAnalysis>();
@@ -82,7 +82,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
             /* If there are no register definitions in this instruction, it has no effect on the distribution
              * of regions so we ignore it.
              */
-            if (Instr->getNumExplicitDefs() == 0)
+            if (Instr->getNumDefs() == 0)
             {
                 continue;
             }
@@ -92,7 +92,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
             // output_rparp.flush();
 
             /* Add all intervals for register definitions to the vector. */
-            for (auto &Def : Instr->defs())
+            for (auto &Def : Instr->all_defs())
             {
                 auto Reg = Def.getReg();
 
@@ -110,6 +110,8 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
                     /* Add this interval to the vector if it doesn't already exist. */
                     if (std::find(LiveIntervalVector.begin(), LiveIntervalVector.end(), &LI) == LiveIntervalVector.end())
                     {
+                        // output_rparp << "Instr: " << *Instr;
+                        // output_rparp.flush();
                         LiveIntervalVector.push_back(&LI);
                     }
                 }
@@ -126,21 +128,22 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
             }
 
             unsigned ExtensionPressure = LIEA_->getExtensionPressureAt(*Instr);
-            output_rparp << "Extensions: " << ExtensionPressure << "\n";
-            output_rparp.flush();
+            // output_rparp << "Extensions:    " << ExtensionPressure << "\n";
+            // output_rparp << "LiveIntervals: " << NumLiveIntervals << "\n";
+            // output_rparp.flush();
 
-            if (ExtensionPressure > 0 && NumLiveIntervals + ExtensionPressure > NUM_INTERVAL_THRESHOLD)
+            if (ExtensionPressure > 0 && NumLiveIntervals > NUM_INTERVAL_THRESHOLD)
             {
-                output_rparp << NumLiveIntervals + ExtensionPressure << " - Threshold exceeded, inserting region...\n";
-                output_rparp.flush();
+                // output_rparp << NumLiveIntervals << " - Threshold exceeded, inserting region...\n";
+                // output_rparp.flush();
                 /* Insert new region. */
                 RRA_->createRegionBefore(&Region, Instr.getMBBIt(), Instr.getInstrIt(), SIS_);
                 /* Trim active extensions to terminate at new region boundary. */
                 LIEA_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));
                 /* Stop iterating over the current region. */
                 // Instr.stop();
-                output_rparp << "Inserted region.\n";
-                output_rparp.flush();
+                // output_rparp << "Inserted region.\n";
+                // output_rparp.flush();
                 goto goto_continue_to_next_region;
             }
 

@@ -702,6 +702,25 @@ public:
                       operands_begin() + getNumExplicitOperands());
   }
 
+  using filtered_mop_iterator =
+      filter_iterator<mop_iterator, bool (*)(const MachineOperand &)>;
+  using filtered_const_mop_iterator =
+      filter_iterator<const_mop_iterator, bool (*)(const MachineOperand &)>;
+
+  static bool opIsRegDef(const MachineOperand &Op) {
+    return Op.isReg() && Op.isDef();
+  }
+ 
+  /// Returns an iterator range over all operands that are (explicit or
+  /// implicit) register defs.
+  iterator_range<filtered_mop_iterator> all_defs() {
+    return make_filter_range(operands(), opIsRegDef);
+  }
+  /// \copydoc all_defs()
+  iterator_range<filtered_const_mop_iterator> all_defs() const {
+    return make_filter_range(operands(), opIsRegDef);
+  }
+
   /// Returns the number of the operand iterator \p I points to.
   unsigned getOperandNo(const_mop_iterator I) const {
     return I - operands_begin();
