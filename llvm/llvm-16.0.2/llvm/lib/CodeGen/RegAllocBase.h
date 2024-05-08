@@ -36,6 +36,7 @@
 #ifndef LLVM_LIB_CODEGEN_REGALLOCBASE_H
 #define LLVM_LIB_CODEGEN_REGALLOCBASE_H
 
+#include "llvm/CodeGen/ReplayCache/ReplayCacheRegionAnalysis.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/CodeGen/RegAllocCommon.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
@@ -67,6 +68,7 @@ protected:
   VirtRegMap *VRM = nullptr;
   LiveIntervals *LIS = nullptr;
   LiveRegMatrix *Matrix = nullptr;
+  ReplayCacheRegionAnalysis *RRA = nullptr;
   RegisterClassInfo RegClassInfo;
   const RegClassFilterFunc ShouldAllocateClass;
 
@@ -82,7 +84,7 @@ protected:
   virtual ~RegAllocBase() = default;
 
   // A RegAlloc pass should call this before allocatePhysRegs.
-  void init(VirtRegMap &vrm, LiveIntervals &lis, LiveRegMatrix &mat);
+  void init(VirtRegMap &vrm, LiveIntervals &lis, LiveRegMatrix &mat, ReplayCacheRegionAnalysis &rra);
 
   // The top-level driver. The output is a VirtRegMap that us updated with
   // physical register assignments.

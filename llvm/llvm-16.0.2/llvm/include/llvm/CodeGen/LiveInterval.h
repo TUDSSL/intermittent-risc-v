@@ -207,6 +207,10 @@ namespace llvm {
     Segments segments;   // the liveness segments
     VNInfoList valnos;   // value#'s
 
+    /*** LIVE INTERVAL EXTENSION ***/
+    bool hasExtension = false;
+    /*******************************/
+
     // The segment set is used temporarily to accelerate initial computation
     // of live ranges of physical registers in computeRegUnitRange.
     // After that the set is flushed to the segment vector and deleted.

@@ -29,6 +29,8 @@ void ReplayCacheRegionAnalysis::getAnalysisUsage(AnalysisUsage &AU) const
 
 bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF) 
 {
+    // output1 << "REGION ANALYSIS\n";
+
     /* Create regions at START_REGION instructions. */
     for (auto MBB = MF.begin(); MBB != MF.end(); MBB++)
     {
@@ -36,6 +38,7 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
         {
             if (IsStartRegion(*MI))
             {
+                // output1 << "CREATE REGION\n";
                 createRegionAtBoundary(MBB, MI);
             }
         }
@@ -55,7 +58,7 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegi
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
 {
     ReplayCacheRegion *NewRegion = new (RegionAllocator_) ReplayCacheRegion(RegionsSize, StartRegionInstr, StartRegionBlock);
-    // output1 << "Created region " << RegionsSize << "\n";
+    // output1 << "Start instr: " << *StartRegionInstr << "\n";
     // output1.flush();
 
     if (PrevRegion == nullptr)

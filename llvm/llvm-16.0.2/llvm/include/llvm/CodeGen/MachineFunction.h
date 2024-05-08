@@ -187,7 +187,8 @@ public:
     TiedOpsRewritten,
     FailsVerification,
     TracksDebugUserValues,
-    LastProperty = TracksDebugUserValues,
+    ExtendsLiveIntervals,
+    LastProperty = ExtendsLiveIntervals,
   };
 
   bool hasProperty(Property P) const {

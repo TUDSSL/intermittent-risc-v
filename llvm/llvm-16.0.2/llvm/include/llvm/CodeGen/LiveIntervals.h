@@ -19,6 +19,8 @@
 #ifndef LLVM_CODEGEN_LIVEINTERVALS_H
 #define LLVM_CODEGEN_LIVEINTERVALS_H
 
+#include "llvm/CodeGen/ReplayCache/ExtendedLiveInterval.h"
+#include "llvm/CodeGen/ReplayCache/ReplayCacheRegionAnalysis.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -93,11 +95,34 @@ class VirtRegMap;
     /// interference.
     SmallVector<LiveRange*, 0> RegUnitRanges;
 
+    /*** LIVE INTERVAL EXTENSION ***/
+    using ExtendedLiveIntervalMap = DenseMap<unsigned, ExtendedLiveInterval *>;
+    BumpPtrAllocator ExtensionAllocator_;
+    ExtendedLiveIntervalMap ExtensionMap_;
+
+    ReplayCacheRegionAnalysis *RRA_;
+    ReplayCacheRegion *CurrentRegion_;
+
+    void computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI);
+    std::vector<SlotInterval> getSlotIntervalsInRegionFrom(MachineInstr &MI);
+    std::vector<SlotInterval> removeOverlappingIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
+    std::vector<SlotInterval> removeEmptySlotIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
+    void addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveInterval *ELR);
+    /*******************************/
+
   public:
     static char ID;
 
     LiveIntervals();
     ~LiveIntervals() override;
+
+    /*** LIVE INTERVAL EXTENSION ***/
+    void computeExtensions(ReplayCacheRegionAnalysis *Regions);
+    ExtendedLiveInterval *getExtensionFromLI(const LiveInterval &LI);
+    void recomputeActiveExtensions(SlotIndex SI);
+    void addExtensionsToIntervals();
+    unsigned getExtensionPressureAt(MachineInstr &MI);
+    /*******************************/
 
     /// Calculate the spill weight to assign to a single instruction.
     static float getSpillWeight(bool isDef, bool isUse,

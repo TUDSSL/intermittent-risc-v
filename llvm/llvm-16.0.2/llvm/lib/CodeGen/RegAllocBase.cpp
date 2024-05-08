@@ -55,11 +55,12 @@ bool RegAllocBase::VerifyEnabled = false;
 void RegAllocBase::anchor() {}
 
 void RegAllocBase::init(VirtRegMap &vrm, LiveIntervals &lis,
-                        LiveRegMatrix &mat) {
+                        LiveRegMatrix &mat, ReplayCacheRegionAnalysis &rra) {
   TRI = &vrm.getTargetRegInfo();
   MRI = &vrm.getRegInfo();
   VRM = &vrm;
   LIS = &lis;
+  RRA = &rra;
   Matrix = &mat;
   MRI->freezeReservedRegs(vrm.getMachineFunction());
   RegClassInfo.runOnMachineFunction(vrm.getMachineFunction());

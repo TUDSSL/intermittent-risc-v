@@ -2,6 +2,7 @@
 
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/SlotIndexes.h"
+#include "llvm/Support/raw_ostream.h"
 #include "ReplayCacheShared.h"
 #include <vector>
 
@@ -26,6 +27,7 @@ public:
     bool isLiveAt(SlotIndex &SI);
 
     unsigned getSize() const;
+    void print(raw_ostream &stream);
 };
 
 } // namespace llvm

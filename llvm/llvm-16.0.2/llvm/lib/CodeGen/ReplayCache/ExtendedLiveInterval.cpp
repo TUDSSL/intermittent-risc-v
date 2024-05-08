@@ -51,4 +51,13 @@ bool ExtendedLiveInterval::isLiveAt(SlotIndex &SI)
     return false;
 }
 
+void ExtendedLiveInterval::print(raw_ostream &stream)
+{
+    for (auto &SIT : SITS_)
+    {
+        stream << "[" << SIT.first << ", " << SIT.last << ")";
+    }
+    stream << "\n";
+}
+
 }

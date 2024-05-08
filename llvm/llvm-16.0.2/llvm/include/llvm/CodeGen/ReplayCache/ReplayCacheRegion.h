@@ -14,9 +14,10 @@ class ReplayCacheRegion
 private:
     ReplayCacheRegion *Next_;
     ReplayCacheRegion *Prev_;
-    MachineFunction *MF_;
 
 public:
+    
+    MachineFunction *MF_;
     using RegionInstr = MachineBasicBlock::iterator;
     using RegionBlock = MachineFunction::iterator;
 
@@ -31,7 +32,6 @@ public:
     RegionBlock BlockStart_;
     /* End MBB of the region. */
     RegionBlock BlockEnd_;
-    
 public:
     /* Iterator for iterating over instructions in a region.
      * Copied from https://github.com/mishermasher/llvm/tree/idempotence-extensions and slightly modified.
@@ -61,12 +61,35 @@ public:
                 }
             }
 
+            /* Ignore empty blocks at the start. */
+            // if (!isEnd)
+            // {
+            //     bool advanced = false;
+
+            //     while (BlockIt_ != BlockEnd_ && BlockIt_->empty())
+            //     {
+            //         ++BlockIt_;
+            //         advanced = true;
+            //     }
+
+            //     if (advanced)
+            //     {
+            //         InstrEnd_ = BlockIt_->begin();
+            //         InstrIt_ = BlockIt_->begin();
+            //     }
+            // }
+
             /* Make InstrEnd_ go to the end of the current basic block, OR the final instruction
             * if that is in the same basic block.
             */
-            while (!isEnd && !(InstrEnd_ == Region.BlockStart_->end() || InstrEnd_ == InstrFinal_))
+        //    TODO: something going wrong here!!! Get a segfault?
+            // while (!isEnd && !(InstrEnd_ == BlockIt_->end() || InstrEnd_ == InstrFinal_))
+            // {
+            //     ++InstrEnd_;
+            // }
+            if (!isEnd)
             {
-                ++InstrEnd_;
+                InstrEnd_ = BlockIt_->end();
             }
         }
 
@@ -83,8 +106,8 @@ public:
         rcr_inst_iterator<MachineInstrTy> operator++(int) { rcr_inst_iterator Tmp = *this; ++*this; return Tmp; };
 
         // Dereference.
-        MachineInstrTy &operator*() const { return *InstrIt_; };
-        MachineInstrTy *operator->() const { return &*InstrIt_; };
+        MachineInstrTy &operator*() const { assert(InstrIt_ != InstrEnd_ && InstrIt_ != InstrFinal_); return *InstrIt_; };
+        MachineInstrTy *operator->() const { assert(InstrIt_ != InstrEnd_ && InstrIt_ != InstrFinal_); return &*InstrIt_; };
         RegionInstr getInstrIt() const { return InstrIt_; };
 
         MachineBasicBlock *getMBB() const { return Valid_ ? InstrIt_->getParent() : nullptr; };
@@ -149,6 +172,8 @@ public:
     ReplayCacheRegion *getNext();
     ReplayCacheRegion *getPrev();
 
+    unsigned getSize(const SlotIndexes &SLIS) { return SLIS.getInstructionIndex(*InstrStart_).distance(SLIS.getInstructionIndex(*InstrEnd_)); }
+
     void print(raw_ostream &OS) const { OS << "Region ID: " << ID_ << "\n"; };
 };
 
@@ -164,6 +189,8 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy> &
 ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
 {
     assert(Valid_ && "iterating past end condition");
+    assert(BlockIt_ != Region_->MF_->end());
+    assert(InstrIt_ != BlockIt_->end());
     
     ++InstrIt_;
 
@@ -173,22 +200,26 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
     }
     else if (InstrIt_ == InstrEnd_)
     {
+        assert(BlockIt_ != BlockEnd_);
         ++BlockIt_;
 
         /* Find next non-empty MBB. */
-        while (BlockIt_ != BlockEnd_ && (*BlockIt_).empty())
+        while (BlockIt_ != BlockEnd_ && BlockIt_->empty())
         {
             ++BlockIt_;
         }
 
         if (BlockIt_ != BlockEnd_)
         {
+            assert(BlockIt_ != Region_->MF_->end());
+            assert(!BlockIt_->empty());
+
             /* Set Instr iterator to first instruction in new MBB. */
             InstrIt_ = BlockIt_->begin();
 
             /* Set InstrEnd to end instruction of MBB or final instruction, whichever comes first. */
-            InstrEnd_ = (*BlockIt_).begin();
-            while (InstrEnd_ != (*BlockIt_).end() && InstrEnd_ != InstrFinal_)
+            InstrEnd_ = BlockIt_->begin();
+            while (InstrEnd_ != BlockIt_->end() && InstrEnd_ != InstrFinal_)
             {
                 ++InstrEnd_;
             }
@@ -236,6 +267,8 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     {
         SI.last = SLIS.getMBBEndIdx(MBB);
     }
+
+    assert(SI.first <= SI.last && "Inverse interval!");
     
     return SI;
 }

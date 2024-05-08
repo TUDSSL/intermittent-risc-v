@@ -24,6 +24,7 @@ struct SlotInterval
     SlotIndex last;
 
     unsigned getSize() const { return first.distance(last); }
+    bool isEmpty() const { return getSize() == 0; }
     bool contains(SlotIndex &SI) const { return SI >= first && SI <= last; }
     void print(raw_ostream &s) const { s << first << ", " << last; }
 };

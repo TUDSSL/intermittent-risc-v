@@ -15,7 +15,7 @@ ReplayCacheRegion::ReplayCacheRegion(unsigned ID, RegionInstr StartRegionInstr, 
 {
     assert(IsStartRegion(*InstrStart_) && "Start instruction is not START_REGION");
 
-    InstrStart_++;
+    // InstrStart_++;
 }
 
 void ReplayCacheRegion::terminateAt(RegionInstr FenceInstr, RegionBlock FenceBlock)

@@ -247,7 +247,7 @@ add_llvm_component_library(LLVMCodeGen
   LiveDebugValues/InstrRefBasedImpl.cpp
 
   ReplayCache/ExtendedLiveInterval.cpp
-  ReplayCache/LiveIntervalExtensionAnalysis.cpp
+  # ReplayCache/LiveIntervalExtensionAnalysis.cpp
   ReplayCache/ReplayCacheRegion.cpp
   ReplayCache/ReplayCacheRegionAnalysis.cpp
   ReplayCache/ReplayCacheShared.cpp

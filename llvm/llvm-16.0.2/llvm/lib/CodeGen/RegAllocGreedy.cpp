@@ -167,7 +167,7 @@ INITIALIZE_PASS_DEPENDENCY(MachineOptimizationRemarkEmitterPass)
 INITIALIZE_PASS_DEPENDENCY(RegAllocEvictionAdvisorAnalysis)
 INITIALIZE_PASS_DEPENDENCY(RegAllocPriorityAdvisorAnalysis)
 INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
-INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
+// INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_END(RAGreedy, "greedy",
                 "Greedy Register Allocator", false, false)
 
@@ -227,8 +227,8 @@ void RAGreedy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<RegAllocPriorityAdvisorAnalysis>();
   AU.addRequired<ReplayCacheRegionAnalysis>();
   AU.addPreserved<ReplayCacheRegionAnalysis>();
-  AU.addRequired<LiveIntervalExtensionAnalysis>();
-  AU.addPreserved<LiveIntervalExtensionAnalysis>();
+  // AU.addRequired<LiveIntervalExtensionAnalysis>();
+  // AU.addPreserved<LiveIntervalExtensionAnalysis>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -298,14 +298,14 @@ void RAGreedy::enqueue(PQueue &CurQueue, const LiveInterval *LI) {
     ExtraInfo->setStage(Reg, Stage);
   }
 
-  unsigned Ret = PriorityAdvisor->getPriority(*LI, LIEA);
+  unsigned Ret = PriorityAdvisor->getPriority(*LI);
 
   // The virtual register number is a tie breaker for same-sized ranges.
   // Give lower vreg numbers higher priority to assign them first.
   CurQueue.push(std::make_pair(Ret, ~Reg));
 }
 
-unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI, LiveIntervalExtensionAnalysis *LIEA) const {
+unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
   // unsigned ExtensionSize = 0;
   // if (LIEA != nullptr)
   // {
@@ -2639,7 +2639,8 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
 
   RegAllocBase::init(getAnalysis<VirtRegMap>(),
                      getAnalysis<LiveIntervals>(),
-                     getAnalysis<LiveRegMatrix>());
+                     getAnalysis<LiveRegMatrix>(),
+                     getAnalysis<ReplayCacheRegionAnalysis>());
 
   // Early return if there is no virtual register to be allocated to a
   // physical register.
@@ -2654,8 +2655,10 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
   Bundles = &getAnalysis<EdgeBundles>();
   SpillPlacer = &getAnalysis<SpillPlacement>();
   DebugVars = &getAnalysis<LiveDebugVariables>();
-  LIEA = &getAnalysis<LiveIntervalExtensionAnalysis>();
-  RRA = &getAnalysis<ReplayCacheRegionAnalysis>();
+  // LIEA = &getAnalysis<LiveIntervalExtensionAnalysis>();
+  // RRA = &getAnalysis<ReplayCacheRegionAnalysis>();
+
+  // LIS->computeExtensions(RRA);
 
   initializeCSRCost();
 

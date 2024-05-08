@@ -275,6 +275,7 @@ public:
   void addMachineSSAOptimization() override;
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
+  void addOptimizedRegAlloc() override;
 };
 } // namespace
 
@@ -373,12 +374,12 @@ void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVInsertVSETVLIPass());
   
   // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
-  if (!ReplayCacheDisableIRP)
-    addPass(createReplayCacheInitialRegionsPass());
+  // if (!ReplayCacheDisableIRP)
+  //   addPass(createReplayCacheInitialRegionsPass());
 
-  // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
-  if (!ReplayCacheDisableRRP)
-    addPass(createRegisterPressureAwareRegionPartitioningPass());
+  // // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
+  // if (!ReplayCacheDisableRRP)
+  //   addPass(createRegisterPressureAwareRegionPartitioningPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
@@ -387,6 +388,70 @@ void RISCVPassConfig::addPostRegAlloc() {
 
   // REPLAYCACHE: Prevent store registers from spilling to the stack AFTER register allocation.
   // addPass(createReplayCacheStackSpillPreventionPass());
+}
+
+void RISCVPassConfig::addOptimizedRegAlloc()
+{
+  addPass(&DetectDeadLanesID);
+
+  addPass(&ProcessImplicitDefsID);
+
+  // LiveVariables currently requires pure SSA form.
+  //
+  // FIXME: Once TwoAddressInstruction pass no longer uses kill flags,
+  // LiveVariables can be removed completely, and LiveIntervals can be directly
+  // computed. (We still either need to regenerate kill flags after regalloc, or
+  // preferably fix the scavenger to not depend on them).
+  // FIXME: UnreachableMachineBlockElim is a dependant pass of LiveVariables.
+  // When LiveVariables is removed this has to be removed/moved either.
+  // Explicit addition of UnreachableMachineBlockElim allows stopping before or
+  // after it with -stop-before/-stop-after.
+  addPass(&UnreachableMachineBlockElimID);
+  addPass(&LiveVariablesID);
+
+  // Edge splitting is smarter with machine loop info.
+  addPass(&MachineLoopInfoID);
+  addPass(&PHIEliminationID);
+
+  // Eventually, we want to run LiveIntervals before PHI elimination.
+  // if (EarlyLiveIntervals)
+  //   addPass(&LiveIntervalsID);
+
+  addPass(&TwoAddressInstructionPassID);
+  addPass(&RegisterCoalescerID);
+
+  // The machine scheduler may accidentally create disconnected components
+  // when moving subregister definitions around, avoid this by splitting them to
+  // separate vregs before. Splitting can also improve reg. allocation quality.
+  addPass(&RenameIndependentSubregsID);
+
+  // PreRA instruction scheduling.
+  addPass(&MachineSchedulerID);
+
+  if (!ReplayCacheDisableIRP)
+    addPass(createReplayCacheInitialRegionsPass());
+
+  // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
+  if (!ReplayCacheDisableRRP)
+    addPass(createRegisterPressureAwareRegionPartitioningPass());
+
+  if (addRegAssignAndRewriteOptimized()) {
+    // Perform stack slot coloring and post-ra machine LICM.
+    addPass(&StackSlotColoringID);
+
+    // Allow targets to expand pseudo instructions depending on the choice of
+    // registers before MachineCopyPropagation.
+    addPostRewrite();
+
+    // Copy propagate to forward register uses and try to eliminate COPYs that
+    // were not coalesced.
+    addPass(&MachineCopyPropagationID);
+
+    // Run post-ra machine LICM to hoist reloads / remats.
+    //
+    // FIXME: can this move into MachineLateOptimization?
+    addPass(&MachineLICMID);
+  }
 }
 
 yaml::MachineFunctionInfo *

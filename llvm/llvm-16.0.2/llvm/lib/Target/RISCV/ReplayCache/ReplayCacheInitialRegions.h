@@ -3,6 +3,7 @@
 
 #include "RISCV.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 
 namespace llvm {
 class ReplayCacheInitialRegions : public MachineFunctionPass {
@@ -12,6 +13,8 @@ public:
   ReplayCacheInitialRegions() : MachineFunctionPass(ID) {}
 
 private:
+  SlotIndexes *SLIS = nullptr;
+
   bool runOnMachineFunction(MachineFunction &MF) override;
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;

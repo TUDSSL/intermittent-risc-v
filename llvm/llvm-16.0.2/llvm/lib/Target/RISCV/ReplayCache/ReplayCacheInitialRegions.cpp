@@ -18,13 +18,17 @@ char ReplayCacheInitialRegions::ID = 0;
 void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 {
     AU.setPreservesCFG();
+    AU.addRequired<SlotIndexes>();
+    AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
 
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
-  output0 << "INITIAL REGION START\n";
+  // output0 << "INITIAL REGION START\n";
+
+  SLIS = &getAnalysis<SlotIndexes>();
 
   // Skip naked functions
   // TODO: determine eligible functions in an earlier pass
@@ -40,7 +44,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
     if (MBB.isEntryBlock())
     {
       StartRegionInBB(MBB);
-      output0 << "Entry block region started!\n";
+      // output0 << "Entry block region started!\n";
     }
       
 
@@ -57,7 +61,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         if (NextMI) {
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
-          output0 << "NEW region started (callee return)!\n";
+          // output0 << "NEW region started (callee return)!\n";
         } else {
           // If there is no next instruction, the callee returns to the
           // fallthrough
@@ -97,8 +101,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST);
       }
     }
+
+
+    SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
   }
-  output0 << "INITIAL REGION END\n";
+  // output0 << "INITIAL REGION END\n";
 
   return true;
 }

@@ -23,7 +23,7 @@ bool ReplayCacheCLWBInserter::runOnMachineFunction(MachineFunction &MF)
 
             if (NextMI && isStoreInstruction(MI))
             {
-                BuildRC(MBB, *NextMI, NextMI->getDebugLoc(), CLWB);
+                BuildRC(MBB, *NextMI, MI.getDebugLoc(), CLWB);
             }
         }
     }

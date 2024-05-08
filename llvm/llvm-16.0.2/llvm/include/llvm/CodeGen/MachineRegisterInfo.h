@@ -67,6 +67,8 @@ private:
   MachineFunction *MF;
   SmallPtrSet<Delegate *, 1> TheDelegates;
 
+  bool extendsLiveIntervals = false;
+
   /// True if subregister liveness is tracked.
   const bool TracksSubRegLiveness;
 
@@ -202,6 +204,24 @@ public:
   // leaveSSA - Indicates that the machine function is no longer in SSA form.
   void leaveSSA() {
     MF->getProperties().reset(MachineFunctionProperties::Property::IsSSA);
+  }
+
+  bool getExtendsLiveIntervals()
+  {
+    return extendsLiveIntervals;
+    // return MF->getProperties().hasProperty(MachineFunctionProperties::Property::ExtendsLiveIntervals);
+  }
+
+  void setExtendsLiveIntervals()
+  {
+    // MF->getProperties().set(MachineFunctionProperties::Property::ExtendsLiveIntervals);
+    extendsLiveIntervals = true;
+  }
+
+  void resetExtendsLiveIntervals()
+  {
+    extendsLiveIntervals = false;
+    // MF->getProperties().reset(MachineFunctionProperties::Property::ExtendsLiveIntervals);
   }
 
   /// tracksLiveness - Returns true when tracking register liveness accurately.
