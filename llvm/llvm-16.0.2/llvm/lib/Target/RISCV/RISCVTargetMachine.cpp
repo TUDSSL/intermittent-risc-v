@@ -343,8 +343,6 @@ void RISCVPassConfig::addPreSched2() {}
 void RISCVPassConfig::addPreEmitPass() {
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
-  // REPLAYCACHE: Add CLWB instructions to all store.
-  addPass(createReplayCacheCLWBInserterPass());
 }
 
 void RISCVPassConfig::addPreEmitPass2() {
@@ -353,6 +351,9 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandAtomicPseudoPass());
+  
+  // REPLAYCACHE: Add CLWB instructions to all store.
+  addPass(createReplayCacheCLWBInserterPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
