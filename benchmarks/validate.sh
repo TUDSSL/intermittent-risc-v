@@ -22,8 +22,47 @@ expect_fence_next_line=false
 prev_line=""
 num_checks_failed=0
 branch_targets=()
+live_store_registers=()
+lineno=0
 
 while IFS= read -r line; do
+    lineno=$((lineno + 1))
+    # Stop at .sbss section, this is not where we want to validate.
+    # We can ignore the .debug_str section after it as well.
+    if [[ $line = "Disassembly of section .sbss:" || $line = "Disassembly of section .sdata:" ]]; then
+        break
+    fi
+
+    # Empty live registers at end of region.
+    if [[ $line =~ $fence_instr ]]; then
+        live_store_registers=()
+    fi
+
+    register_used=${line##*"	"}
+    register_used=${register_used%%,*}
+    for live_store_register in "${live_store_registers[@]}"
+    do
+        if [ "$live_store_register" = "$register_used" ]; then
+            found=false
+            for instr in "${conditional_branch_instrs[@]}"
+            do
+                if [[ $line =~ $instr ]]; then
+                    found=true
+                    break
+                fi
+            done
+
+            if [[ $found = false ]]; then
+                echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
+                echo "Register $register_used used after store: $read_file:$lineno"
+                echo "$line"
+                echo ""
+                num_checks_failed=$((num_checks_failed + 1))
+                failed=true
+                break
+            fi
+        fi
+    done
 
     #### CLWB CHECK ####
     # If we expect a CLWB now, check if it is there.
@@ -31,7 +70,7 @@ while IFS= read -r line; do
     if [ "$expect_clwb_next_line" = true ]; then
         if [[ ! $line =~ $clwb_instr ]]; then
             echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-            echo "Missing CLWB for store:"
+            echo "Missing CLWB for store: $read_file:$((lineno - 1))"
             echo "$prev_line"
             echo ""
             num_checks_failed=$((num_checks_failed + 1))
@@ -40,12 +79,40 @@ while IFS= read -r line; do
         expect_clwb_next_line=false
     fi
 
-    #### CLWB CHECK ####
+    #### STORE CHECK ####
     # Check for any store instructions. If one is found, expect CLWB at next line.
+    # Also add the store register to the live registers array for checking.
     for store_instr in "${store_instrs[@]}"
     do
         if [[ $line =~ $store_instr ]]; then
+            # Whenever a store is found, we expect a CLWB instruction next.
             expect_clwb_next_line=true
+            failed=false
+
+            # Extract store register from line.
+            store_register=${line##*"	"}
+            store_register=${store_register%%,*}
+
+            # Check if register is already used in a store.
+            # It cannot be used twice, because that would break recovery.
+            for live_store_register in "${live_store_registers[@]}"
+            do
+                if [ "$live_store_register" = "$store_register" ]; then
+                    echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
+                    echo "Register $store_register used in multiple stores: $read_file:$lineno"
+                    echo "$line"
+                    echo ""
+                    num_checks_failed=$((num_checks_failed + 1))
+                    failed=true
+                    break
+                fi
+            done
+            
+            # If it was not used yet, add register to list.
+            if [[ $failed = false ]]; then
+                live_store_registers+=($store_register)
+            fi
+
             break
         fi
     done
@@ -58,7 +125,7 @@ while IFS= read -r line; do
         if [[ $line =~ $branch_instr ]]; then
             if [[ ! $prev_line =~ $start_region_branch_instr && ! $prev_line =~ $start_region_branch_dest_instr ]]; then
                 echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-                echo "Missing region for branch instruction:"
+                echo "Missing region for branch instruction: $read_file:$lineno"
                 echo "$line"
                 echo ""
                 num_checks_failed=$((num_checks_failed + 1))
@@ -78,7 +145,7 @@ while IFS= read -r line; do
     if [ "$expect_fence_next_line" = true ]; then
         if [[ ! $line =~ $fence_instr ]]; then
             echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-            echo "Missing region boundary after call:"
+            echo "Missing region boundary after call: $read_file:$((lineno - 1))"
             echo "$prev_line"
             echo ""
             num_checks_failed=$((num_checks_failed + 1))
@@ -97,12 +164,6 @@ while IFS= read -r line; do
         fi
     done
 
-    # Stop at .sbss section, this is not where we want to validate.
-    # We can ignore the .debug_str section after it as well.
-    if [[ $line = "Disassembly of section .sbss:" ]]; then
-        break
-    fi
-
     prev_line=$line
 done < $read_file
 
@@ -116,7 +177,7 @@ do
 
     if [[ ! $target_line =~ $fence_instr ]]; then
         echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-        echo "Branch destination is not a FENCE instruction:"
+        echo "Branch destination is not a FENCE instruction: $read_file"
         echo "$target_line"
         echo ""
         num_checks_failed=$((num_checks_failed + 1))

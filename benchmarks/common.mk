@@ -1,5 +1,5 @@
 BENCHMARKS := \
-		quicksort
+		picojpeg
 		# devel \
 		# quicksort \
 		# coremark \

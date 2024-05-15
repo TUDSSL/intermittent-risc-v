@@ -17,7 +17,7 @@ char ReplayCacheInitialRegions::ID = 0;
 
 void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    AU.setPreservesCFG();
+    // AU.setPreservesCFG();
     AU.addRequired<SlotIndexes>();
     AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
@@ -44,6 +44,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
     if (MBB.isEntryBlock())
     {
       StartRegionInBB(MBB);
+      SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
       // output0 << "Entry block region started!\n";
     }
       
@@ -61,13 +62,16 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         if (NextMI) {
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
           BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
+          SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
           // output0 << "NEW region started (callee return)!\n";
         } else {
           // If there is no next instruction, the callee returns to the
           // fallthrough
           auto Fallthrough = MBB.getFallThrough();
-          if (Fallthrough)
+          if (Fallthrough) {
             StartRegionInBB(*Fallthrough, START_REGION_RETURN);
+            SLIS->repairIndexesInRange(Fallthrough, Fallthrough->begin(), Fallthrough->end());
+          }
           // If there is no fallthrough, this is the last block in the function
           // and the call is probably a tail call.
         }
@@ -78,6 +82,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // Create boundaries BEFORE branches
         BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
         BuildRC(MBB, MI, MI.getDebugLoc(), START_REGION_BRANCH);
+        SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
 
         // Create boundaries at the start of branch basic blocks
 
@@ -90,15 +95,24 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           if (NextMI->isUnconditionalBranch()) {
             FalseDest = TII.getBranchDestBlock(*NextMI);
           }
-          // else: nothing of interest (?)
+          // else: fall through within basic block.
+          // else {
+          //   BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
+          //   BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_BRANCH_DEST);
+          //   // SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
+          // }
         } else {
           // If there is no next instruction, the false branch is the fallthrough
           FalseDest = MBB.getFallThrough();
         }
           
         StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST);
+        SLIS->repairIndexesInRange(TrueDest, TrueDest->begin(), TrueDest->end());
         if (FalseDest)
+        {
           StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST);
+          SLIS->repairIndexesInRange(FalseDest, FalseDest->begin(), FalseDest->end());
+        }
       }
     }
 
