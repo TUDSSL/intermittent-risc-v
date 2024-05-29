@@ -13,6 +13,7 @@ enum ReplayCacheInstruction {
   START_REGION_EXTENSION = 2,
   START_REGION_BRANCH = 3,
   START_REGION_BRANCH_DEST = 4,
+  START_REGION_STACK_SPILL = 5,
   FENCE = 7,
   CLWB = 8,
   POWER_FAILURE_NEXT = 9
@@ -29,14 +30,14 @@ struct SlotInterval
     void print(raw_ostream &s) const { s << first << ", " << last; }
 };
 
-void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
+MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr);
 
-void BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
+MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr);
 
 void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION);
-void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION);
+void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION, bool insertInstr = false);
 
 /**
  * Check if the instruction is a ReplayCache instruction.
@@ -46,10 +47,12 @@ void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const 
 bool IsRC(const MachineInstr &MI);
 bool IsStartRegion(const MachineInstr &MI);
 bool IsFence(const MachineInstr &MI);
+bool hasRegionBoundaryBefore(const MachineInstr &MI);
 
-void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr = START_REGION);
+void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr = START_REGION, bool insertInstr = false);
 
 
 bool isStoreInstruction(MachineInstr &MI);
+bool isLoadInstruction(MachineInstr &MI);
 
 #endif

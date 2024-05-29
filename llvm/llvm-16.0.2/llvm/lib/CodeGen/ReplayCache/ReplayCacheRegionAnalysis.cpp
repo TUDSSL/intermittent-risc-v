@@ -36,6 +36,11 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
     {
         for (auto MI = MBB->begin(); MI != MBB->end(); MI++)
         {
+            // if (hasRegionBoundaryBefore(*MI))
+            // {
+            //     // output1 << "Has region boundary before!\n";
+            //     createRegionAtBoundary(MBB, MI);
+            // }
             if (IsStartRegion(*MI))
             {
                 // output1 << "CREATE REGION\n";
@@ -50,9 +55,9 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
     /* Insert instructions. */
-    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION);
+    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, true);
     SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
-    return createRegionAtBoundary(MBB, --MI, Region);
+    return createRegionAtBoundary(MBB, MI, Region);
 }
 
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
@@ -77,7 +82,7 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCache
             Tail->setNext(NewRegion);
 
             /* Set end instr and block for previous region. */
-            Tail->terminateAt(--StartRegionInstr, ++StartRegionBlock);
+            Tail->terminateAt(StartRegionInstr, ++StartRegionBlock);
             
             /* Set tail of linked list to new region. */
             Tail = NewRegion;
@@ -102,7 +107,7 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCache
         NewRegion->terminateAt(PrevRegion->InstrEnd_, PrevRegion->BlockEnd_);
 
         /* Set end instr and block for previous region. */
-        PrevRegion->terminateAt(--StartRegionInstr, ++StartRegionBlock);
+        PrevRegion->terminateAt(StartRegionInstr, ++StartRegionBlock);
     }
 
     RegionsSize++;

@@ -46,15 +46,13 @@ add_llvm_target(RISCVCodeGen
   GISel/RISCVInstructionSelector.cpp
   GISel/RISCVLegalizerInfo.cpp
   GISel/RISCVRegisterBankInfo.cpp
-  # ReplayCache/ReplayCacheShared.cpp
+  
   ReplayCache/ReplayCacheInitialRegions.cpp
-  # ReplayCache/ReplayCacheRegisterRegionPartitioning.cpp
   ReplayCache/ReplayCacheCLWBInserter.cpp
-  # ReplayCache/ReplayCacheStackSpillPrevention.cpp
-  # ReplayCache/Region/ReplayCacheRegion.cpp
-  # ReplayCache/Region/ReplayCacheRegionAnalysis.cpp
-  # ReplayCache/LiveIntervalExtension/ExtendedLiveInterval.cpp
-  # ReplayCache/LiveIntervalExtension/LiveIntervalExtensionAnalysis.cpp
+  ReplayCache/MBBPrinter.cpp
+  ReplayCache/BBPrinter.cpp
+  ReplayCache/ReplayCacheStackSpill.cpp
+  ReplayCache/ReplayCacheRepairRegions.cpp
   ReplayCache/LiveIntervalExtension/RegisterPressureAwareRegionPartitioning.cpp
 
   LINK_COMPONENTS

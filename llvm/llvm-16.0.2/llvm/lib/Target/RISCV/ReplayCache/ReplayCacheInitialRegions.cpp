@@ -28,6 +28,10 @@ void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
   // output0 << "INITIAL REGION START\n";
 
+  // output0 << "============================================\n";
+  // output0 << "=                INIT                      =\n";
+  // output0 << "============================================\n";
+
   SLIS = &getAnalysis<SlotIndexes>();
 
   // Skip naked functions
@@ -35,15 +39,13 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
   if (MF.getFunction().hasFnAttribute(Attribute::Naked))
     return false;
 
-  // TODO: make sure this only runs once
-
   auto &TII = *MF.getSubtarget().getInstrInfo();
 
   for (auto &MBB : MF) {
 
     if (MBB.isEntryBlock())
     {
-      StartRegionInBB(MBB);
+      StartRegionInBB(MBB, START_REGION, true);
       SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
       // output0 << "Entry block region started!\n";
     }
@@ -60,8 +62,9 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
       if (MI.isCall()) {
         // Start a new region when callee returns
         if (NextMI) {
-          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
-          BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
+          InsertRegionBoundaryBefore(MBB, *NextMI, START_REGION_RETURN, true);
+          // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
+          // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
           SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
           // output0 << "NEW region started (callee return)!\n";
         } else {
@@ -69,7 +72,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           // fallthrough
           auto Fallthrough = MBB.getFallThrough();
           if (Fallthrough) {
-            StartRegionInBB(*Fallthrough, START_REGION_RETURN);
+            StartRegionInBB(*Fallthrough, START_REGION_RETURN, true);
             SLIS->repairIndexesInRange(Fallthrough, Fallthrough->begin(), Fallthrough->end());
           }
           // If there is no fallthrough, this is the last block in the function
@@ -79,9 +82,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // No need to 'explicitly' end a region when returning,
         // because the caller is expected to do that already
       } else if (MI.isConditionalBranch()) {
+        // output0 << MBB;
+        // output0 << MI;
+        // output0 << "---------------------------------------------\n";
         // Create boundaries BEFORE branches
-        BuildRC(MBB, MI, MI.getDebugLoc(), FENCE);
-        BuildRC(MBB, MI, MI.getDebugLoc(), START_REGION_BRANCH);
+        InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, true);
         SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
 
         // Create boundaries at the start of branch basic blocks
@@ -106,11 +111,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           FalseDest = MBB.getFallThrough();
         }
           
-        StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST);
+        StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST, true);
         SLIS->repairIndexesInRange(TrueDest, TrueDest->begin(), TrueDest->end());
         if (FalseDest)
         {
-          StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST);
+          StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST, true);
           SLIS->repairIndexesInRange(FalseDest, FalseDest->begin(), FalseDest->end());
         }
       }
@@ -119,7 +124,15 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
 
     SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
   }
-  // output0 << "INITIAL REGION END\n";
+  
+  // for (auto &MBB : MF) {
+  //   for (auto &MI : MBB) {
+  //     if (MI.isConditionalBranch()) {
+  //       output0 << MBB;
+  //       output0 << "--------------------\n";
+  //     }
+  //   }
+  // }
 
   return true;
 }

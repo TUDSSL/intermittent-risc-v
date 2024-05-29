@@ -39,6 +39,8 @@
 
 using namespace llvm;
 
+raw_ostream &output_asmprinter = llvm::outs();
+
 #define DEBUG_TYPE "asm-printer"
 
 STATISTIC(RISCVNumInstrsCompressed,

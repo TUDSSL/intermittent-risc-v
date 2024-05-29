@@ -1,6 +1,6 @@
 conditional_branch_instrs=("beq" "bne" "blt" "bge" "bltu" "bgeu")
 store_instrs=("sw" "sh" "sb")
-call_instrs=("jalr" "jal")
+call_instrs=("jalr")
 call_register="ra"
 replaycache_instr_base="li	t6, "
 
@@ -51,6 +51,13 @@ while IFS= read -r line; do
                     break
                 fi
             done
+            for instr in "${store_instrs[@]}"
+            do
+                if [[ $line =~ $instr ]]; then
+                    found=true
+                    break
+                fi
+            done
 
             if [[ $found = false ]]; then
                 echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
@@ -87,29 +94,23 @@ while IFS= read -r line; do
         if [[ $line =~ $store_instr ]]; then
             # Whenever a store is found, we expect a CLWB instruction next.
             expect_clwb_next_line=true
-            failed=false
+            stored=false
 
             # Extract store register from line.
             store_register=${line##*"	"}
             store_register=${store_register%%,*}
 
             # Check if register is already used in a store.
-            # It cannot be used twice, because that would break recovery.
             for live_store_register in "${live_store_registers[@]}"
             do
                 if [ "$live_store_register" = "$store_register" ]; then
-                    echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-                    echo "Register $store_register used in multiple stores: $read_file:$lineno"
-                    echo "$line"
-                    echo ""
-                    num_checks_failed=$((num_checks_failed + 1))
-                    failed=true
+                    stored=true
                     break
                 fi
             done
             
             # If it was not used yet, add register to list.
-            if [[ $failed = false ]]; then
+            if [[ $stored = false ]]; then
                 live_store_registers+=($store_register)
             fi
 

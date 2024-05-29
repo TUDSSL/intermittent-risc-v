@@ -2,29 +2,33 @@
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
 
-void BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
+MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr) {
   auto &TII = *MBB.getParent()->getSubtarget().getInstrInfo();
-  BuildMI(MBB, MI, DL, TII.get(RISCV::C_LI), RISCV::X31) // TODO: missing isIndirect?
+  return BuildMI(*MBB.getParent(), DL, TII.get(RISCV::C_LI), RISCV::X31) // TODO: missing isIndirect?
       .addImm(Instr);
 }
 
-void BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
+MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr) {
   auto &TII = *MBB.getParent()->getSubtarget().getInstrInfo();
-  BuildMI(MBB, MI, DL, TII.get(RISCV::C_LI), RISCV::X31) // TODO: missing isIndirect?
+  return BuildMI(*MBB.getParent(), DL, TII.get(RISCV::C_LI), RISCV::X31) // TODO: missing isIndirect?
       .addImm(Instr);
 }
 
 void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr)
 {
-  BuildRC(MBB, MI, MI.getDebugLoc(), Instr);
+  MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), Instr));
 }
 
-void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr)
+void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr, bool insertInstr)
 {
-  BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE);
-  BuildRC(MBB, MI, MI.getDebugLoc(), Instr);
+  MI.setFlags(MachineInstr::MIFlag::HasRegionBoundaryBefore);
+  if (insertInstr)
+  {
+    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE));
+    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), Instr));
+  }
 }
 
 /**
@@ -47,15 +51,19 @@ bool IsFence(const MachineInstr &MI)
   return IsRC(MI) && static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) == ReplayCacheInstruction::FENCE;
 }
 
-void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr) {
+bool hasRegionBoundaryBefore(const MachineInstr &MI)
+{
+  return MI.getFlag(MachineInstr::MIFlag::HasRegionBoundaryBefore);
+}
+
+void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr, bool insertInstr) {
   auto FirstNonPHI = MBB.getFirstNonPHI();
   if (FirstNonPHI == MBB.instr_end())
     return;
   auto &EntryInstr = *FirstNonPHI;
   if (IsRC(EntryInstr))
     return;
-  BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), FENCE);
-  BuildRC(MBB, EntryInstr, EntryInstr.getDebugLoc(), Instr);
+  InsertRegionBoundaryBefore(MBB, EntryInstr, Instr, insertInstr);
 }
 
 bool isStoreInstruction(MachineInstr &MI)
@@ -66,6 +74,20 @@ bool isStoreInstruction(MachineInstr &MI)
         case RISCV::SB:
         case RISCV::C_SW:
         case RISCV::C_SWSP:
+            return true;
+    }
+
+    return false;
+}
+
+bool isLoadInstruction(MachineInstr &MI)
+{
+    switch (MI.getOpcode()) {
+        case RISCV::LW:
+        case RISCV::LH:
+        case RISCV::LB:
+        case RISCV::C_LW:
+        case RISCV::C_LWSP:
             return true;
     }
 

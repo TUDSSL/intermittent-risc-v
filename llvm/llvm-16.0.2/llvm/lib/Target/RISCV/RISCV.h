@@ -89,10 +89,18 @@ void initializeReplayCacheInitialRegionsPass(PassRegistry &);
 // void initializeReplayCacheRegisterRegionPartitioningPass(PassRegistry &);
 FunctionPass *createReplayCacheCLWBInserterPass();
 void initializeReplayCacheCLWBInserterPass(PassRegistry &);
+FunctionPass *createMBBPrinterPass();
+void initializeMBBPrinterPass(PassRegistry &);
+FunctionPass *createBBPrinterPass();
+void initializeBBPrinterPass(PassRegistry &);
+// FunctionPass *createReplayCacheRegionInserterPass();
+// void initializeReplayCacheRegionInserterPass(PassRegistry &);
 // FunctionPass *createReplayCacheRegisterPreservationPass();
 // void initializeReplayCacheRegisterPreservationPass(PassRegistry &);
-// FunctionPass *createReplayCacheStackSpillPreventionPass();
-// void initializeReplayCacheStackSpillPreventionPass(PassRegistry &);
+FunctionPass *createReplayCacheStackSpillPass();
+void initializeReplayCacheStackSpillPass(PassRegistry &);
+FunctionPass *createReplayCacheRepairRegionsPass();
+void initializeReplayCacheRepairRegionsPass(PassRegistry &);
 } // namespace llvm
 
 #endif

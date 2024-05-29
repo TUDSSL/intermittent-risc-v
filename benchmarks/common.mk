@@ -1,12 +1,11 @@
 BENCHMARKS := \
-		picojpeg
-		# devel \
-		# quicksort \
-		# coremark \
-		# crc \
-		# sha \
-		# dijkstra \
-		# aes \
+		devel \
+		quicksort\
+		coremark \
+		crc \
+		sha \
+		dijkstra \
+		aes \
 		# picojpeg
 
 BUILD_CONFIGURATIONS := \

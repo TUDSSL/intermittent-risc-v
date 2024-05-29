@@ -194,14 +194,14 @@ void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
           {
               auto Reg = MI.getOperand(0).getReg();
               if (Reg.isVirtual()){
-              LiveInterval &LI = this->getInterval(Reg);
+                LiveInterval &LI = this->getInterval(Reg);
 
-              // output_li << "Store instr: " << MI;
-              // output_li << "Operand:     " << MI.getOperand(0) << "\n";
-              // output_li << "LI:          " << LI << "\n";
-              // output_li.flush();
+                // output_li << "Store instr: " << MI;
+                // output_li << "Operand:     " << MI.getOperand(0) << "\n";
+                // output_li << "LI:          " << LI << "\n";
+                // output_li.flush();
 
-              computeExtensionFromLI(MI, LI);
+                computeExtensionFromLI(MI, LI);
 
               }
           }

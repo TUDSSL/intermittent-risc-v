@@ -30,6 +30,7 @@
 #include "llvm/MC/MCInstBuilder.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
 
 using namespace llvm;
 
@@ -56,6 +57,18 @@ using namespace RISCV;
 RISCVInstrInfo::RISCVInstrInfo(RISCVSubtarget &STI)
     : RISCVGenInstrInfo(RISCV::ADJCALLSTACKDOWN, RISCV::ADJCALLSTACKUP),
       STI(STI) {}
+
+bool RISCVInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
+                                          const MachineBasicBlock *MBB,
+                                          const MachineFunction &MF) const {
+
+  // Do not schedule region boundaries/clwbs.
+  if (IsRC(MI)) {
+    return true;
+  }
+
+  return TargetInstrInfo::isSchedulingBoundary(MI, MBB, MF);
+}
 
 MCInst RISCVInstrInfo::getNop() const {
   if (STI.hasStdExtCOrZca())

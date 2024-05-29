@@ -13,17 +13,21 @@ using namespace llvm;
 
 char ReplayCacheCLWBInserter::ID = 2;
 
+raw_ostream &output_clwb = llvm::outs();
+
 bool ReplayCacheCLWBInserter::runOnMachineFunction(MachineFunction &MF) 
 {
+    // output_clwb << "============================================\n";
+    // output_clwb << "=                CLWB                      =\n";
+    // output_clwb << "============================================\n";
     for (auto &MBB : MF) 
     {
-        for (auto &MI : MBB)
+        // output_clwb << MBB;
+        for (auto MI = MBB.begin(); MI != MBB.end(); MI++)
         {
-            auto NextMI = MI.getNextNode();
-
-            if (NextMI && isStoreInstruction(MI))
+            if (isStoreInstruction(*MI))
             {
-                BuildRC(MBB, *NextMI, MI.getDebugLoc(), CLWB);
+                MBB.insertAfter(MI, BuildRC(MBB, *MI, MI->getDebugLoc(), CLWB));
             }
         }
     }

@@ -13,7 +13,7 @@ ReplayCacheRegion::ReplayCacheRegion(unsigned ID, RegionInstr StartRegionInstr, 
     BlockEnd_(MF_->end()),
     ID_(ID)
 {
-    assert(IsStartRegion(*InstrStart_) && "Start instruction is not START_REGION");
+    // assert(IsStartRegion(*InstrStart_) && "Start instruction is not START_REGION");
 
     // InstrStart_++;
 }

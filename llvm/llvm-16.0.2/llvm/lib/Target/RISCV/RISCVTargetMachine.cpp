@@ -93,8 +93,11 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVInsertVSETVLIPass(*PR);
   initializeRISCVDAGToDAGISelPass(*PR);
   initializeReplayCacheInitialRegionsPass(*PR);
-  // initializeReplayCacheRegisterRegionPartitioningPass(*PR);
+  initializeMBBPrinterPass(*PR);
+  initializeBBPrinterPass(*PR);
   initializeReplayCacheCLWBInserterPass(*PR);
+  initializeReplayCacheStackSpillPass(*PR);
+  initializeReplayCacheRepairRegionsPass(*PR);
   initializeRegisterPressureAwareRegionPartitioningPass(*PR);
 }
 
@@ -296,6 +299,8 @@ void RISCVPassConfig::addIRPasses() {
 }
 
 bool RISCVPassConfig::addPreISel() {
+  // addPass(createBBPrinterPass());
+
   if (TM->getOptLevel() != CodeGenOpt::None) {
     // Add a barrier before instruction selection so that we will not get
     // deleted block address after enabling default outlining. See D99707 for
@@ -353,10 +358,13 @@ void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandAtomicPseudoPass());
   
   // REPLAYCACHE: Add CLWB instructions to all store.
+  addPass(createReplayCacheRepairRegionsPass());
+  addPass(createReplayCacheStackSpillPass());
   addPass(createReplayCacheCLWBInserterPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
+  // addPass(createMBBPrinterPass());
   TargetPassConfig::addMachineSSAOptimization();
   if (EnableMachineCombiner)
     addPass(&MachineCombinerID);
@@ -368,7 +376,6 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-
   addPass(createRISCVPreRAExpandPseudoPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
@@ -386,9 +393,6 @@ void RISCVPassConfig::addPreRegAlloc() {
 void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
-
-  // REPLAYCACHE: Prevent store registers from spilling to the stack AFTER register allocation.
-  // addPass(createReplayCacheStackSpillPreventionPass());
 }
 
 void RISCVPassConfig::addOptimizedRegAlloc()

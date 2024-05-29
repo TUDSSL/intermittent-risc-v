@@ -255,13 +255,41 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     {
         /* Check if MIStart is in current basic block. */
         assert(MIStart->getParent() == MBB);
-        
-        SI.first = SLIS.getInstructionIndex(*MIStart).getRegSlot();
+
+        // MachineInstr *RealMIStart = MIStart;
+
+        // while (RealMIStart->isDebugInstr())
+        // {
+        //     RealMIStart = MIStart->getNextNode();
+        // }
+
+        // if (RealMIStart == nullptr)
+        // {
+        //     SI.last = SLIS.getMBBEndIdx(MBB);
+        // }
+        // else {
+            SI.first = SLIS.getInstructionIndex(*MIStart).getRegSlot();
+        // }
     }
 
     if (!InstrFinalIsSentinel_ && InstrFinal_->getParent() == MBB)
     {
-        SI.last = SLIS.getInstructionIndex(*InstrFinal_).getRegSlot();
+        RegionInstr RealInstrFinal = InstrFinal_;
+
+        while (RealInstrFinal != MBB->end() && RealInstrFinal->isDebugInstr())
+        {
+            RealInstrFinal--;
+        }
+
+        if (RealInstrFinal == MBB->begin())
+        {
+            SI.last = SLIS.getMBBStartIdx(MBB);
+        }
+        else {
+            SI.last = SLIS.getInstructionIndex(*RealInstrFinal).getRegSlot();
+        }
+
+        // SI.last = SLIS.getInstructionIndex(*InstrFinal_).getRegSlot();
     }
     else
     {
