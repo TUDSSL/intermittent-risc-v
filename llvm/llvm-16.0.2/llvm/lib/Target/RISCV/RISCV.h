@@ -83,6 +83,8 @@ void initializeRegisterPressureAwareRegionPartitioningPass(PassRegistry &);
 // void initializeLiveIntervalExtensionAnalysisPass(PassRegistry &);
 FunctionPass *createReplayCacheRegionAnalysisPass();
 void initializeReplayCacheRegionAnalysisPass(PassRegistry &);
+// FunctionPass *createReplayCacheMarkBranchesPass();
+// void initializeReplayCacheMarkBranchesPass(PassRegistry &);
 FunctionPass *createReplayCacheInitialRegionsPass();
 void initializeReplayCacheInitialRegionsPass(PassRegistry &);
 // FunctionPass *createReplayCacheRegisterRegionPartitioningPass();
@@ -101,6 +103,8 @@ FunctionPass *createReplayCacheStackSpillPass();
 void initializeReplayCacheStackSpillPass(PassRegistry &);
 FunctionPass *createReplayCacheRepairRegionsPass();
 void initializeReplayCacheRepairRegionsPass(PassRegistry &);
+FunctionPass *createReplayCacheRepairRegions2Pass();
+void initializeReplayCacheRepairRegions2Pass(PassRegistry &);
 } // namespace llvm
 
 #endif

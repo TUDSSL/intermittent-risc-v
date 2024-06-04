@@ -36,16 +36,18 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
     {
         for (auto MI = MBB->begin(); MI != MBB->end(); MI++)
         {
-            // if (hasRegionBoundaryBefore(*MI))
-            // {
-            //     // output1 << "Has region boundary before!\n";
-            //     createRegionAtBoundary(MBB, MI);
-            // }
-            if (IsStartRegion(*MI))
+            auto PrevMI = MI->getPrevNode();
+
+            if (hasRegionBoundaryBefore(*MI) || (PrevMI && IsStartRegion(*PrevMI)))
             {
-                // output1 << "CREATE REGION\n";
+                // output1 << "Has region boundary before!\n";
                 createRegionAtBoundary(MBB, MI);
             }
+            // if (IsStartRegion(*MI))
+            // {
+            //     // output1 << "CREATE REGION\n";
+            //     createRegionAtBoundary(MBB, MI);
+            // }
         }
     }
 
@@ -55,7 +57,7 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
     /* Insert instructions. */
-    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, true);
+    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
     SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
     return createRegionAtBoundary(MBB, MI, Region);
 }

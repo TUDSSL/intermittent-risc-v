@@ -125,11 +125,9 @@ void _start(void) {
   "li a1, 1\n"
   "1:li t6, 7\n"
   "li t6, 4\n"
-  "li t6, 7\n"
-  "li t6, 3\n"
   "bgeu a0, a1, 1b\n"
   "li t6, 7\n"
-  "li t6, 4\n"
+  "li t6, 5\n"
 
   "add sp, a0, 1\n"
   "sll sp, sp, 17\n"

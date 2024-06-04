@@ -49,11 +49,12 @@ add_llvm_target(RISCVCodeGen
   
   ReplayCache/ReplayCacheInitialRegions.cpp
   ReplayCache/ReplayCacheCLWBInserter.cpp
-  ReplayCache/MBBPrinter.cpp
-  ReplayCache/BBPrinter.cpp
   ReplayCache/ReplayCacheStackSpill.cpp
   ReplayCache/ReplayCacheRepairRegions.cpp
+  ReplayCache/ReplayCacheRepairRegions2.cpp
   ReplayCache/LiveIntervalExtension/RegisterPressureAwareRegionPartitioning.cpp
+  ReplayCache/Debug/MBBPrinter.cpp
+  ReplayCache/Debug/BBPrinter.cpp
 
   LINK_COMPONENTS
   Analysis

@@ -8,12 +8,12 @@
 using namespace llvm;
 
 enum ReplayCacheInstruction {
-  START_REGION = 0,
-  START_REGION_RETURN = 1,
-  START_REGION_EXTENSION = 2,
-  START_REGION_BRANCH = 3,
-  START_REGION_BRANCH_DEST = 4,
-  START_REGION_STACK_SPILL = 5,
+  START_REGION = 1,
+  START_REGION_RETURN = 2,
+  START_REGION_EXTENSION = 3,
+  START_REGION_BRANCH = 4,
+  START_REGION_BRANCH_DEST = 5,
+  START_REGION_STACK_SPILL = 6,
   FENCE = 7,
   CLWB = 8,
   POWER_FAILURE_NEXT = 9
@@ -48,6 +48,7 @@ bool IsRC(const MachineInstr &MI);
 bool IsStartRegion(const MachineInstr &MI);
 bool IsFence(const MachineInstr &MI);
 bool hasRegionBoundaryBefore(const MachineInstr &MI);
+void removeRegionBoundaryBefore(MachineInstr &MI);
 
 void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr = START_REGION, bool insertInstr = false);
 

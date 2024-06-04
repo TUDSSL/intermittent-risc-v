@@ -28,9 +28,10 @@ void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
   // output0 << "INITIAL REGION START\n";
 
-  // output0 << "============================================\n";
-  // output0 << "=                INIT                      =\n";
-  // output0 << "============================================\n";
+  output0 << "============================================\n";
+  output0 << "=                INIT                      =\n";
+  output0 << "============================================\n";
+  output0.flush();
 
   SLIS = &getAnalysis<SlotIndexes>();
 
@@ -62,7 +63,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
       if (MI.isCall()) {
         // Start a new region when callee returns
         if (NextMI) {
-          InsertRegionBoundaryBefore(MBB, *NextMI, START_REGION_RETURN, true);
+          InsertRegionBoundaryBefore(MBB, *NextMI, START_REGION_RETURN, false);
           // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
           // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
           SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
@@ -72,7 +73,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           // fallthrough
           auto Fallthrough = MBB.getFallThrough();
           if (Fallthrough) {
-            StartRegionInBB(*Fallthrough, START_REGION_RETURN, true);
+            StartRegionInBB(*Fallthrough, START_REGION_RETURN, false);
             SLIS->repairIndexesInRange(Fallthrough, Fallthrough->begin(), Fallthrough->end());
           }
           // If there is no fallthrough, this is the last block in the function
@@ -86,7 +87,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // output0 << MI;
         // output0 << "---------------------------------------------\n";
         // Create boundaries BEFORE branches
-        InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, true);
+        InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
         SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
 
         // Create boundaries at the start of branch basic blocks
@@ -111,11 +112,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           FalseDest = MBB.getFallThrough();
         }
           
-        StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST, true);
+        StartRegionInBB(*TrueDest, START_REGION_BRANCH_DEST, false);
         SLIS->repairIndexesInRange(TrueDest, TrueDest->begin(), TrueDest->end());
         if (FalseDest)
         {
-          StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST, true);
+          StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST, false);
           SLIS->repairIndexesInRange(FalseDest, FalseDest->begin(), FalseDest->end());
         }
       }
@@ -138,6 +139,8 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
 }
 
 FunctionPass *llvm::createReplayCacheInitialRegionsPass() {
+  output0 << "Create ReplayCacheInitialRegions\n";
+  output0.flush();
   return new ReplayCacheInitialRegions();
 }
 

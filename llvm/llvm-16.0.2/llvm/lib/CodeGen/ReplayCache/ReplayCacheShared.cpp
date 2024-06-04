@@ -23,11 +23,13 @@ void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const Rep
 
 void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr, bool insertInstr)
 {
-  MI.setFlags(MachineInstr::MIFlag::HasRegionBoundaryBefore);
+  MI.setFlag(MachineInstr::MIFlag::HasRegionBoundaryBefore);
+  MI.setFlag(MachineInstr::MIFlag::NoMerge);
+  MI.StartRegionInstr = (unsigned)Instr;
   if (insertInstr)
   {
-    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE));
-    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), Instr));
+    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE).setMIFlag(MachineInstr::MIFlag::NoMerge));
+    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), Instr).setMIFlag(MachineInstr::MIFlag::NoMerge));
   }
 }
 
@@ -44,7 +46,7 @@ bool IsRC(const MachineInstr &MI) {
 
 bool IsStartRegion(const MachineInstr &MI)
 {
-  return IsRC(MI) && (static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) <= ReplayCacheInstruction::START_REGION_BRANCH_DEST);
+  return IsRC(MI) && (static_cast<ReplayCacheInstruction>(MI.getOperand(1).getImm()) < ReplayCacheInstruction::FENCE);
 }
 bool IsFence(const MachineInstr &MI)
 {
@@ -56,10 +58,31 @@ bool hasRegionBoundaryBefore(const MachineInstr &MI)
   return MI.getFlag(MachineInstr::MIFlag::HasRegionBoundaryBefore);
 }
 
+void removeRegionBoundaryBefore(MachineInstr &MI)
+{
+  MI.clearFlag(MachineInstr::MIFlag::HasRegionBoundaryBefore);
+}
+
 void StartRegionInBB(MachineBasicBlock &MBB, const ReplayCacheInstruction Instr, bool insertInstr) {
   auto FirstNonPHI = MBB.getFirstNonPHI();
-  if (FirstNonPHI == MBB.instr_end())
-    return;
+  while (FirstNonPHI != MBB.instr_end() && FirstNonPHI->isDebugInstr())
+  {
+    FirstNonPHI++;
+  }
+
+  /* If MBB is empty, go on to next MBB if it exists. */
+  if (FirstNonPHI == MBB.instr_end()) {
+    MachineBasicBlock *next = MBB.getNextNode();
+    if (next)
+    {
+      return StartRegionInBB(*next, Instr, insertInstr);
+    }
+    else
+    {
+      return;
+    }
+  }
+    
   auto &EntryInstr = *FirstNonPHI;
   if (IsRC(EntryInstr))
     return;

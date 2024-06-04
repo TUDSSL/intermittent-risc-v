@@ -1663,6 +1663,8 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "nofpexcept ";
   if (getFlag(MachineInstr::NoMerge))
     OS << "nomerge ";
+  if (getFlag(MachineInstr::HasRegionBoundaryBefore))
+    OS << "regionbefore ";
 
   // Print the opcode name.
   if (TII)

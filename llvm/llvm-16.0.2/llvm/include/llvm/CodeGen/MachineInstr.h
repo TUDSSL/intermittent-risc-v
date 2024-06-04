@@ -115,6 +115,8 @@ public:
     HasRegionBoundaryBefore = 1 << 16,  // Instruction has ReplayCache region boundary before it.
   };
 
+  unsigned StartRegionInstr;
+
 private:
   const MCInstrDesc *MCID;              // Instruction descriptor.
   MachineBasicBlock *Parent = nullptr;  // Pointer to the owning basic block.

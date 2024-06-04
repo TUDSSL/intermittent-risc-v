@@ -29,7 +29,6 @@ RegisterPressureAwareRegionPartitioning::RegisterPressureAwareRegionPartitioning
 
 void RegisterPressureAwareRegionPartitioning::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    // AU.addRequiredTransitive<LiveIntervalExtensionAnalysis>();
     AU.addRequired<ReplayCacheRegionAnalysis>();
     AU.addRequired<LiveIntervals>();
     AU.addRequired<SlotIndexes>();

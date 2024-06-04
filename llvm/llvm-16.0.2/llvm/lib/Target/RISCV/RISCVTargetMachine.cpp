@@ -38,6 +38,8 @@
 #include <optional>
 using namespace llvm;
 
+raw_ostream &output_riscv = llvm::outs();
+
 static cl::opt<bool> EnableRedundantCopyElimination(
     "riscv-enable-copyelim",
     cl::desc("Enable the redundant copy elimination pass"), cl::init(true),
@@ -98,7 +100,11 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeReplayCacheCLWBInserterPass(*PR);
   initializeReplayCacheStackSpillPass(*PR);
   initializeReplayCacheRepairRegionsPass(*PR);
+  initializeReplayCacheRepairRegions2Pass(*PR);
+  // initializeReplayCacheMarkBranchesPass(*PR);
   initializeRegisterPressureAwareRegionPartitioningPass(*PR);
+  // output_riscv << "Initialized passes\n";
+  // output_riscv.flush();
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -279,6 +285,7 @@ public:
   void addPreRegAlloc() override;
   void addPostRegAlloc() override;
   void addOptimizedRegAlloc() override;
+  // void addMachineLateOptimization() override;
 };
 } // namespace
 
@@ -357,9 +364,11 @@ void RISCVPassConfig::addPreEmitPass2() {
   // progress in the LR/SC block.
   addPass(createRISCVExpandAtomicPseudoPass());
   
-  // REPLAYCACHE: Add CLWB instructions to all store.
-  addPass(createReplayCacheRepairRegionsPass());
+  /* REPLAYCACHE: Repair regions in preparation for stack spill. */
+  addPass(createReplayCacheRepairRegions2Pass());
+  /* REPLAYCACHE: Add regions for stack spills. */
   addPass(createReplayCacheStackSpillPass());
+  /* REPLAYCACHE: Add CLWB instructions to all store. */
   addPass(createReplayCacheCLWBInserterPass());
 }
 
@@ -380,20 +389,41 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
-  
-  // REPLAYCACHE: Create initial ReplayCache regions at function bounds and conditional branches.
-  // if (!ReplayCacheDisableIRP)
-  //   addPass(createReplayCacheInitialRegionsPass());
-
-  // // REPLAYCACHE: Do register region partitioning and preservation BEFORE register allocation.
-  // if (!ReplayCacheDisableRRP)
-  //   addPass(createRegisterPressureAwareRegionPartitioningPass());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
+
+  /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
+  disablePass(&BranchFolderPassID);
+  /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
+  addPass(createReplayCacheRepairRegionsPass());
+
+  // addPass(createMBBPrinterPass());
+
+  // addPass(createReplayCacheMarkBranchesPass());
 }
+
+// void RISCVPassConfig::addMachineLateOptimization()
+// {
+//   // Cleanup of redundant immediate/address loads.
+//   addPass(&MachineLateInstrsCleanupID);
+
+//   // Branch folding must be run after regalloc and prolog/epilog insertion.
+//   addPass(&BranchFolderPassID);
+//   addPass(createMBBPrinterPass());
+
+//   // Tail duplication.
+//   // Note that duplicating tail just increases code size and degrades
+//   // performance for targets that require Structured Control Flow.
+//   // In addition it can also make CFG irreducible. Thus we disable it.
+//   if (!TM->requiresStructuredCFG())
+//     addPass(&TailDuplicateID);
+
+//   // Copy propagation.
+//   addPass(&MachineCopyPropagationID);
+// }
 
 void RISCVPassConfig::addOptimizedRegAlloc()
 {

@@ -28,13 +28,27 @@ void ReplayCacheRepairRegions::getAnalysisUsage(AnalysisUsage &AU) const
 bool ReplayCacheRepairRegions::runOnMachineFunction(MachineFunction &MF) 
 {
     SLIS = &getAnalysis<SlotIndexes>();
+    MachineInstr *PrevMI = nullptr;
 
     for (auto &MBB : MF) 
     {
-        if (MBB.isEntryBlock())
+        for (MachineInstr &MI : MBB) 
         {
-            StartRegionInBB(MBB, START_REGION, true);
-            SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
+            if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI))
+            {
+                ReplayCacheInstruction startRegionInstr = (ReplayCacheInstruction) MI.StartRegionInstr;
+                if (startRegionInstr != START_REGION_BRANCH_DEST)
+                {
+                    InsertRegionBoundaryBefore(MBB, MI, startRegionInstr, true);
+                }
+                else
+                {
+                    removeRegionBoundaryBefore(MI);
+                }
+                
+            }
+
+            PrevMI = &MI;
         }
     }
     return true;
