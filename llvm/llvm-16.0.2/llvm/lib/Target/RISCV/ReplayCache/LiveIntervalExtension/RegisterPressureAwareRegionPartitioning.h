@@ -3,12 +3,10 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
 #include "llvm/CodeGen/LiveIntervals.h"
-// #include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
 
 class RegisterPressureAwareRegionPartitioning : public MachineFunctionPass
 {
 private:
-    // LiveIntervalExtensionAnalysis *LIEA_;
     ReplayCacheRegionAnalysis *RRA_;
     LiveIntervals *LIS_;
     SlotIndexes *SIS_;

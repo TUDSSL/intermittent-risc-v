@@ -100,7 +100,6 @@ class VirtRegMap;
     BumpPtrAllocator ExtensionAllocator_;
     ExtendedLiveIntervalMap ExtensionMap_;
 
-    ReplayCacheRegionAnalysis *RRA_;
     ReplayCacheRegion *CurrentRegion_;
 
     void computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI);

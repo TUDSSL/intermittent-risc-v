@@ -79,14 +79,7 @@ public:
             //     }
             // }
 
-            /* Make InstrEnd_ go to the end of the current basic block, OR the final instruction
-            * if that is in the same basic block.
-            */
-        //    TODO: something going wrong here!!! Get a segfault?
-            // while (!isEnd && !(InstrEnd_ == BlockIt_->end() || InstrEnd_ == InstrFinal_))
-            // {
-            //     ++InstrEnd_;
-            // }
+            /* Make InstrEnd_ go to the end of the current basic block. */
             if (!isEnd)
             {
                 InstrEnd_ = BlockIt_->end();
@@ -149,14 +142,10 @@ public:
 public:
     unsigned ID_;
 
-    /* Start a region at an instruction.
-     * Assumes this is done at a START_REGION instruction!
-     */
+    /* Start the region at an instruction. */
     ReplayCacheRegion(unsigned ID, RegionInstr StartRegionInstr, RegionBlock StartRegionBlock);
 
-    /* Terminate the region at this instruction.
-     * Assumes this is done at a FENCE instruction!
-     */
+    /* Terminate the region at this instruction. */
     void terminateAt(RegionInstr FenceInstr, RegionBlock FenceBlock);
 
     bool containsInstr(MachineInstr MI);
@@ -192,12 +181,17 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
     assert(BlockIt_ != Region_->MF_->end());
     assert(InstrIt_ != BlockIt_->end());
     
+    /* Increment instruction iterator. */
     ++InstrIt_;
 
+    /* Return if the final instruction in the region has been reached. */
     if (InstrIt_ == InstrFinal_)
     {
         Valid_ = false;
     }
+    /* We reached the end of the current basic block, increment basic block and find
+     * next instruction.
+     */
     else if (InstrIt_ == InstrEnd_)
     {
         assert(BlockIt_ != BlockEnd_);
@@ -224,6 +218,7 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
                 ++InstrEnd_;
             }
         }
+        /* Final basic block reached, region ends. */
         else
         {
             Valid_ = false;
@@ -233,6 +228,7 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
     return *this;
 }
 
+/* Get the slot index interval of the region in the current MBB. */
 template <typename MachineInstrTy>
 SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart) const
 {
@@ -253,29 +249,16 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     }
     else
     {
-        /* Check if MIStart is in current basic block. */
+        /* Region contains custom start instruction. */
         assert(MIStart->getParent() == MBB);
-
-        // MachineInstr *RealMIStart = MIStart;
-
-        // while (RealMIStart->isDebugInstr())
-        // {
-        //     RealMIStart = MIStart->getNextNode();
-        // }
-
-        // if (RealMIStart == nullptr)
-        // {
-        //     SI.last = SLIS.getMBBEndIdx(MBB);
-        // }
-        // else {
-            SI.first = SLIS.getInstructionIndex(*MIStart).getRegSlot();
-        // }
+        SI.first = SLIS.getInstructionIndex(*MIStart).getRegSlot();
     }
 
+    /* If the final instruction is in this MBB, that should be the end of the range. */
     if (!InstrFinalIsSentinel_ && InstrFinal_->getParent() == MBB)
     {
+        /* Get non-debug final instr (using debug instr crashes compiler). */
         RegionInstr RealInstrFinal = InstrFinal_;
-
         while (RealInstrFinal != MBB->end() && RealInstrFinal->isDebugInstr())
         {
             RealInstrFinal--;
@@ -288,8 +271,6 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
         else {
             SI.last = SLIS.getInstructionIndex(*RealInstrFinal).getRegSlot();
         }
-
-        // SI.last = SLIS.getInstructionIndex(*InstrFinal_).getRegSlot();
     }
     else
     {
@@ -301,11 +282,11 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     return SI;
 }
 
-template <typename MachineInstrTy>
-void ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::stop()
-{
-    InstrIt_ = --InstrFinal_;
-    InstrEnd_ = ++InstrFinal_;
-}
+// template <typename MachineInstrTy>
+// void ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::stop()
+// {
+//     InstrIt_ = --InstrFinal_;
+//     InstrEnd_ = ++InstrFinal_;
+// }
 
 }

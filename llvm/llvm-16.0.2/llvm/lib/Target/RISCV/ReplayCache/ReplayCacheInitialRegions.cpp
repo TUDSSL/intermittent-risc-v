@@ -28,10 +28,10 @@ void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
   // output0 << "INITIAL REGION START\n";
 
-  output0 << "============================================\n";
-  output0 << "=                INIT                      =\n";
-  output0 << "============================================\n";
-  output0.flush();
+  // output0 << "============================================\n";
+  // output0 << "=                INIT                      =\n";
+  // output0 << "============================================\n";
+  // output0.flush();
 
   SLIS = &getAnalysis<SlotIndexes>();
 

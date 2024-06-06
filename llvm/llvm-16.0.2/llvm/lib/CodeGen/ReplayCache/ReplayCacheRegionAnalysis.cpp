@@ -4,7 +4,6 @@
 
 using namespace llvm;
 
-
 #define DEBUG_TYPE "replaycache"
 #define PASS_NAME "ReplayCache_RegionAnalysis"
 
@@ -27,9 +26,11 @@ void ReplayCacheRegionAnalysis::getAnalysisUsage(AnalysisUsage &AU) const
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
+/* Create regions at region start instructions, or if the instruction should have a region before it. */
 bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF) 
 {
     // output1 << "REGION ANALYSIS\n";
+    // output1.flush();
 
     /* Create regions at START_REGION instructions. */
     for (auto MBB = MF.begin(); MBB != MF.end(); MBB++)
@@ -43,25 +44,26 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
                 // output1 << "Has region boundary before!\n";
                 createRegionAtBoundary(MBB, MI);
             }
-            // if (IsStartRegion(*MI))
-            // {
-            //     // output1 << "CREATE REGION\n";
-            //     createRegionAtBoundary(MBB, MI);
-            // }
         }
     }
 
     return false;
 }
 
+/* Create a region before the given instruction. */
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
     /* Insert instructions. */
-    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
-    SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
-    return createRegionAtBoundary(MBB, MI, Region);
+    output1 << *MI;
+    // InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
+    // SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
+    // return createRegionAtBoundary(MBB, MI, Region);
 }
 
+/* Create a new region at a region boundary.
+ * The new region automatically runs to the start of the next region,
+ * or to the end of the current MachineFunction.
+ */
 ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
 {
     ReplayCacheRegion *NewRegion = new (RegionAllocator_) ReplayCacheRegion(RegionsSize, StartRegionInstr, StartRegionBlock);
@@ -116,9 +118,5 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCache
 
     return *NewRegion;
 }
-
-// FunctionPass *llvm::createReplayCacheRegionAnalysisPass() {
-//     return new ReplayCacheRegionAnalysis();
-// }
 
 INITIALIZE_PASS(ReplayCacheRegionAnalysis, DEBUG_TYPE, PASS_NAME, false, true)

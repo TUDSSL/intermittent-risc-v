@@ -1,3 +1,19 @@
+#!/bin/bash
+
+########################################################################################
+# Validates the compiler-outputted assembly code according to the ReplayCache rules.
+#
+# The following rules are checked:
+# - No registers must be reused after store
+# - All store instructions must be followed by a CLWB
+# - Conditional branch instructions must have a region boundary before
+# - Branch instructions must be followed by a region boundary or an unconditional jump
+# - There must be a region boundary after every function call
+# - Every START_REGION_BRANCH must have a following branch instruction
+# - Every START_REGION_BRANCH_DEST must have a branch pointing to that region boundary
+# - Every branch target (including fallthrough) must target a region boundary
+########################################################################################
+
 conditional_branch_instrs=("beq" "bne" "blt" "bge" "bltu" "bgeu" "bgtz" "blez")
 store_instrs=("sw" "sh" "sb")
 call_instrs=("jalr")

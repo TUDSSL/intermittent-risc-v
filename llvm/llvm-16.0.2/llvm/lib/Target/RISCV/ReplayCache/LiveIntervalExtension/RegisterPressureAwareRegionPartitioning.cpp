@@ -17,7 +17,6 @@ raw_ostream &output_rparp = llvm::outs();
 
 INITIALIZE_PASS_BEGIN(RegisterPressureAwareRegionPartitioning, DEBUG_TYPE, PASS_NAME,
                       false, false)
-// INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
 INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
 INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
@@ -38,7 +37,8 @@ void RegisterPressureAwareRegionPartitioning::getAnalysisUsage(AnalysisUsage &AU
 
 bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFunction &MF)
 {
-    // output_rparp << "START REGION PARTITIONING\n";
+    output_rparp << "START REGION PARTITIONING\n";
+    output_rparp.flush();
 
     static constexpr unsigned NUM_INTERVAL_THRESHOLD = 26;
 
@@ -46,7 +46,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     LIS_ = &getAnalysis<LiveIntervals>();
     SIS_ = &getAnalysis<SlotIndexes>();
 
-    MachineBasicBlock *PrevMBB;
+    // MachineBasicBlock *PrevMBB;
     unsigned NumLiveIntervals = 0;
     std::vector<LiveInterval *> LiveIntervalVector;
     // MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -57,7 +57,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     {
         for (auto Instr = Region.begin(); Instr != Region.end(); Instr++)
         {
-            auto MBB = Instr.getMBB();
+    //         // auto MBB = Instr.getMBB();
 
             if (IsRC(*Instr) || Instr->isDebugInstr())
             {
@@ -86,17 +86,16 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
                     if (std::find(LiveIntervalVector.begin(), LiveIntervalVector.end(), &LI) == LiveIntervalVector.end())
                     {
                         LiveIntervalVector.push_back(&LI);
-                        // output_rparp << *Instr << "\n";
-                        // output_rparp.flush();
                     }
                 }
             }
             
             /* Compute number of live intervals. */
             NumLiveIntervals = 0;
+            auto InstrIndex = LIS_->getInstructionIndex(*Instr);
             for (auto *LI : LiveIntervalVector)
             {
-                if (LI->liveAt(LIS_->getInstructionIndex(*Instr)))
+                if (LI->liveAt(InstrIndex))
                 {
                     NumLiveIntervals++;
                 }
@@ -107,22 +106,18 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
 
             if (ExtensionPressure > 0 && NumLiveIntervals > NUM_INTERVAL_THRESHOLD)
             {
+                // output_rparp << *Instr.getMBBIt();
+                // output_rparp << *Instr.getInstrIt();
+                // output_rparp.flush();
                 /* Insert new region. */
                 RRA_->createRegionBefore(&Region, Instr.getMBBIt(), Instr.getInstrIt(), SIS_);
                 /* Trim active extensions to terminate at new region boundary. */
-                LIS_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));
+                // LIS_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));
                 /* Stop iterating over the current region. */
-                goto goto_continue_to_next_region;
+                break;
             }
-
-            PrevMBB = MBB;
         }
-
-        goto_continue_to_next_region:;
     }
-
-    /* Enable extension of live intervals. */
-    // MRI.setExtendsLiveIntervals();
 
     return true;
 }

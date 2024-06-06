@@ -101,10 +101,9 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeReplayCacheStackSpillPass(*PR);
   initializeReplayCacheRepairRegionsPass(*PR);
   initializeReplayCacheRepairRegions2Pass(*PR);
-  // initializeReplayCacheMarkBranchesPass(*PR);
   initializeRegisterPressureAwareRegionPartitioningPass(*PR);
-  // output_riscv << "Initialized passes\n";
-  // output_riscv.flush();
+  output_riscv << "Initialized passes\n";
+  output_riscv.flush();
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -364,12 +363,12 @@ void RISCVPassConfig::addPreEmitPass2() {
   // progress in the LR/SC block.
   addPass(createRISCVExpandAtomicPseudoPass());
   
-  /* REPLAYCACHE: Repair regions in preparation for stack spill. */
-  addPass(createReplayCacheRepairRegions2Pass());
-  /* REPLAYCACHE: Add regions for stack spills. */
-  addPass(createReplayCacheStackSpillPass());
-  /* REPLAYCACHE: Add CLWB instructions to all store. */
-  addPass(createReplayCacheCLWBInserterPass());
+  // /* REPLAYCACHE: Repair regions in preparation for stack spill. */
+  // addPass(createReplayCacheRepairRegions2Pass());
+  // /* REPLAYCACHE: Add regions for stack spills. */
+  // addPass(createReplayCacheStackSpillPass());
+  // /* REPLAYCACHE: Add CLWB instructions to all store. */
+  // addPass(createReplayCacheCLWBInserterPass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
@@ -395,14 +394,12 @@ void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
 
-  /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
-  disablePass(&BranchFolderPassID);
-  /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
-  addPass(createReplayCacheRepairRegionsPass());
+  // /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
+  // disablePass(&BranchFolderPassID);
+  // /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
+  // addPass(createReplayCacheRepairRegionsPass());
 
   // addPass(createMBBPrinterPass());
-
-  // addPass(createReplayCacheMarkBranchesPass());
 }
 
 // void RISCVPassConfig::addMachineLateOptimization()

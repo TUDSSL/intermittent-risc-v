@@ -9,6 +9,10 @@
 namespace llvm
 {
 
+/**
+ * Extension of a live interval. Contains a vector of SlotIndex intervals,
+ * which indicate where the extension is live.
+ */
 class ExtendedLiveInterval
 {
 public:

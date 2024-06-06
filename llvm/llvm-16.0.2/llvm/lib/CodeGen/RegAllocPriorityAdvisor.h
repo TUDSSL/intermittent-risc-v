@@ -9,7 +9,6 @@
 #ifndef LLVM_CODEGEN_REGALLOCPRIORITYADVISOR_H
 #define LLVM_CODEGEN_REGALLOCPRIORITYADVISOR_H
 
-// #include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
 #include "RegAllocEvictionAdvisor.h"
 #include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/Pass.h"

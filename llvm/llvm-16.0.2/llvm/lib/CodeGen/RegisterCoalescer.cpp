@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// #include "llvm/CodeGen/ReplayCache/LiveIntervalExtensionAnalysis.h"
 #include "RegisterCoalescer.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
@@ -132,7 +131,6 @@ namespace {
     LiveIntervals *LIS = nullptr;
     const MachineLoopInfo* Loops = nullptr;
     AliasAnalysis *AA = nullptr;
-    // LiveIntervalExtensionAnalysis *LIEA = nullptr;
     RegisterClassInfo RegClassInfo;
 
     /// Position and VReg of a PHI instruction during coalescing.
@@ -412,7 +410,6 @@ INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
 INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
 INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
-// INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_END(RegisterCoalescer, "simple-register-coalescing",
                     "Simple Register Coalescing", false, false)
 
@@ -596,8 +593,6 @@ void RegisterCoalescer::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<SlotIndexes>();
   AU.addRequired<MachineLoopInfo>();
   AU.addPreserved<MachineLoopInfo>();
-  // AU.addRequired<LiveIntervalExtensionAnalysis>();
-  // AU.addPreserved<LiveIntervalExtensionAnalysis>();
   AU.addPreservedID(MachineDominatorsID);
   MachineFunctionPass::getAnalysisUsage(AU);
 }
@@ -4128,7 +4123,6 @@ bool RegisterCoalescer::runOnMachineFunction(MachineFunction &fn) {
   TII = STI.getInstrInfo();
   LIS = &getAnalysis<LiveIntervals>();
   AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
-  // LIEA = &getAnalysis<LiveIntervalExtensionAnalysis>();
   Loops = &getAnalysis<MachineLoopInfo>();
   if (EnableGlobalCopies == cl::BOU_UNSET)
     JoinGlobalCopies = STI.enableJoinGlobalCopies();

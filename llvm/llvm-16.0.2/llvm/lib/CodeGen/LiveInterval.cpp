@@ -1165,8 +1165,6 @@ static inline bool coalescable(const LiveRange::Segment &A,
 void LiveRangeUpdater::add(LiveRange::Segment Seg) {
   assert(LR && "Cannot add to a null destination");
 
-  // auto &output_li2 = llvm::outs();
-
   // Fall back to the regular add method if the live range
   // is using the segment set instead of the segment vector.
   if (LR->segmentSet != nullptr) {
@@ -1204,8 +1202,6 @@ void LiveRangeUpdater::add(LiveRange::Segment Seg) {
 
   // Check if the ReadI segment begins early.
   if (ReadI != E && ReadI->start <= Seg.start) {
-    // output_li2 << "READI:[" << ReadI->start << ", " << ReadI->end << ") SEG:[" << Seg.start << ", " << Seg.end << ")\n";
-    // output_li2.flush();
     assert(ReadI->valno == Seg.valno && "Cannot overlap different values");
     // Bail if Seg is completely contained in ReadI.
     if (ReadI->end >= Seg.end)

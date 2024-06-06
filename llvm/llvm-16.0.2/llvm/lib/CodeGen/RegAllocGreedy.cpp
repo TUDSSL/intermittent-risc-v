@@ -167,7 +167,6 @@ INITIALIZE_PASS_DEPENDENCY(MachineOptimizationRemarkEmitterPass)
 INITIALIZE_PASS_DEPENDENCY(RegAllocEvictionAdvisorAnalysis)
 INITIALIZE_PASS_DEPENDENCY(RegAllocPriorityAdvisorAnalysis)
 INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
-// INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_END(RAGreedy, "greedy",
                 "Greedy Register Allocator", false, false)
 
@@ -227,8 +226,6 @@ void RAGreedy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addRequired<RegAllocPriorityAdvisorAnalysis>();
   AU.addRequired<ReplayCacheRegionAnalysis>();
   AU.addPreserved<ReplayCacheRegionAnalysis>();
-  // AU.addRequired<LiveIntervalExtensionAnalysis>();
-  // AU.addPreserved<LiveIntervalExtensionAnalysis>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -306,17 +303,6 @@ void RAGreedy::enqueue(PQueue &CurQueue, const LiveInterval *LI) {
 }
 
 unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
-  // unsigned ExtensionSize = 0;
-  // if (LIEA != nullptr)
-  // {
-  //   auto ext = LIEA->getExtensionFromLI(LI);
-  //   if (ext != nullptr)
-  //   {
-  //     ExtensionSize = ext->getSize();
-  //   }
-  // }
-  
-
   const unsigned Size = LI.getSize();
   const Register Reg = LI.reg();
   unsigned Prio;
@@ -391,14 +377,6 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
     if (VRM->hasKnownPreference(Reg))
       Prio |= (1u << 30);
   }
-
-
-
-  // if (ExtensionSize > 0)
-  // {
-  //   output_regalloc << "EXTENSION SIZE: " << ExtensionSize << "\n";
-  //   output_regalloc << "TOTAL SIZE:     " << Size << "\n";
-  // }
 
   return Prio;
 }
@@ -2655,10 +2633,6 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
   Bundles = &getAnalysis<EdgeBundles>();
   SpillPlacer = &getAnalysis<SpillPlacement>();
   DebugVars = &getAnalysis<LiveDebugVariables>();
-  // LIEA = &getAnalysis<LiveIntervalExtensionAnalysis>();
-  // RRA = &getAnalysis<ReplayCacheRegionAnalysis>();
-
-  // LIS->computeExtensions(RRA);
 
   initializeCSRCost();
 

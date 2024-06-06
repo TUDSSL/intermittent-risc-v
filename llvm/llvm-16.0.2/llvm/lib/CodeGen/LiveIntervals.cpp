@@ -65,7 +65,6 @@ INITIALIZE_PASS_BEGIN(LiveIntervals, "liveintervals", "Live Interval Analysis",
                       false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
-// INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
 INITIALIZE_PASS_END(LiveIntervals, "liveintervals",
                 "Live Interval Analysis", false, false)
 
@@ -94,8 +93,6 @@ void LiveIntervals::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreservedID(MachineDominatorsID);
   AU.addPreserved<SlotIndexes>();
   AU.addRequiredTransitive<SlotIndexes>();
-  // AU.addPreserved<ReplayCacheRegionAnalysis>();
-  // AU.addRequired<ReplayCacheRegionAnalysis>();
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -127,13 +124,10 @@ void LiveIntervals::releaseMemory() {
 }
 
 bool LiveIntervals::runOnMachineFunction(MachineFunction &fn) {
-
-    // output_li << "LIVE INTERVALS\n";
   MF = &fn;
   MRI = &MF->getRegInfo();
   TRI = MF->getSubtarget().getRegisterInfo();
   TII = MF->getSubtarget().getInstrInfo();
-  // RRA_ = &getAnalysis<ReplayCacheRegionAnalysis>();
   Indexes = &getAnalysis<SlotIndexes>();
   DomTree = &getAnalysis<MachineDominatorTree>();
 
@@ -155,39 +149,22 @@ bool LiveIntervals::runOnMachineFunction(MachineFunction &fn) {
   }
   LLVM_DEBUG(dump());
 
-  // /*** LIVE INTERVAL EXTENSION ***/
-  // if (MRI->getExtendsLiveIntervals())
-  // {
-  //   output_li << "Extenstion active!!!\n";
-  //   output_li.flush();
-  //   computeExtensions();
-  // }
-
   return false;
 }
 
 /************ LIVE INTERVAL EXTENSION ************/
+/**
+ * Compute extensions for live intervals of store instructions,
+ * and add the extensions to the live intervals.
+ */
 void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
 {
   assert(Regions != nullptr);
 
-  // output_li << "COMPUTE EXTENSIONS\n";
-  // output_li.flush();
   for (auto &Region : *Regions)
   {
-    // Region.print(output_li);
-    // output_li << "Size: " << Region.getSize(*Indexes) << "\n";
-    // output_li << *Region.begin();
-    // output_li << Region.begin().getMBB();
-    // output_li.flush();
-    // TODO: for some reason the instr is UNKNOWN and MBB is nullptr???
-    // output_li << *(Region.begin().getMBB());
-    // output_li.flush();
       for (auto &MI : Region)
-      // for (auto MI = Region.begin(); MI != Region.end(); MI++)
       {
-        // output_li << "Instr: " << MI;
-        // output_li.flush();
           CurrentRegion_ = &Region;
 
           if (isStoreInstruction(MI))
@@ -195,14 +172,7 @@ void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
               auto Reg = MI.getOperand(0).getReg();
               if (Reg.isVirtual()){
                 LiveInterval &LI = this->getInterval(Reg);
-
-                // output_li << "Store instr: " << MI;
-                // output_li << "Operand:     " << MI.getOperand(0) << "\n";
-                // output_li << "LI:          " << LI << "\n";
-                // output_li.flush();
-
                 computeExtensionFromLI(MI, LI);
-
               }
           }
       }
@@ -211,6 +181,9 @@ void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
   addExtensionsToIntervals();
 }
 
+/**
+ * Compute an extension for a live interval.
+ */
 void LiveIntervals::computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI)
 {
     /* Extension already in map, skip. */
@@ -235,11 +208,11 @@ void LiveIntervals::computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI)
     /* Add all slot intervals to the extension and add the extension to the extension map. */
     Extension->setSlotIntervals(NonEmptySlotIntervals);
     ExtensionMap_.insert(std::pair(LI.reg(), Extension));
-
-    // output_li << LI << " ext: ";
-    // Extension->print(output_li);
 }
 
+/* Get the slot intervals for all basic blocks in the region, starting
+ * from the given instruction.
+ */
 std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineInstr &MI)
 {
     std::vector<SlotInterval> SlotIntervals;
@@ -282,6 +255,7 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineIns
     return SlotIntervals;
 }
 
+/* Remove extension slot intervals that overlap with the already-existing live interval. */
 std::vector<SlotInterval> LiveIntervals::removeOverlappingIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals)
 {
     std::vector<SlotInterval> NonOverlappingIntervals;
@@ -325,6 +299,7 @@ std::vector<SlotInterval> LiveIntervals::removeOverlappingIntervals(LiveInterval
     return NonOverlappingIntervals;  
 }
 
+/* Remove empty slot intervals from the given list. */
 std::vector<SlotInterval> LiveIntervals::removeEmptySlotIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals)
 {
     std::vector<SlotInterval> NonEmptyIntervals;
@@ -339,6 +314,7 @@ std::vector<SlotInterval> LiveIntervals::removeEmptySlotIntervals(LiveInterval &
     return NonEmptyIntervals;
 }
 
+/* Get the extenstion that belongs to the given live interval. */
 ExtendedLiveInterval *LiveIntervals::getExtensionFromLI(const LiveInterval &LI)
 {
     auto it = ExtensionMap_.find(LI.reg());
@@ -351,6 +327,7 @@ ExtendedLiveInterval *LiveIntervals::getExtensionFromLI(const LiveInterval &LI)
     return it->second;
 }
 
+/* Recompute all extenstions that are live at the given index. */
 void LiveIntervals::recomputeActiveExtensions(SlotIndex FinalIndex)
 {
     LiveRangeUpdater LRU;
@@ -367,11 +344,10 @@ void LiveIntervals::recomputeActiveExtensions(SlotIndex FinalIndex)
                 LR.removeSegment(SI.first, SI.last, true);
             }
 
-            /* Trim extension interval to stop at the FinalIndex. */
+            /*** Trim extension interval to stop at the FinalIndex. ****/
             bool found = false;
-
             auto it = ex->SITS_.begin();
-            // TODO_REPLAYCACHE: do not erase while iterating!!!
+            /* Change the last index of the slot interval containing the final index. */
             for (; it != ex->SITS_.end(); it++)
             {
                 if (it->contains(FinalIndex))
@@ -380,6 +356,7 @@ void LiveIntervals::recomputeActiveExtensions(SlotIndex FinalIndex)
                     break;
                 }
             }
+            /* Erase all intervals from the final index onwards. */
             if (it != ex->SITS_.end())
             {
               if (!it->isEmpty())
@@ -390,14 +367,16 @@ void LiveIntervals::recomputeActiveExtensions(SlotIndex FinalIndex)
               ex->SITS_.erase(it, ex->SITS_.end());
             }
 
-            /* Re-add extension to live range. */
+            /* Add recomputed extension to live range. */
             addExtensionToInterval(LRU, ex);
         }
     }
 
+    /* Save changes. */
     LRU.flush();
 }
 
+/* Get the number of active extensions at the given instruction. */
 unsigned LiveIntervals::getExtensionPressureAt(MachineInstr &MI)
 {
     auto SI = Indexes->getInstructionIndex(MI).getRegSlot();
@@ -405,11 +384,6 @@ unsigned LiveIntervals::getExtensionPressureAt(MachineInstr &MI)
 
     for (const auto &[reg, ex] : ExtensionMap_)
     {
-        // output_llex << "First, last: ";
-        // ex->SITS_.front().print(output_llex);
-        // ex->SITS_.back().print(output_llex);
-        // output_llex << "\n";
-        // output_llex.flush();
         if (ex->isLiveAt(SI))
         {
             Pressure++;
@@ -419,6 +393,7 @@ unsigned LiveIntervals::getExtensionPressureAt(MachineInstr &MI)
     return Pressure;
 }
 
+/* Add all extensions in the map to their corresponding live intervals. */
 void LiveIntervals::addExtensionsToIntervals()
 {
     LiveRangeUpdater LRU;
@@ -430,12 +405,11 @@ void LiveIntervals::addExtensionsToIntervals()
     LRU.flush();
 }
 
+/* Add the given extension to its corresponding live range. */
 void LiveIntervals::addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveInterval *ELR)
 {
     LiveRange &LR = ELR->getInterval();
     LRU.setDest(&LR);
-
-    // ELR->print(output_li);
 
     for (auto &Seg : ELR->SITS_)
     {
@@ -445,8 +419,6 @@ void LiveIntervals::addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveIn
             LRU.add(Seg.first, Seg.last, VN);
         }
     }
-
-    LR.hasExtension = true;
 }
 /*******************************************************/
 

@@ -36,7 +36,6 @@ MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr &MI,
 MachineInstrBuilder BuildRC(MachineBasicBlock &MBB, MachineInstr *MI,
                     const DebugLoc &DL, const ReplayCacheInstruction Instr);
 
-void InsertStartRegionBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION);
 void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const ReplayCacheInstruction Instr = START_REGION, bool insertInstr = false);
 
 /**

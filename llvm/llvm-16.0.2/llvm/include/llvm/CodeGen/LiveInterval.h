@@ -194,10 +194,6 @@ namespace llvm {
         return !(*this == Other);
       }
 
-      void print(llvm::raw_ostream &stream) {
-        stream << "Start: " << start << ", End: " << end;
-      }
-
       void dump() const;
     };
 
@@ -206,10 +202,6 @@ namespace llvm {
 
     Segments segments;   // the liveness segments
     VNInfoList valnos;   // value#'s
-
-    /*** LIVE INTERVAL EXTENSION ***/
-    bool hasExtension = false;
-    /*******************************/
 
     // The segment set is used temporarily to accelerate initial computation
     // of live ranges of physical registers in computeRegUnitRange.

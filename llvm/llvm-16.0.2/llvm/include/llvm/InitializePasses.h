@@ -420,7 +420,6 @@ void initializeWriteBitcodePassPass(PassRegistry&);
 void initializeXRayInstrumentationPass(PassRegistry&);
 
 /*** REPLAY CACHE ***/
-void initializeReplayCacheMarkBranchesPass(PassRegistry&);
 void initializeReplayCacheRegionAnalysisPass(PassRegistry&);
 
 } // end namespace llvm

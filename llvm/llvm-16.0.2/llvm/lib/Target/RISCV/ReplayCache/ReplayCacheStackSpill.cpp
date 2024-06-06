@@ -17,10 +17,7 @@ char ReplayCacheStackSpill::ID = 7;
 
 INITIALIZE_PASS_BEGIN(ReplayCacheStackSpill, DEBUG_TYPE, PASS_NAME,
                       false, false)
-// INITIALIZE_PASS_DEPENDENCY(LiveIntervalExtensionAnalysis)
 INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
-// INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
-// INITIALIZE_PASS_DEPENDENCY(SlotIndexes)
 INITIALIZE_PASS_END(ReplayCacheStackSpill, DEBUG_TYPE,
                     PASS_NAME, false, false)
 

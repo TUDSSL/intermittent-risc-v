@@ -43,8 +43,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "post-RA-sched"
 
-raw_ostream &output_postrasched = llvm::outs();
-
 STATISTIC(NumNoops, "Number of noops inserted");
 STATISTIC(NumStalls, "Number of pipeline stalls");
 STATISTIC(NumFixedAnti, "Number of fixed anti-dependencies");
@@ -308,7 +306,6 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
   }
 
   LLVM_DEBUG(dbgs() << "PostRAScheduler\n");
-  output_postrasched << "******** POST RA SCHEDULER ***********\n";
 
   SchedulePostRATDList Scheduler(Fn, MLI, AA, RegClassInfo, AntiDepMode,
                                  CriticalPathRCs);

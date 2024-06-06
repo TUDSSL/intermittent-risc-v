@@ -8,7 +8,6 @@ namespace llvm
 
 class ReplayCacheRegionAnalysis : public MachineFunctionPass
 {
-// TODO: add iterator over regions here!!!
 public:
     static char ID;
     
@@ -20,9 +19,7 @@ public:
 
     ReplayCacheRegion &createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS);
 
-    /* Iterator for iterating over instructions in a region.
-     * Copied from https://github.com/mishermasher/llvm/tree/idempotence-extensions and slightly modified.
-     */
+    /* Iterator for iterating over regions. */
     template <typename ReplayCacheRegionTy>
     class rcra_rr_iterator : public std::iterator<std::forward_iterator_tag, ReplayCacheRegionTy *> {
     public:
