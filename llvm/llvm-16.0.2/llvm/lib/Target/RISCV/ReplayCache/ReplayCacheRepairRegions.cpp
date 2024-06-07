@@ -1,3 +1,11 @@
+/**
+ * Repair regions
+ * 
+ * Add region boundary instructions BEFORE instructions that have the
+ * hasRegionBoundaryBefore flag.
+ * 
+ * Runs after register allocation.
+ */
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
@@ -17,7 +25,6 @@ raw_ostream &output_repair = llvm::outs();
 
 void ReplayCacheRepairRegions::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    // AU.setPreservesCFG();
     AU.addRequired<SlotIndexes>();
     AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
@@ -43,9 +50,12 @@ bool ReplayCacheRepairRegions::runOnMachineFunction(MachineFunction &MF)
                 }
                 else
                 {
+                    /* Flags for BRANH_DEST are removed, because these are
+                     * moved around later. If we keep them, the flags will either be
+                     * removed regardless, or they will be put somewhere where we don't want them.
+                     */
                     removeRegionBoundaryBefore(MI);
                 }
-                
             }
 
             PrevMI = &MI;

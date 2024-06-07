@@ -1,3 +1,11 @@
+/**
+ * Repair Regions 2
+ * 
+ * Repairs regions to be in the correct place by basically recomputing
+ * the initial regions for the rearranged instructions.
+ * 
+ * Runs at the end of all passes, but BEFORE the stack spill pass.
+ */
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
@@ -17,7 +25,6 @@ raw_ostream &output_repair2 = llvm::outs();
 
 void ReplayCacheRepairRegions2::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    // AU.setPreservesCFG();
     AU.addRequired<SlotIndexes>();
     AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
@@ -31,6 +38,9 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
     MachineInstr *PrevMI = nullptr;
     auto &TII = *MF.getSubtarget().getInstrInfo();
 
+    /* Recompute initial regions, and add flags to all instructions
+     * that need region boundaries before them.
+     */
     for (auto &MBB : MF)
     {
         for (auto &MI : MBB)
@@ -42,17 +52,19 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
                 auto TrueDest = TII.getBranchDestBlock(MI);
                 MachineBasicBlock *FalseDest = nullptr;
 
-                if (NextMI) {
-                    // If the next instruction is an unconditional branch, where it jumps
-                    // to should be interpreted as the false branch
-                    if (NextMI->isUnconditionalBranch()) {
+                if (NextMI) 
+                {
+                    if (NextMI->isUnconditionalBranch()) 
+                    {
                         FalseDest = TII.getBranchDestBlock(*NextMI);
                     }
-                    else {
+                    else 
+                    {
                         assert(false && "Branch should not have instruction that is not jump.");
                     }
-                } else {
-                    // If there is no next instruction, the false branch is the fallthrough
+                } 
+                else 
+                {
                     FalseDest = MBB.getFallThrough();
                 }
 
@@ -61,13 +73,17 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
                 {
                     StartRegionInBB(*FalseDest, START_REGION_BRANCH_DEST, false);
                 }
-                
-            } else if (MI.isCall()) {
+            } 
+            else if (MI.isCall()) 
+            {
                 if (NextMI) {
                     InsertRegionBoundaryBefore(MBB, *NextMI, START_REGION_RETURN, false);
-                } else {
+                } 
+                else 
+                {
                     auto Fallthrough = MBB.getFallThrough();
-                    if (Fallthrough) {
+                    if (Fallthrough) 
+                    {
                         StartRegionInBB(*Fallthrough, START_REGION_RETURN, false);
                     }
                 }
@@ -75,8 +91,15 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
         }
     }
 
+    /* Add region boundaries before instructions that are flagged. */
     for (auto &MBB : MF) 
     {
+        /* Add new region for entry block, because new instructions may have been
+         * inserted before the original entry block region in previous passes.
+         *
+         * This could lead to duplicate regions, but one of those regions will be
+         * empty and thus would not contribute to any latency/slowdown.
+         */
         if (MBB.isEntryBlock())
         {
             StartRegionInBB(MBB, START_REGION, true);

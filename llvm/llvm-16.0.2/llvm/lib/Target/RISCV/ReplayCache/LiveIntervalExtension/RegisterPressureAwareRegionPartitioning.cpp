@@ -1,3 +1,11 @@
+/**
+ * Register pressure-aware region partitioning
+ * 
+ * For every definition, checks if the register pressure (including extensions)
+ * is above a certain threshold. If it is, a new region boundary is inserted.
+ * 
+ * Runs after initial regions and before register allocation.
+ */
 #include "RegisterPressureAwareRegionPartitioning.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/CodeGen/RegisterPressure.h"
@@ -46,19 +54,16 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     LIS_ = &getAnalysis<LiveIntervals>();
     SIS_ = &getAnalysis<SlotIndexes>();
 
-    // MachineBasicBlock *PrevMBB;
     unsigned NumLiveIntervals = 0;
     std::vector<LiveInterval *> LiveIntervalVector;
-    // MachineRegisterInfo &MRI = MF.getRegInfo();
 
+    /* Compute initial live interval extensions. */
     LIS_->computeExtensions(RRA_);
 
     for (auto &Region : *RRA_)
     {
         for (auto Instr = Region.begin(); Instr != Region.end(); Instr++)
         {
-    //         // auto MBB = Instr.getMBB();
-
             if (IsRC(*Instr) || Instr->isDebugInstr())
             {
                 continue;
@@ -90,7 +95,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
                 }
             }
             
-            /* Compute number of live intervals. */
+            /* Compute number of live intervals, INCLUDING extensions! */
             NumLiveIntervals = 0;
             auto InstrIndex = LIS_->getInstructionIndex(*Instr);
             for (auto *LI : LiveIntervalVector)
@@ -101,9 +106,12 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
                 }
             }
 
+            /* Compute number of extensions that are live. */
             unsigned ExtensionPressure = LIS_->getExtensionPressureAt(*Instr);
-            // output_rparp << "EXT_PRES: " << ExtensionPressure << "\n";
 
+            /* We only insert a region when there is at least one live interval with an
+             * extension, otherwise the new region would be useless.
+             */
             if (ExtensionPressure > 0 && NumLiveIntervals > NUM_INTERVAL_THRESHOLD)
             {
                 // output_rparp << *Instr.getMBBIt();
@@ -122,10 +130,6 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     return true;
 }
 
-
 FunctionPass *llvm::createRegisterPressureAwareRegionPartitioningPass() {
     return new RegisterPressureAwareRegionPartitioning();
 }
-
-// INITIALIZE_PASS(RegisterPressureAwareRegionPartitioning, DEBUG_TYPE, PASS_NAME, false, true)
-

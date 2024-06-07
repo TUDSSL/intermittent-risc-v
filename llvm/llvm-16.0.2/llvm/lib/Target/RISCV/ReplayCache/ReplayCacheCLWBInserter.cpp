@@ -1,3 +1,10 @@
+/**
+ * CLWB inserted
+ * 
+ * Inserts CLWB instructions after every store instruction.
+ * 
+ * Runs at the very end of all passes.
+ */
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
@@ -17,12 +24,8 @@ raw_ostream &output_clwb = llvm::outs();
 
 bool ReplayCacheCLWBInserter::runOnMachineFunction(MachineFunction &MF) 
 {
-    // output_clwb << "============================================\n";
-    // output_clwb << "=                CLWB                      =\n";
-    // output_clwb << "============================================\n";
     for (auto &MBB : MF) 
     {
-        // output_clwb << MBB;
         for (auto MI = MBB.begin(); MI != MBB.end(); MI++)
         {
             if (isStoreInstruction(*MI))

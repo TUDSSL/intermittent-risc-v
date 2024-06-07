@@ -1,3 +1,14 @@
+/**
+ * Initial regions
+ * 
+ * Inserts regions in the following places:
+ * - At the start of a function.
+ * - After a function call.
+ * - Before a branch instruction.
+ * - At each branch destination (including fallthrough).
+ * 
+ * Runs before all other replaycache passes.
+ */
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
 #include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
@@ -17,7 +28,6 @@ char ReplayCacheInitialRegions::ID = 0;
 
 void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    // AU.setPreservesCFG();
     AU.addRequired<SlotIndexes>();
     AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
@@ -25,18 +35,12 @@ void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
-bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
-  // output0 << "INITIAL REGION START\n";
-
-  // output0 << "============================================\n";
-  // output0 << "=                INIT                      =\n";
-  // output0 << "============================================\n";
-  // output0.flush();
-
+bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
+{
   SLIS = &getAnalysis<SlotIndexes>();
 
   // Skip naked functions
-  // TODO: determine eligible functions in an earlier pass
+  // TODO: determine eligible functions in an earlier pass (?)
   if (MF.getFunction().hasFnAttribute(Attribute::Naked))
     return false;
 
@@ -48,7 +52,6 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
     {
       StartRegionInBB(MBB, START_REGION, true);
       SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
-      // output0 << "Entry block region started!\n";
     }
       
 
@@ -64,10 +67,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // Start a new region when callee returns
         if (NextMI) {
           InsertRegionBoundaryBefore(MBB, *NextMI, START_REGION_RETURN, false);
-          // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
-          // BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_RETURN);
           SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
-          // output0 << "NEW region started (callee return)!\n";
         } else {
           // If there is no next instruction, the callee returns to the
           // fallthrough
@@ -83,15 +83,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
         // No need to 'explicitly' end a region when returning,
         // because the caller is expected to do that already
       } else if (MI.isConditionalBranch()) {
-        // output0 << MBB;
-        // output0 << MI;
-        // output0 << "---------------------------------------------\n";
         // Create boundaries BEFORE branches
         InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
         SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
 
         // Create boundaries at the start of branch basic blocks
-
         auto TrueDest = TII.getBranchDestBlock(MI);
         MachineBasicBlock *FalseDest = nullptr;
 
@@ -101,12 +97,6 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
           if (NextMI->isUnconditionalBranch()) {
             FalseDest = TII.getBranchDestBlock(*NextMI);
           }
-          // else: fall through within basic block.
-          // else {
-          //   BuildRC(MBB, NextMI, NextMI->getDebugLoc(), FENCE);
-          //   BuildRC(MBB, NextMI, NextMI->getDebugLoc(), START_REGION_BRANCH_DEST);
-          //   // SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
-          // }
         } else {
           // If there is no next instruction, the false branch is the fallthrough
           FalseDest = MBB.getFallThrough();
@@ -125,22 +115,11 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF) {
 
     SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
   }
-  
-  // for (auto &MBB : MF) {
-  //   for (auto &MI : MBB) {
-  //     if (MI.isConditionalBranch()) {
-  //       output0 << MBB;
-  //       output0 << "--------------------\n";
-  //     }
-  //   }
-  // }
 
   return true;
 }
 
 FunctionPass *llvm::createReplayCacheInitialRegionsPass() {
-  output0 << "Create ReplayCacheInitialRegions\n";
-  output0.flush();
   return new ReplayCacheInitialRegions();
 }
 
