@@ -40,7 +40,6 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
   SLIS = &getAnalysis<SlotIndexes>();
 
   // Skip naked functions
-  // TODO: determine eligible functions in an earlier pass (?)
   if (MF.getFunction().hasFnAttribute(Attribute::Naked))
     return false;
 

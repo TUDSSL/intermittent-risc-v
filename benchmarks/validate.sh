@@ -43,6 +43,14 @@ live_store_registers=()
 lineno=0
 
 while IFS= read -r line; do
+    if [ -z "$line" ]; then
+        continue
+    fi
+
+    if [[ $line =~ ">:" ]]; then
+        continue
+    fi
+
     lineno=$((lineno + 1))
     # Stop at .sbss section, this is not where we want to validate.
     # We can ignore the .debug_str section after it as well.

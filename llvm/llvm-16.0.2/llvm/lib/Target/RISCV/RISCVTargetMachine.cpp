@@ -352,6 +352,13 @@ bool RISCVPassConfig::addGlobalInstructionSelect() {
 void RISCVPassConfig::addPreSched2() {}
 
 void RISCVPassConfig::addPreEmitPass() {
+  /* REPLAYCACHE: Repair regions in preparation for stack spill. */
+  addPass(createReplayCacheRepairRegions2Pass());
+  /* REPLAYCACHE: Add regions for stack spills. */
+  addPass(createReplayCacheStackSpillPass());
+  /* REPLAYCACHE: Add CLWB instructions to all store. */
+  addPass(createReplayCacheCLWBInserterPass());
+  
   addPass(&BranchRelaxationPassID);
   addPass(createRISCVMakeCompressibleOptPass());
 }
@@ -362,13 +369,9 @@ void RISCVPassConfig::addPreEmitPass2() {
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
   addPass(createRISCVExpandAtomicPseudoPass());
-  
-  // /* REPLAYCACHE: Repair regions in preparation for stack spill. */
-  // addPass(createReplayCacheRepairRegions2Pass());
-  // /* REPLAYCACHE: Add regions for stack spills. */
-  // addPass(createReplayCacheStackSpillPass());
-  // /* REPLAYCACHE: Add CLWB instructions to all store. */
-  // addPass(createReplayCacheCLWBInserterPass());
+
+  /* REPLAYCACHE: Repair regions for one final time to get correct branch destination regions. */
+  addPass(createReplayCacheRepairRegions2Pass());
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
@@ -394,10 +397,10 @@ void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
 
-  // /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
-  // disablePass(&BranchFolderPassID);
-  // /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
-  // addPass(createReplayCacheRepairRegionsPass());
+  /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
+  disablePass(&BranchFolderPassID);
+  /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
+  addPass(createReplayCacheRepairRegionsPass());
 
   // addPass(createMBBPrinterPass());
 }

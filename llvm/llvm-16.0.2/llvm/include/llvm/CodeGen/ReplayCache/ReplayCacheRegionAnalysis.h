@@ -17,7 +17,7 @@ public:
 
     ReplayCacheRegionAnalysis() : MachineFunctionPass(ID), RegionsSize(0), Head(nullptr), Tail(nullptr) {}
 
-    ReplayCacheRegion &createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS);
+    void createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS);
 
     /* Iterator for iterating over regions. */
     template <typename ReplayCacheRegionTy>
@@ -71,7 +71,7 @@ private:
     void releaseMemory() override;
     void getAnalysisUsage(AnalysisUsage &AU) const override;
 
-    ReplayCacheRegion &createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* Region = nullptr);
+    void createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* Region = nullptr);
 };
 
 }

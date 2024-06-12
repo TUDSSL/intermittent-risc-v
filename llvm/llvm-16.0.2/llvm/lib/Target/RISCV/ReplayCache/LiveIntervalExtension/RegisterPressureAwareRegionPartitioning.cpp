@@ -45,9 +45,6 @@ void RegisterPressureAwareRegionPartitioning::getAnalysisUsage(AnalysisUsage &AU
 
 bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFunction &MF)
 {
-    output_rparp << "START REGION PARTITIONING\n";
-    output_rparp.flush();
-
     static constexpr unsigned NUM_INTERVAL_THRESHOLD = 26;
 
     RRA_ = &getAnalysis<ReplayCacheRegionAnalysis>();
@@ -114,15 +111,10 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
              */
             if (ExtensionPressure > 0 && NumLiveIntervals > NUM_INTERVAL_THRESHOLD)
             {
-                // output_rparp << *Instr.getMBBIt();
-                // output_rparp << *Instr.getInstrIt();
-                // output_rparp.flush();
                 /* Insert new region. */
                 RRA_->createRegionBefore(&Region, Instr.getMBBIt(), Instr.getInstrIt(), SIS_);
                 /* Trim active extensions to terminate at new region boundary. */
-                // LIS_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));
-                /* Stop iterating over the current region. */
-                break;
+                LIS_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));
             }
         }
     }

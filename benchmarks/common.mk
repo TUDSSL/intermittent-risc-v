@@ -1,17 +1,16 @@
 BENCHMARKS := \
+		devel \
+		quicksort\
+		coremark \
+		crc \
+		sha \
+		dijkstra \
+		aes \
 		picojpeg
-		# devel \
-		# quicksort\
-		# coremark \
-		# crc \
-		# sha \
-		# dijkstra \
-		# aes \
-		# picojpeg
 
 BUILD_CONFIGURATIONS := \
+		uninstrumented \
 		replay-cache
-		# uninstrumented \
 
 # Note that the checkpoint period in the benchmarks is on_duration/2
 # 250000   =>   5ms @ 50MHz

@@ -51,20 +51,19 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
 }
 
 /* Create a region before the given instruction. */
-ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
+void ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
     /* Insert instructions. */
-    output1 << *MI;
-    // InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
-    // SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
-    // return createRegionAtBoundary(MBB, MI, Region);
+    InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
+    SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
+    // createRegionAtBoundary(MBB, MI, Region);
 }
 
 /* Create a new region at a region boundary.
  * The new region automatically runs to the start of the next region,
  * or to the end of the current MachineFunction.
  */
-ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
+void ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCacheRegion::RegionBlock StartRegionBlock, ReplayCacheRegion::RegionInstr StartRegionInstr, ReplayCacheRegion* PrevRegion)
 {
     ReplayCacheRegion *NewRegion = new (RegionAllocator_) ReplayCacheRegion(RegionsSize, StartRegionInstr, StartRegionBlock);
     // output1 << "Start instr: " << *StartRegionInstr << "\n";
@@ -115,8 +114,6 @@ ReplayCacheRegion& ReplayCacheRegionAnalysis::createRegionAtBoundary(ReplayCache
     }
 
     RegionsSize++;
-
-    return *NewRegion;
 }
 
 INITIALIZE_PASS(ReplayCacheRegionAnalysis, DEBUG_TYPE, PASS_NAME, false, true)
