@@ -121,7 +121,8 @@
         "numbers": "cpp",
         "semaphore": "cpp",
         "source_location": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "*.txt": "cpp"
     },
     "cmake.sourceDirectory": "${workspaceFolder}/llvm/llvm-16.0.2/llvm",
     "cmake.buildDirectory": "/tmp/llvm-16.0.2-build",

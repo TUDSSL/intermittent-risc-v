@@ -113,7 +113,6 @@ class ReplayCacheIntrinsics : public HookCode {
       return;
     }
 
-    last_cycle_was_pf = false;
     if (is_region_active) ++region_instruction_count;
 
     const auto cyclesBefore = pipeline.getTotalCycles();
@@ -123,6 +122,8 @@ class ReplayCacheIntrinsics : public HookCode {
     // Only tick the cache if a non-cache related instruction was executed
     if (!processInstructions(arg->address, arg->size))
       cache->tick(pipelineCycleEst);
+
+    last_cycle_was_pf = false;
   }
 
  private:
@@ -192,7 +193,15 @@ class ReplayCacheIntrinsics : public HookCode {
 
           bool was_cache_instr = false;
           switch (imm_value) {
-            case 0: p_debug << "start region" << std::endl;
+            case 0:
+              /* This case happens at the start, where all values are set to 0. */
+              break;
+            case 1: 
+            case 2: 
+            case 3: 
+            case 4: 
+            case 5: 
+            case 6: p_debug << "start region" << std::endl;
               // Store the PC for verification
               last_region_register_value = getRegisterValue(_Arch::Register::REG_PC);
               p_debug << printLeader() << " stored PC: 0x" << std::hex << std::setw(8) << std::setfill('0') << last_region_register_value << std::dec << std::endl;
@@ -201,15 +210,15 @@ class ReplayCacheIntrinsics : public HookCode {
                 endRegion();
               startRegion();
               break;
-            case 1: p_debug << "CLWB" << std::endl;
-              executeCLWB();
-              was_cache_instr = true;
-              break;
-            case 2: p_debug << "FENCE" << std::endl;
+            case 7: p_debug << "FENCE" << std::endl;
               executeFence();
               was_cache_instr = true;
               break;
-            case 3: p_debug << "power failure next" << std::endl;
+            case 8: p_debug << "CLWB" << std::endl;
+              executeCLWB();
+              was_cache_instr = true;
+              break;
+            case 9: p_debug << "power failure next" << std::endl;
               power_failure_generator.failNext();
               break;
             default:
@@ -294,7 +303,7 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void executeCLWB() {
-    const auto clwb_cycles = cache->clwb(last_store_address, last_store_size);
+    const auto clwb_cycles = cache->clwb(last_store_address, last_store_size, last_cycle_was_pf);
     p_debug << printLeader() << " CLWB cycles: " << clwb_cycles << std::endl;
     pipeline.addToCycles(clwb_cycles);
   }

@@ -29,8 +29,7 @@ void ReplayCacheRegionAnalysis::getAnalysisUsage(AnalysisUsage &AU) const
 /* Create regions at region start instructions, or if the instruction should have a region before it. */
 bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF) 
 {
-    // output1 << "REGION ANALYSIS\n";
-    // output1.flush();
+    // TODO: use MachineDominatorTree here!!!
 
     /* Create regions at START_REGION instructions. */
     for (auto MBB = MF.begin(); MBB != MF.end(); MBB++)

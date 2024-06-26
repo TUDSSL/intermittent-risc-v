@@ -115,6 +115,27 @@ while IFS= read -r line; do
         expect_clwb_next_line=false
     fi
 
+    #### CLWB CHECK ####
+    # Check if there is a lone CLWB without a store.
+    if [[ $line =~ $clwb_instr ]]; then
+        found=false
+        for store_instr in "${store_instrs[@]}"
+        do
+            if [[ $prev_line =~ "$store_instr	" ]]; then
+                found=true
+                break
+            fi
+        done
+
+        if [[ $found = false ]]; then
+            echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
+            echo "CLWB without store: $read_file:$((lineno))"
+            echo "$prev_line"
+            echo ""
+            num_checks_failed=$((num_checks_failed + 1))
+        fi
+    fi
+
     #### STORE CHECK ####
     # Check for any store instructions. If one is found, expect CLWB at next line.
     # Also add the store register to the live registers array for checking.
@@ -128,6 +149,24 @@ while IFS= read -r line; do
             # Extract store register from line.
             store_register=${line##*"	"}
             store_register=${store_register%%,*}
+
+            # Check if register is already used in a store.
+            for live_store_register in "${live_store_registers[@]}"
+            do
+                if [ "$live_store_register" = "$store_register" ]; then
+                    stored=true
+                    break
+                fi
+            done
+            
+            # If it was not used yet, add register to list.
+            if [[ $stored = false ]]; then
+                live_store_registers+=($store_register)
+            fi
+
+            # Extract address register from line.
+            store_register=${line##*"("}
+            store_register=${store_register%%")"*}
 
             # Check if register is already used in a store.
             for live_store_register in "${live_store_registers[@]}"

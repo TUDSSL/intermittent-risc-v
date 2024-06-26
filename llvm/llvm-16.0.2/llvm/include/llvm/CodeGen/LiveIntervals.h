@@ -102,8 +102,8 @@ class VirtRegMap;
 
     ReplayCacheRegion *CurrentRegion_;
 
-    void computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI);
-    std::vector<SlotInterval> getSlotIntervalsInRegionFrom(MachineInstr &MI);
+    void computeExtensionFromLI(MachineFunction &MF, MachineInstr &MI, LiveInterval &LI);
+    std::vector<SlotInterval> getSlotIntervalsInRegionFrom(MachineFunction &MF, MachineInstr &MI);
     std::vector<SlotInterval> removeOverlappingIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
     std::vector<SlotInterval> removeEmptySlotIntervals(LiveInterval &LI, std::vector<SlotInterval> &SlotIntervals);
     void addExtensionToInterval(LiveRangeUpdater &LRU, ExtendedLiveInterval *ELR);
@@ -116,7 +116,7 @@ class VirtRegMap;
     ~LiveIntervals() override;
 
     /*** LIVE INTERVAL EXTENSION ***/
-    void computeExtensions(ReplayCacheRegionAnalysis *Regions);
+    void computeExtensions(MachineFunction &MF, ReplayCacheRegionAnalysis *Regions);
     ExtendedLiveInterval *getExtensionFromLI(const LiveInterval &LI);
     void recomputeActiveExtensions(SlotIndex SI);
     void addExtensionsToIntervals();

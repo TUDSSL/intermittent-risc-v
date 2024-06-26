@@ -10,7 +10,7 @@
 
 using namespace std;
 
-//#define PRINT_DEBUG
+// #define PRINT_DEBUG
 static const bool MIMIC_CHECKPOINT_TAKEN = true;
 static const float DIRTY_RATIO_THRESHOLD = 1.1;
 static const bool NVM_STATS_PER_BYTE = true;

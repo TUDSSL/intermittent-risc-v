@@ -32,6 +32,9 @@ public:
     RegionBlock BlockStart_;
     /* End MBB of the region. */
     RegionBlock BlockEnd_;
+
+    /* Whether end instruction is a list sentinel. */
+    bool InstrEndIsSentinel_ = false;
 public:
     /* Iterator for iterating over instructions in a region.
      * Copied from https://github.com/mishermasher/llvm/tree/idempotence-extensions and slightly modified.
@@ -43,7 +46,7 @@ public:
         explicit rcr_inst_iterator(const ReplayCacheRegion &Region, const bool isEnd = false) :
             Region_(&Region), 
             Valid_(!isEnd && Region.InstrStart_ != Region.InstrEnd_),
-            InstrFinalIsSentinel_(false), 
+            InstrFinalIsSentinel_(Region.InstrEndIsSentinel_), 
             InstrStart_(Region.InstrStart_),
             InstrEnd_(isEnd ? Region.InstrEnd_ : Region.InstrStart_),
             InstrIt_(isEnd ? Region.InstrEnd_ : Region.InstrStart_), 
@@ -53,6 +56,7 @@ public:
             BlockIt_(isEnd ? Region.BlockEnd_ : Region.BlockStart_)
         {
             /* Figure out if the final instruction is a sentinel. */
+            InstrFinalIsSentinel_ = false;
             for (auto BlockIt = BlockStart_; BlockIt != BlockEnd_; BlockIt++)
             {
                 if (InstrFinal_ == BlockIt->end())
@@ -108,7 +112,7 @@ public:
 
         MachineBasicBlock::iterator getIterator() const { return InstrIt_; };
 
-        SlotInterval getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart = nullptr) const;
+        std::pair<SlotInterval, bool> getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart = nullptr) const;
 
         void stop();
 
@@ -148,9 +152,10 @@ public:
     /* Terminate the region at this instruction. */
     void terminateAt(RegionInstr FenceInstr, RegionBlock FenceBlock);
 
-    bool containsInstr(MachineInstr MI);
+    bool containsInstr(MachineInstr &MI);
+    bool hasMBB(MachineBasicBlock &MBB);
 
-    SlotInterval getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart = nullptr) const;
+    std::pair<SlotInterval, bool>  getSlotIntervalInMBB(const SlotIndexes &SLIS, MachineBasicBlock *MBB, MachineInstr *MIStart = nullptr) const;
 
     bool hasNext();
     bool hasPrev();
@@ -177,6 +182,8 @@ template <typename MachineInstrTy>
 ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy> &
 ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
 {
+    // TODO: change to use MachineDominatorTree!!!
+
     assert(Valid_ && "iterating past end condition");
     assert(BlockIt_ != Region_->MF_->end());
     assert(InstrIt_ != BlockIt_->end());
@@ -230,17 +237,18 @@ ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::operator++()
 
 /* Get the slot index interval of the region in the current MBB. */
 template <typename MachineInstrTy>
-SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart) const
+std::pair<SlotInterval, bool> ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotIntervalInCurrentMBB(const SlotIndexes &SLIS, MachineInstr *MIStart) const
 {
     assert(Valid_ && "Iterator invalid");
 
     MachineBasicBlock *MBB = getMBB();
     SlotInterval SI;
+    bool foundFence = false;
 
     /* Return invalid SlotIndices if MBB is empty.*/
     if (MBB->empty())
     {
-        return SI;
+        return std::make_pair(SI, foundFence);
     }
 
     if (MIStart == nullptr)
@@ -271,6 +279,8 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
         else {
             SI.last = SLIS.getInstructionIndex(*RealInstrFinal).getRegSlot();
         }
+
+        foundFence = true;
     }
     else
     {
@@ -278,15 +288,10 @@ SlotInterval ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::getSlotInterv
     }
 
     assert(SI.first <= SI.last && "Inverse interval!");
-    
-    return SI;
-}
 
-// template <typename MachineInstrTy>
-// void ReplayCacheRegion::rcr_inst_iterator<MachineInstrTy>::stop()
-// {
-//     InstrIt_ = --InstrFinal_;
-//     InstrEnd_ = ++InstrFinal_;
-// }
+    return std::make_pair(SI, foundFence);
+    
+    // return Region_->getSlotIntervalInMBB(SLIS, MBB, MIStart);
+}
 
 }

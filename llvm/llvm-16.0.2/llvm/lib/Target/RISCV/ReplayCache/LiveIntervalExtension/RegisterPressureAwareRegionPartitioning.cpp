@@ -55,8 +55,10 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     std::vector<LiveInterval *> LiveIntervalVector;
 
     /* Compute initial live interval extensions. */
-    LIS_->computeExtensions(RRA_);
+    LIS_->computeExtensions(MF, RRA_);
 
+
+    // TODO: use domtree here?
     for (auto &Region : *RRA_)
     {
         for (auto Instr = Region.begin(); Instr != Region.end(); Instr++)

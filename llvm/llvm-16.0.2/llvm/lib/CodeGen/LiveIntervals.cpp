@@ -157,7 +157,7 @@ bool LiveIntervals::runOnMachineFunction(MachineFunction &fn) {
  * Compute extensions for live intervals of store instructions,
  * and add the extensions to the live intervals.
  */
-void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
+void LiveIntervals::computeExtensions(MachineFunction &MF, ReplayCacheRegionAnalysis *Regions)
 {
   assert(Regions != nullptr);
 
@@ -172,8 +172,17 @@ void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
               auto Reg = MI.getOperand(0).getReg();
               if (Reg.isVirtual()){
                 LiveInterval &LI = this->getInterval(Reg);
-                computeExtensionFromLI(MI, LI);
+                computeExtensionFromLI(MF, MI, LI);
               }
+
+              if (MI.getOperand(1).isReg())
+              {
+                auto Reg2 = MI.getOperand(1).getReg();
+                if (Reg2.isVirtual()){
+                  LiveInterval &LI = this->getInterval(Reg2);
+                  computeExtensionFromLI(MF, MI, LI);
+                }
+              } 
           }
       }
   }
@@ -184,7 +193,7 @@ void LiveIntervals::computeExtensions(ReplayCacheRegionAnalysis *Regions)
 /**
  * Compute an extension for a live interval.
  */
-void LiveIntervals::computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI)
+void LiveIntervals::computeExtensionFromLI(MachineFunction &MF, MachineInstr &MI, LiveInterval &LI)
 {
     /* Extension already in map, skip. */
     if (ExtensionMap_.find(LI.reg()) != ExtensionMap_.end())
@@ -196,7 +205,7 @@ void LiveIntervals::computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI)
     auto *Extension = new (ExtensionAllocator_) ExtendedLiveInterval(LI);
 
     /* Find the slot intervals of all basic blocks until the next region boundary, starting from MI (a store instruction). */
-    auto SlotIntervals = getSlotIntervalsInRegionFrom(MI);
+    auto SlotIntervals = getSlotIntervalsInRegionFrom(MF, MI);
 
     /* Remove slot intervals that overlap with ranges in LI. We do this so the extension and LI are disjoint from one another.
      * This is required to get the correct values for register allocation. */
@@ -213,44 +222,138 @@ void LiveIntervals::computeExtensionFromLI(MachineInstr &MI, LiveInterval &LI)
 /* Get the slot intervals for all basic blocks in the region, starting
  * from the given instruction.
  */
-std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineInstr &MI)
+std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFunction &MF, MachineInstr &MI)
 {
     std::vector<SlotInterval> SlotIntervals;
-    MachineBasicBlock *PrevMBB = nullptr;
-    bool MIFound = false;
 
-    for (auto Instr = CurrentRegion_->begin(); Instr != CurrentRegion_->end(); Instr++)
-    {
-        auto MBB = Instr.getMBB();
+    /* Find the slot intervals in the first MBB. */
+    auto *MBB = MI.getParent();
+    bool foundFence = false;
+    // for (auto Instr = CurrentRegion_->begin(); Instr != CurrentRegion_->end(); Instr++)
+    // {
+    //   auto *InstrMBB = Instr->getParent();
+    
+    //   // for (auto I = MBB->begin(); I != MBB->end(); I++)
+    //   // {
+    //       if (&*Instr == &MI)
+    //       {
+    //           auto GSI = Instr.getSlotIntervalInCurrentMBB(*Indexes, &MI);
+    //           auto SlotInterval = GSI.first;
+    //           foundFence = GSI.second;
+    //           if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
+    //           {
+    //               SlotIntervals.push_back(SlotInterval);
+    //           }
 
-        if (!MIFound)
+    //           break;
+    //       }
+    //   // }
+    // }
+
+    /* Early return if next region boundary was already found. */
+    // if (foundFence || MBB->succ_size() != 1)
+    // {
+    //   return SlotIntervals;
+    // }
+
+
+    std::vector<MachineBasicBlock*> Visited;
+    bool FirstIter = true;
+    // Visited.push_back(MBB);
+    
+    // MBB = *MBB->succ_begin();
+    do {
+        if (std::find(Visited.begin(), Visited.end(), MBB) != Visited.end())
         {
-            if (&*Instr == &MI)
-            {
-                auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes, &MI);
-                if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
-                {
-                    SlotIntervals.push_back(SlotInterval);
-                }   
+          break;
+        }
 
-                MIFound = true;
+        Visited.push_back(MBB);
+
+        // output_li << "Succ size: " << MBB->succ_size() << "\n";
+        // output_li << *MBB;
+
+        SlotInterval SI;
+        SI.first = FirstIter ? Indexes->getInstructionIndex(MI).getRegSlot() : Indexes->getMBBStartIdx(MBB);
+
+        for (auto &I : *MBB)
+        {
+          /* Start iteration from MI. */
+          if (FirstIter)
+          {
+            if (&I != &MI)
+            {
+              continue;
             }
+            else
+            {
+              FirstIter = false;
+              continue; /* Continue here to avoid false-positive fence. */
+            }
+          }
+
+          if (IsFence(I) || hasRegionBoundaryBefore(I))
+          {
+            SI.last = Indexes->getInstructionIndex(I).getRegSlot();
+            foundFence = true;
+            break;
+          }          
+        }
+
+        if (!foundFence)
+        {
+          SI.last = Indexes->getMBBEndIdx(MBB);
+        }
+        SlotIntervals.push_back(SI);
+
+        if (MBB->succ_size() == 1)
+        {
+          MBB = *MBB->succ_begin();
         }
         else
         {
-            if (MBB != PrevMBB)
-            {
-                /* Entered a new basic block, add the slot intervals. */
-                auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes);
-                if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
-                {
-                    SlotIntervals.push_back(SlotInterval);
-                }   
-            }
+          MBB = nullptr;
         }
 
-        PrevMBB = MBB;
+        FirstIter = false;
     }
+    while (MBB != nullptr && !foundFence);
+
+    // output_li << "\n\n\n";
+    // output_li.flush();
+
+    // for (auto Instr = CurrentRegion_->begin(); Instr != CurrentRegion_->end(); Instr++)
+    // {
+    //     auto MBB = Instr.getMBB();
+
+    //     if (!MIFound)
+    //     {
+            // if (&*Instr == &MI)
+            // {
+            //     auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes, &MI);
+            //     if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
+            //     {
+            //         SlotIntervals.push_back(SlotInterval);
+            //     }   
+
+    //             MIFound = true;
+    //         }
+    //     }
+    //     else
+    //     {
+    //         if (MBB != PrevMBB)
+    //         {
+    //             /* Entered a new basic block, add the slot intervals. */
+    //             auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes);
+    //             if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
+    //             {
+    //                 SlotIntervals.push_back(SlotInterval);
+    //             }   
+    //         }
+    //     }
+
+    //     PrevMBB = MBB;
+    // }
 
     return SlotIntervals;
 }
@@ -345,7 +448,6 @@ void LiveIntervals::recomputeActiveExtensions(SlotIndex FinalIndex)
             }
 
             /*** Trim extension interval to stop at the FinalIndex. ****/
-            bool found = false;
             auto it = ex->SITS_.begin();
             /* Change the last index of the slot interval containing the final index. */
             for (; it != ex->SITS_.end(); it++)

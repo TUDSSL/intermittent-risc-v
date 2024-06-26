@@ -55,6 +55,7 @@ bool ReplayCacheStackSpill::runOnMachineFunction(MachineFunction &MF) {
             if (isStoreInstruction(MI))
             {
                 storeRegs.push_back(MI.getOperand(0).getReg());
+                storeRegs.push_back(MI.getOperand(1).getReg());
             }
 
             if (MI.getNumDefs() > 0)

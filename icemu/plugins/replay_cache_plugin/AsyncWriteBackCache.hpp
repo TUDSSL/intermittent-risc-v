@@ -247,7 +247,7 @@ class AsyncWriteBackCache {
    * @return The number of cycles spent on waiting for earlier writebacks to complete
    *         to free up space in the writeback queue. May be zero.
    */
-  unsigned int clwb(const arch_addr_t address, const address_t size) {
+  unsigned int clwb(const arch_addr_t address, const address_t size, bool ignore_dirty_bit = false) {
     if (stats) stats->incCacheClwb();
 
     // Simulate a read request so we can find the correct cache line
@@ -261,13 +261,17 @@ class AsyncWriteBackCache {
     // The cache line must be found, because CLWB may only be executed on
     //  cache lines that would be valid for reading
     ASSERT(line);
+    if (!hit)
+    {
+      std::cout << "HIT failed with address " << std::hex << std::setw(8) << std::setfill('0') << address << std::dec << std::endl;
+    }
     ASSERT(hit);
     ASSERT(!miss);
     // As the cache line must be found, there must at most be one non-colliding line
     ASSERT(collisions < no_of_lines);
 
     updateCacheLastUsed(*line);
-    return enqueueWriteback(*line);
+    return enqueueWriteback(*line, ignore_dirty_bit); // Ignore dirty bit, because CLWB may be the first instruction after power failure
   }
 
   /**
@@ -279,13 +283,13 @@ class AsyncWriteBackCache {
 
     // Enqueue all dirty cache lines as writebacks
     // TODO: I don´t think we need this because all stores should have clwb??
-    for (auto &set: sets) {
-      for (auto &line: set.lines) {
-        if (!line.valid) continue;
-        if (!line.dirty) continue;
-        cycles += enqueueWriteback(line);
-      }
-    }
+    // for (auto &set: sets) {
+    //   for (auto &line: set.lines) {
+    //     if (!line.valid) continue;
+    //     if (!line.dirty) continue;
+    //     cycles += enqueueWriteback(line);
+    //   }
+    // }
 
     // Wait for all writebacks to complete
     cycles += completeWritebacksUntilQueueSize(0);
@@ -361,9 +365,9 @@ class AsyncWriteBackCache {
 
     // Handle eviction in case all lines are occupied
     else if (collisions == no_of_lines) {
-      auto evicted_line = evictLine();
-      updateCacheLastUsed(evicted_line);
-      handleMiss(evicted_line);
+      auto *evicted_line = evictLine();
+      updateCacheLastUsed(*evicted_line);
+      handleMiss(*evicted_line);
     }
 
     else ASSERT(false);
@@ -415,7 +419,7 @@ class AsyncWriteBackCache {
                   << " WAY: " << i << endl;
           return &line;
         } else {
-          p_debug << printLeader() << "Cache miss for Addr: " << hex << req.addr << dec << endl;
+          p_debug << printLeader() << "Cache miss for Addr: " << hex << reconstructAddress(line) << dec << endl;
           collisions++;
         }
       }
@@ -432,7 +436,7 @@ class AsyncWriteBackCache {
         if (stats) stats->incCacheReads(req.size);
         if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * req.size);
 
-        p_debug << printLeader() << "Cache read req, read DATA: " << line.blocks.data << endl;
+        p_debug << printLeader() << "Cache read req at addr " << hex << reconstructAddress(line) << dec << ", read DATA: " << line.blocks.data << endl;
         break;
 
       case HookMemory::MEM_WRITE:
@@ -500,7 +504,7 @@ class AsyncWriteBackCache {
         // In case of a write, copy the value from the CPU to the data
         writeToCache(line);
 
-        p_debug << printLeader() << "Cache write req, written DATA: " << hex << line.blocks.data
+        p_debug << printLeader() << "Cache write req at addr " << hex << reconstructAddress(line) << dec << ", written DATA: " << hex << line.blocks.data
                 << dec << endl;
         p_debug << printLeader() << "Data at NVM: " << hex
                 << nvm.localRead(reconstructAddress(line), 4) << dec << endl;
@@ -515,19 +519,19 @@ class AsyncWriteBackCache {
    * @brief Evict and get that line, using the configured policy.
    * @return The line that was evicted, which has been invalidated.
    */
-  CacheLine &evictLine() {
+  CacheLine *evictLine() {
     CacheLine *evicted_line = nullptr;
     address_t hashed_index;
 
     // Perform the eviction based on the policy.
     switch (policy) {
       case LRU:
-        hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, SET_ASSOCIATIVE, 0);
+        hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, hash_method, 0);
         evicted_line = &(*std::min_element(sets.at(hashed_index).lines.begin(),
                                            sets.at(hashed_index).lines.end()));
         break;
       case MRU:
-        hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, SET_ASSOCIATIVE, 0);
+        hashed_index = cacheHash(req.mem_id.tag, req.mem_id.index, hash_method, 0);
         evicted_line = &(*std::max_element(sets.at(hashed_index).lines.begin(),
                                            sets.at(hashed_index).lines.end()));
         break;
@@ -560,18 +564,23 @@ class AsyncWriteBackCache {
     if (pipeline) pipeline->addToCycles(COST_PER_EVICTION);
 
     clearBit(VALID, *evicted_line);
-    return *evicted_line;
+    return evicted_line;
   }
 
   /**
    * @brief Enqueue a writeback request for the given line.
    * @return The number of cycles spent waiting for the request to be enqueued.
    */
-  unsigned int enqueueWriteback(CacheLine &line) {
+  unsigned int enqueueWriteback(CacheLine &line, bool ignore_dirty_bit = false) {
     // The line must be valid
     ASSERT(line.valid);
-    // Writing back a line that is not dirty is illegal
-    ASSERT(line.dirty);
+    
+    if (!ignore_dirty_bit)
+    {
+      // Writing back a line that is not dirty is illegal
+      ASSERT(line.dirty);
+    }
+
     clearBit(DIRTY, line);
 
     // Wait for the writeback queue to have enough space

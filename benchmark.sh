@@ -6,9 +6,10 @@ make llvm nodownload=1
 # Assuming ICEmu itself does not need recompilation
 cmake --build icemu/plugins/build
 # Ensure benchmarks are built (incremental)
+make -C benchmarks clean
 make -C benchmarks clean build
 # Run a benchmark
-bench=sha
+bench=$1
 exec run-elf \
     -p replay_cache_plugin.so \
     -a hash-method=0 \

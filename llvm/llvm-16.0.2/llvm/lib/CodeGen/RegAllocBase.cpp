@@ -149,6 +149,10 @@ void RegAllocBase::allocatePhysRegs() {
 
       LiveInterval *SplitVirtReg = &LIS->getInterval(Reg);
       assert(!VRM->hasPhys(SplitVirtReg->reg()) && "Register already assigned");
+      // raw_ostream &out = llvm::outs();
+      // out << MRI->reg_nodbg_empty(SplitVirtReg->reg()) << "\n";
+      // out << *SplitVirtReg << "\n\n";
+      // out.flush();
       if (MRI->reg_nodbg_empty(SplitVirtReg->reg())) {
         assert(SplitVirtReg->empty() && "Non-empty but used interval");
         LLVM_DEBUG(dbgs() << "not queueing unused  " << *SplitVirtReg << '\n');

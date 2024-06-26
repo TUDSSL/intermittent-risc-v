@@ -6,3 +6,4 @@ sed -i 's/li	t6, 5/li	t6, 5                   ; START_REGION_BRANCH_DEST/g' $1
 sed -i 's/li	t6, 6/li	t6, 6                   ; START_REGION_STACK_SPILL/g' $1
 sed -i 's/li	t6, 7/li	t6, 7                   ; FENCE/g' $1
 sed -i 's/li	t6, 8/li	t6, 8                   ; CLWB/g' $1
+sed -i 's/li	t6, 9/li	t6, 9                   ; POWER_FAILURE/g' $1
