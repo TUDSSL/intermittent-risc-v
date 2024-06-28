@@ -259,6 +259,7 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
 
     std::vector<MachineBasicBlock*> Visited;
     bool FirstIter = true;
+    MachineInstr *PrevInstr = nullptr;
     // Visited.push_back(MBB);
     
     // MBB = *MBB->succ_begin();
@@ -270,41 +271,43 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
 
         Visited.push_back(MBB);
 
-        // output_li << "Succ size: " << MBB->succ_size() << "\n";
-        // output_li << *MBB;
-
         SlotInterval SI;
         SI.first = FirstIter ? Indexes->getInstructionIndex(MI).getRegSlot() : Indexes->getMBBStartIdx(MBB);
+
 
         for (auto &I : *MBB)
         {
           /* Start iteration from MI. */
           if (FirstIter)
           {
-            if (&I != &MI)
-            {
-              continue;
-            }
-            else
+            if (&I == &MI)
             {
               FirstIter = false;
-              continue; /* Continue here to avoid false-positive fence. */
             }
           }
-
-          if (IsFence(I) || hasRegionBoundaryBefore(I))
+          else if (IsFence(I) || hasRegionBoundaryBefore(I))
           {
-            SI.last = Indexes->getInstructionIndex(I).getRegSlot();
+            if (PrevInstr != nullptr && !PrevInstr->isDebugInstr() && &I == &*MBB->begin())
+              SI.last = Indexes->getInstructionIndex(*PrevInstr, true).getRegSlot();
+            else
+              SI.last = Indexes->getInstructionIndex(I).getRegSlot();
+
             foundFence = true;
+            PrevInstr = &I;
             break;
-          }          
+          }
+
+          PrevInstr = &I;
         }
 
         if (!foundFence)
         {
           SI.last = Indexes->getMBBEndIdx(MBB);
         }
-        SlotIntervals.push_back(SI);
+        if (SI.first < SI.last)
+        {
+          SlotIntervals.push_back(SI);
+        }
 
         if (MBB->succ_size() == 1)
         {

@@ -1,7 +1,7 @@
 /**
  * Repair Regions 2
  * 
- * Repairs regions to be in the correct place by basically recomputing
+ * Repairs regions to be in the correct place by recomputing
  * the initial regions for the rearranged instructions.
  * 
  * Runs at the end of all passes, but BEFORE the stack spill pass.

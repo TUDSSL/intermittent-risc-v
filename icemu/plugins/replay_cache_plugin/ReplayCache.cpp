@@ -63,6 +63,7 @@ class ReplayCacheIntrinsics : public HookCode {
       : HookCode(emu, "replay_cache"),
         cache(cache),
         pipeline(emu, &NoMemCost, &NoMemCost),
+        stats(pipeline),
         checkpoint(emu),
         power_failure_generator(emu, stats) {
     pipeline.setVerifyJumpDestinationGuess(false);
@@ -323,8 +324,8 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto n_bytes_transferred = n_registers_checkpointed * 4;
 
     stats.incNVMWrites(n_bytes_transferred);
-    pipeline.addToCycles(6 * n_bytes_transferred); // NVM writes
-    pipeline.addToCycles(2 * n_registers_checkpointed); // QuickRecall logic overhead (TODO: currently just a guess)
+    pipeline.addToCycles(6 * (n_bytes_transferred + 1)); // NVM writes (one extra for QuickRecall checkpoint flag)
+    pipeline.addToCycles(n_registers_checkpointed); // QuickRecall stores program context onto stack
   }
 
   void resetProcessorAndCache() {
@@ -367,6 +368,11 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void restoreCheckpoint() {
+    pipeline.addToCycles(6 * 4); // Add cycles for reading region register. Also done by QuickRecall.
+    pipeline.addToCycles(6 * 4); // Add cycles for lookup of CM map entry & storing it in register.
+    // TODO: find SC via binary search with Program counter as key
+    pipeline.addToCycles(6 * 4); // Add cycles for lookup of recovery code address in RC map & storing in PC.
+
     // Replay all stores that were issued in this region so far
     std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
     for (auto &insn : replay_instructions) {
@@ -429,8 +435,12 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto n_bytes_transferred = n_registers_restored * 4;
 
     stats.incNVMReads(n_bytes_transferred);
-    pipeline.addToCycles(6 * n_bytes_transferred); // NVM reads, assuming reads did not go through the cache
-    pipeline.addToCycles(2 * n_registers_restored); // QuickRecall logic overhead // TODO: currently just a guess
+    const auto cost_quick_recall = 
+      6 * (n_bytes_transferred + 1) // NVM reads, assuming reads did not go through the cache
+    + 6  // NVM write to reset QuickRecall checkpoint flag
+    + 1; // Compare Vdd > Vtrig, assume true
+    pipeline.addToCycles(cost_quick_recall);
+    cache->tick(cost_quick_recall);
   }
 
   arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {

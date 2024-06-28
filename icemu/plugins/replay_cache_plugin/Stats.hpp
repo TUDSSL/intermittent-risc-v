@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include <numeric>
 
 #include "../includes/Utils.hpp"
 
@@ -58,10 +59,12 @@ class Stats {
   CheckpointStats checkpoint;
   ReplayCacheStats replay_cache;
   MiscStats misc;
+  RiscvE21Pipeline &pipeline;
 
  public:
 
   /* Cache statistics updates */
+  Stats(RiscvE21Pipeline &pipeline) : pipeline(pipeline) {}
 
   void incCacheMisses() { cache.misses++; }
   void incCacheHits() { cache.hits++; }
@@ -121,8 +124,9 @@ class Stats {
     out << " CLWB: " << cache.clwb << std::endl;
     out << " Writebacks enqueued: " << cache.writebacks_enqueued << std::endl;
     out << " Writebacks completed: " << cache.writebacks_completed << std::endl;
-    out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << std::endl;
+    out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << " [" << ((double)cache.writebacks_completed_before_fence / (double)cache.writebacks_completed) * 100.0 << "%]" << std::endl;
     out << " FENCE: " << cache.fence << std::endl;
+    out << " Total FENCE wait cycles: " << std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) << " [" << ((double)std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
     out << " FENCE wait cycles: ";
     for (auto cycles : cache.fence_wait_cycles)
       out << cycles << " ";

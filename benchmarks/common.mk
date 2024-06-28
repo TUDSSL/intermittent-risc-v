@@ -1,5 +1,5 @@
 BENCHMARKS := \
-		sha
+		towers
 		# devel \
 		# quicksort \
 		# coremark \
