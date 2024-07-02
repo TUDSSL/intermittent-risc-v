@@ -49,7 +49,7 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
 
     if (MBB.isEntryBlock())
     {
-      StartRegionInBB(MBB, START_REGION, true);
+      StartRegionInBB(MBB, START_REGION, false);
       SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
     }
       

@@ -34,6 +34,7 @@ struct CheckpointStats {
   int due_to_period;
   int due_to_explicit;
   int restores;
+  int restore_cycles;
 };
 
 struct ReplayCacheStats {
@@ -91,6 +92,7 @@ class Stats {
   void incCheckpointsDueToPeriod() { checkpoint.due_to_period++; }
   void incCheckpointsDueToExplicit() { checkpoint.due_to_explicit++; }
   void incRestores() { checkpoint.restores++; }
+  void incRestoreCycles(int cycles) { checkpoint.restore_cycles += cycles; }
 
   /* ReplayCache updates */
 
@@ -127,10 +129,10 @@ class Stats {
     out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << " [" << ((double)cache.writebacks_completed_before_fence / (double)cache.writebacks_completed) * 100.0 << "%]" << std::endl;
     out << " FENCE: " << cache.fence << std::endl;
     out << " Total FENCE wait cycles: " << std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) << " [" << ((double)std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " FENCE wait cycles: ";
-    for (auto cycles : cache.fence_wait_cycles)
-      out << cycles << " ";
-    out << std::endl;
+    // out << " FENCE wait cycles: ";
+    // for (auto cycles : cache.fence_wait_cycles)
+    //   out << cycles << " ";
+    // out << std::endl;
 
     out << "NVM STATS" << std::endl;
     out << " Reads: " << nvm.reads << std::endl;
@@ -141,18 +143,19 @@ class Stats {
     out << " Due to period: " << checkpoint.due_to_period << std::endl;
     out << " Due to explicit: " << checkpoint.due_to_explicit << std::endl;
     out << " Restores: " << checkpoint.restores << std::endl;
+    out << " Overhead cycles (checkpoint + restore): " << checkpoint.restore_cycles << " [" << ((double) checkpoint.restore_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
 
     out << "REPLAYCACHE STATS" << std::endl;
     out << " Region starts: " << replay_cache.region_starts << std::endl;
     out << " Region ends: " << replay_cache.region_ends << std::endl;
-    out << " Region sizes: ";
-    for (auto size : replay_cache.region_sizes)
-      out << size << " ";
-    out << std::endl;
-    out << " Stores per region: ";
-    for (auto stores : replay_cache.stores_per_region)
-      out << stores << " ";
-    out << std::endl;
+    // out << " Region sizes: ";
+    // for (auto size : replay_cache.region_sizes)
+    //   out << size << " ";
+    // out << std::endl;
+    // out << " Stores per region: ";
+    // for (auto stores : replay_cache.stores_per_region)
+    //   out << stores << " ";
+    // out << std::endl;
     out << " Replays: " << replay_cache.replays << std::endl;
 
     out << "MISC STATS" << std::endl;

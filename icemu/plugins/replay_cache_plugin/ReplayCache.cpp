@@ -2,6 +2,8 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <vector>
+#include <unordered_map>
 
 #include "capstone/capstone.h"
 
@@ -51,6 +53,13 @@ class ReplayCacheIntrinsics : public HookCode {
 
   std::shared_ptr<_Cache> cache;
 
+  struct Restore {
+    arch_addr_t region_addr;
+    arch_addr_t pc_addr;
+  };
+  std::vector<Restore> restores;
+  std::unordered_map<arch_addr_t, std::set<arch_addr_t>> stores_map;
+
   _Pipeline pipeline;
   Stats stats;
   Checkpoint checkpoint;
@@ -87,6 +96,11 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   ~ReplayCacheIntrinsics() {
+    /* Execute fence to wait for any pending cache requests. */
+    executeFence();
+    endRegion();
+    addPendingRestoreCycles();
+
     // Print stats & config summary to stdout
     std::cout << "\n-------------------------------------" << std::endl;
     cache->printConfig(std::cout);
@@ -274,6 +288,9 @@ class ReplayCacheIntrinsics : public HookCode {
     // Persist the address and size for the CLWB instruction
     last_store_address = addr;
     last_store_size = store.size;
+
+    // Record the store.
+    stores_map[last_region_register_value].insert(getRegisterValue(_Arch::Register::REG_PC));
   }
 
   void endRegion() {
@@ -323,9 +340,17 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto n_registers_checkpointed = checkpoint.create();
     const auto n_bytes_transferred = n_registers_checkpointed * 4;
 
+    // QuickRecall overhead from the QuickRecall paper is about 65-66 cycles.
+    // This seems to be quite low, but does check out IF each register write is two cycles.
+    // Here, we use the NVM overhead of the emulator to keep everything consistent.
+
     stats.incNVMWrites(n_bytes_transferred);
-    pipeline.addToCycles(6 * (n_bytes_transferred + 1)); // NVM writes (one extra for QuickRecall checkpoint flag)
-    pipeline.addToCycles(n_registers_checkpointed); // QuickRecall stores program context onto stack
+    auto cost = 6 * (n_bytes_transferred + 1);
+    pipeline.addToCycles(cost); // NVM writes (one extra for QuickRecall checkpoint flag)
+    stats.incRestoreCycles(cost);
+
+    /* Push restore to list. */
+    restores.push_back({.region_addr = last_region_register_value, .pc_addr = getRegisterValue(_Arch::Register::REG_PC)});
   }
 
   void resetProcessorAndCache() {
@@ -372,6 +397,7 @@ class ReplayCacheIntrinsics : public HookCode {
     pipeline.addToCycles(6 * 4); // Add cycles for lookup of CM map entry & storing it in register.
     // TODO: find SC via binary search with Program counter as key
     pipeline.addToCycles(6 * 4); // Add cycles for lookup of recovery code address in RC map & storing in PC.
+    stats.incRestoreCycles(6 * 4 * 3);
 
     // Replay all stores that were issued in this region so far
     std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
@@ -413,6 +439,7 @@ class ReplayCacheIntrinsics : public HookCode {
       + 6 * 4;         // NVM read of the base register
     pipeline.addToCycles(cost_read_replay_value);
     cache->tick(cost_read_replay_value);
+    stats.incRestoreCycles(cost_read_replay_value);
 
     // Inform the cache about the replay-store instruction
     cache->handleReplay(addr, src_value, store.size);
@@ -420,7 +447,9 @@ class ReplayCacheIntrinsics : public HookCode {
     // Call CLWB on the replayed store
     // NOTE: This is *not* mentioned in the paper, but the authors have confirmed
     //       that it was merely omitted from Figure 6 for brevity.
-    pipeline.addToCycles(1 + cache->clwb(addr, store.size));
+    auto cache_clwb_cycles = 1 + cache->clwb(addr, store.size);
+    pipeline.addToCycles(cache_clwb_cycles);
+    stats.incRestoreCycles(cache_clwb_cycles);
 
     // Account for post-replay instructions
     const auto cost_post_replay =
@@ -428,11 +457,18 @@ class ReplayCacheIntrinsics : public HookCode {
       + 1; // checking if the replay counter is zero
     pipeline.addToCycles(cost_post_replay);
     cache->tick(cost_post_replay);
+    stats.incRestoreCycles(cost_post_replay);
   }
 
   void quickRecallRestore() {
     const auto n_registers_restored = checkpoint.restore();
     const auto n_bytes_transferred = n_registers_restored * 4;
+
+    // QuickRecall overhead from the QuickRecall paper is about 33-34 cycles.
+    // This seems to be quite low, but does check out IF each register read is only one cycle.
+    // Here, we use the NVM overhead of the emulator to keep everything consistent.
+    // Initialization overhead is not taken into account because it does not depend on the
+    // runtime.
 
     stats.incNVMReads(n_bytes_transferred);
     const auto cost_quick_recall = 
@@ -440,7 +476,26 @@ class ReplayCacheIntrinsics : public HookCode {
     + 6  // NVM write to reset QuickRecall checkpoint flag
     + 1; // Compare Vdd > Vtrig, assume true
     pipeline.addToCycles(cost_quick_recall);
+    stats.incRestoreCycles(cost_quick_recall);
     cache->tick(cost_quick_recall);
+  }
+
+  void addPendingRestoreCycles()
+  {
+    int cost_restore_pending = 0;
+    for (auto &restore : restores)
+    {
+      auto &stores_set = stores_map[restore.region_addr];
+      auto len = stores_set.size();
+      cost_restore_pending += 1; // Store size
+      if (len > 0)
+      {
+        cost_restore_pending += (int)std::round(9.0 * log10((double)len)); // Calculate worst case complexity, with 9 cycles per iteration.
+      }
+    }
+
+    pipeline.addToCycles(cost_restore_pending);
+    stats.incRestoreCycles(cost_restore_pending);
   }
 
   arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {

@@ -100,7 +100,7 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
          * This could lead to duplicate regions, but one of those regions will be
          * empty and thus would not contribute to any latency/slowdown.
          */
-        if (MBB.isEntryBlock())
+        if (MBB.isEntryBlock() && !IsFence(*MBB.begin()))
         {
             StartRegionInBB(MBB, START_REGION, true);
             SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
@@ -108,11 +108,21 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
 
         for (auto &MI : MBB) 
         {
-            if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI))
+            if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI) && !IsFence(MI))
             {
                 InsertRegionBoundaryBefore(MBB, MI, (ReplayCacheInstruction) MI.StartRegionInstr, true);
                 SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
             }
+            // if (MI.isUnconditionalBranch())
+            // {
+            //     int NumOp = MI.getNumExplicitOperands();
+            //     auto TargetIndex = MI.getOperand(NumOp - 1).getIndex();
+
+            //     if (TargetIndex == SLIS->getInstructionIndex(MI).getRegSlot())
+            //     {
+            //         output_repair2 << "Jump to self: " << MI << "\n";
+            //     }
+            // }
 
             PrevMI = &MI;
         }
