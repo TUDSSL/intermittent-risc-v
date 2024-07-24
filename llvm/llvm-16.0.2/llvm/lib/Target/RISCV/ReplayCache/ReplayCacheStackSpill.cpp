@@ -42,45 +42,90 @@ void ReplayCacheStackSpill::getAnalysisUsage(AnalysisUsage &AU) const
 }
 
 bool ReplayCacheStackSpill::runOnMachineFunction(MachineFunction &MF) {
-    RRA = &getAnalysis<ReplayCacheRegionAnalysis>();
-
-    std::vector<Register> storeRegs;
-    std::vector<Register> spillRegs;
-
-    for (auto &Region : *RRA) {
-        for (auto &MI : Region) {
-            /* Push all registers used for every store instruction in the region
-             * to a vector, to keep track of them.
-             */
+    for (auto &MBB : MF){
+        for (auto &MI : MBB) {
             if (isStoreInstruction(MI))
             {
-                storeRegs.push_back(MI.getOperand(0).getReg());
-                storeRegs.push_back(MI.getOperand(1).getReg());
+                checkRegionForStackSpill(MF, MI);
             }
+        }
+    }
+    return false;
+}
 
-            if (MI.getNumDefs() > 0)
+
+void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, MachineInstr &MI)
+{
+    auto storereg0 = MI.getOperand(0).getReg();
+    auto storereg1 = MI.getOperand(1).getReg();
+
+    auto *MBB = MI.getParent();
+    bool foundFence = false;
+    std::vector<MachineBasicBlock*> Visited;
+    bool FirstIter = true;
+
+    do {
+        if (std::find(Visited.begin(), Visited.end(), MBB) != Visited.end())
+        {
+          break;
+        }
+
+        Visited.push_back(MBB);
+
+        for (auto &I : *MBB)
+        {
+          /* Start iteration from MI. */
+          if (FirstIter)
+          {
+            if (&I == &MI)
             {
-                for (auto &Def : MI.all_defs())
+              FirstIter = false;
+            }
+          }
+          else if (IsStartRegion(I) || hasRegionBoundaryBefore(I))
+          {
+            foundFence = true;
+            break;
+          }
+          else
+          {
+            if (I.getNumDefs() > 0)
+            {
+                for (auto &Def : I.all_defs())
                 {
                     auto Reg = Def.getReg();
 
-                    /* Check if the defining register is used in a store. If it is, we need to
+                    /* Check if the defining register is redefined. If it is, we need to
                      * insert a region boundary.
                      */
-                    if (std::find(storeRegs.begin(), storeRegs.end(), Reg) != storeRegs.end())
+                    if (Reg == storereg0 || Reg == storereg1)
                     {
-                        InsertRegionBoundaryBefore(*(MI.getParent()), MI, START_REGION_STACK_SPILL, true);
-                        storeRegs.clear();
+                        InsertRegionBoundaryBefore(*MBB, I, START_REGION_STACK_SPILL, true);
+                        foundFence = true;
                         break;
                     }
                 }
+
+                if (foundFence)
+                {
+                    break;
+                }
             }
+          }
         }
 
-        /* Clear store register vector when switching regions. */
-        storeRegs.clear();
+        if (MBB->succ_size() == 1)
+        {
+          MBB = *MBB->succ_begin();
+        }
+        else
+        {
+          MBB = nullptr;
+        }
+
+        FirstIter = false;
     }
-    return false;
+    while (MBB != nullptr && !foundFence);
 }
 
 FunctionPass *llvm::createReplayCacheStackSpillPass() {

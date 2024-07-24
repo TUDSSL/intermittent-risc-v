@@ -156,8 +156,8 @@ class Stats {
     out << "NVM STATS" << std::endl;
     out << " Reads: " << nvm.reads << std::endl;
     out << " Writes: " << nvm.writes << std::endl;
-    out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)nvm.reads * NVM_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " Write cycles: " << nvm.write_cycles << " [" << ((double)nvm.write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)(nvm.reads * NVM_READ_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Write cycles: " << nvm.writes * NVM_WRITE_COST << " [" << ((double)(nvm.writes * NVM_WRITE_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
 
     out << "CHECKPOINT STATS" << std::endl;
     out << " Checkpoints: " << checkpoint.checkpoints.size() << std::endl;

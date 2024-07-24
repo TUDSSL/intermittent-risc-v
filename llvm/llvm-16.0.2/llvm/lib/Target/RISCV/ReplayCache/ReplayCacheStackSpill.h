@@ -17,6 +17,8 @@ private:
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 
+  void checkRegionForStackSpill(MachineFunction &MF, MachineInstr &MI);
+
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 };
 } // namespace llvm

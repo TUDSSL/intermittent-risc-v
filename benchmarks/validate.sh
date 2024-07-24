@@ -26,11 +26,12 @@ start_region_return_instr="$replaycache_instr_base""2"
 start_region_extension_instr="$replaycache_instr_base""3"
 start_region_branch_instr="$replaycache_instr_base""4"
 start_region_branch_dest_instr="$replaycache_instr_base""5"
+start_region_stack_spill_instr="$replaycache_instr_base""6"
 fence_instr="$replaycache_instr_base""7"
 clwb_instr="$replaycache_instr_base""8"
 
 # Command line argument: file to read.
-read_file="benchmarks/$1/build-replay-cache/$1.dis"
+read_file="benchmarks/$1/build-replay-cache-$2/$1.dis"
 
 # Globals
 expect_clwb_next_line=false
@@ -43,6 +44,8 @@ live_store_registers=()
 lineno=0
 
 while IFS= read -r line; do
+    lineno=$((lineno + 1))
+    
     if [ -z "$line" ]; then
         continue
     fi
@@ -51,7 +54,6 @@ while IFS= read -r line; do
         continue
     fi
 
-    lineno=$((lineno + 1))
     # Stop at .sbss section, this is not where we want to validate.
     # We can ignore the .debug_str section after it as well.
     if [[ $line = "Disassembly of section .sbss:" || $line = "Disassembly of section .sdata:" ]]; then
@@ -59,7 +61,7 @@ while IFS= read -r line; do
     fi
 
     # Empty live registers at end of region.
-    if [[ $line =~ $fence_instr ]]; then
+    if [[ $line =~ $start_region_instr || $line =~ $start_region_return_instr || $line =~ $start_region_extension_instr || $line =~ $start_region_branch_instr || $line =~ $start_region_branch_dest_instr || $line =~ $start_region_stack_spill_instr ]]; then
         live_store_registers=()
     fi
 
@@ -214,7 +216,7 @@ while IFS= read -r line; do
     for branch_instr in "${conditional_branch_instrs[@]}"
     do
         if [[ $prev_line =~ $branch_instr ]]; then
-            if [[ ! $line =~ $fence_instr && ! $line =~ "j	" ]]; then
+            if [[ ! ($line =~ $start_region_instr || $line =~ $start_region_return_instr || $line =~ $start_region_extension_instr || $line =~ $start_region_branch_instr || $line =~ $start_region_branch_dest_instr || $line =~ $start_region_stack_spill_instr) && ! $line =~ "j	" ]]; then
                 echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
                 echo "Missing fall-through region: $read_file:$lineno"
                 echo "$line"
@@ -235,7 +237,7 @@ while IFS= read -r line; do
     #### CALL RETURN CHECK ####
     # Check if there is a region boundary when it is expected.
     if [ "$expect_fence_next_line" = true ]; then
-        if [[ ! $line =~ $fence_instr ]]; then
+        if [[ ! ($line =~ $start_region_instr || $line =~ $start_region_return_instr || $line =~ $start_region_extension_instr || $line =~ $start_region_branch_instr || $line =~ $start_region_branch_dest_instr || $line =~ $start_region_stack_spill_instr) ]]; then
             echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
             echo "Missing region boundary after call: $read_file:$((lineno - 1))"
             echo "$prev_line"
@@ -263,14 +265,14 @@ while IFS= read -r line; do
 
         for branch_instr in "${conditional_branch_instrs[@]}"
         do
-            if [[ $prevprev_line =~ $branch_instr ]]; then
+            if [[ $prev_line =~ $branch_instr ]]; then
                 found=true
                 break
             fi
         done
 
         if [[ $found == false ]]; then
-            instr_address=${prev_line%%:*}
+            instr_address=${line%%:*}
             target_line=$(grep -E -i "0x$instr_address" $read_file)
 
             if [[ ! $target_line =~ $instr_address ]]; then
@@ -316,9 +318,9 @@ for target in "${branch_targets[@]}"
 do
     target_line=$(grep -E -i "$target:" $read_file)
 
-    if [[ ! $target_line =~ $fence_instr ]]; then
+    if [[ ! ($target_line =~ $start_region_instr || $target_line =~ $start_region_return_instr || $target_line =~ $start_region_extension_instr || $target_line =~ $start_region_branch_instr || $target_line =~ $start_region_branch_dest_instr || $target_line =~ $start_region_stack_spill_instr) ]]; then
         echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-        echo "Branch destination is not a FENCE instruction: $read_file"
+        echo "Branch destination is not a region boundary instruction: $read_file"
         echo "$target_line"
         echo ""
         num_checks_failed=$((num_checks_failed + 1))

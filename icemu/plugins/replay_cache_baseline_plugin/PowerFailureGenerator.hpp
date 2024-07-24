@@ -7,6 +7,8 @@
 #include "../includes/Checkpoint.hpp"
 #include "Stats.hpp"
 
+using _Stats = ReplayCacheStats::Stats;
+
 template <class _Pipeline>
 class PowerFailureGenerator {
 
@@ -21,7 +23,7 @@ class PowerFailureGenerator {
   bool fail_next = false;
 
  public:
-  PowerFailureGenerator(icemu::Emulator &emu, ReplayCacheStats::Stats &stats) {
+  PowerFailureGenerator(icemu::Emulator &emu, _Stats &stats) {
     // Get the on duration from the arguments
     auto arg_on_duration =
         PluginArgumentParsing::GetArguments(emu, "on-duration=");

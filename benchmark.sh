@@ -10,6 +10,7 @@ cmake --build icemu/plugins/build
 # make -C benchmarks clean build
 # Run a benchmark
 bench=$1
+opt_lvl=$2
 exec run-elf \
     -p replay_cache_plugin.so \
     -a hash-method=0 \
@@ -19,5 +20,5 @@ exec run-elf \
     -a writeback-parallelism=1 \
     -a log-file=/tmp/replay-cache-$bench-log \
     -a on-duration=250000 \
-    ./benchmarks/$bench/build-replay-cache/$bench.elf
+    ./benchmarks/$bench/build-replay-cache-$opt_lvl/$bench.elf
 

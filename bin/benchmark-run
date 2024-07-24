@@ -170,6 +170,20 @@ function replay-cache() {
         $elf
 }
 
+function replay-cache-baseline() {
+    on_duration=$1
+    run-elf \
+        -p replay_cache_baseline_plugin.so \
+        -a hash-method=0 \
+        -a cache-size=8192 \
+        -a cache-lines=2 \
+        -a writeback-queue-size=8 \
+        -a writeback-parallelism=1 \
+        -a log-file=$LOGDIR/$name-$compile_config-run-replay_cache_baseline \
+        -a on-duration=$on_duration \
+        $elf
+}
+
 function plain-c() {
 	run-elf \
         -p memory_stats_plugin.so \

@@ -1,12 +1,13 @@
 BENCHMARKS := \
-		devel \
-		quicksort \
-		coremark \
-		crc \
-		sha \
-		dijkstra \
-		aes \
-		picojpeg
+	picojpeg \
+	coremark
+		# quicksort \
+		# coremark \
+		# crc \
+		# sha \
+		# dijkstra \
+		# aes \
+		# picojpeg
 
 BUILD_CONFIGURATIONS := \
 		uninstrumented \
@@ -24,6 +25,13 @@ ON_DURATIONS := \
     	2500000 \
     	5000000 \
     	25000000
+
+DEFAULT_OPT_LEVEL := -O3
+OPT_LEVELS := \
+		-Os \
+		-O1 \
+		-O2 \
+		-O3
 
 # Highlight begin/end
 HLB = "\\e[33m\\e[1m"

@@ -28,5 +28,6 @@ ColorScheme = {
     "nacho_pw" : Color['teal'], 
     "nacho_pw_stcont" : Color['teal'],
     "nacho_naive" : Color['teal'],
-    "nacho_clank" : Color['yellow']
+    "nacho_clank" : Color['yellow'],
+    "replay_cache": Color['purple']
 }

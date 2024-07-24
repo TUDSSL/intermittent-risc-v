@@ -23,7 +23,6 @@ void InsertRegionBoundaryBefore(MachineBasicBlock &MBB, MachineInstr &MI, const 
   MI.StartRegionInstr = (unsigned)Instr;
   if (insertInstr)
   {
-    MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), ReplayCacheInstruction::FENCE));
     MBB.insert(MI, BuildRC(MBB, MI, MI.getDebugLoc(), Instr));
   }
 }

@@ -44,7 +44,7 @@ bool ReplayCacheRepairRegions::runOnMachineFunction(MachineFunction &MF)
             if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI))
             {
                 ReplayCacheInstruction startRegionInstr = (ReplayCacheInstruction) MI.StartRegionInstr;
-                if (startRegionInstr != START_REGION_BRANCH_DEST)
+                if (startRegionInstr != START_REGION_BRANCH_DEST && startRegionInstr != START_REGION)
                 {
                     InsertRegionBoundaryBefore(MBB, MI, startRegionInstr, true);
                 }

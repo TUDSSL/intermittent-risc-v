@@ -49,6 +49,8 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
             
             if (MI.isConditionalBranch())
             {
+                InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
+
                 auto TrueDest = TII.getBranchDestBlock(MI);
                 MachineBasicBlock *FalseDest = nullptr;
 
@@ -100,7 +102,7 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
          * This could lead to duplicate regions, but one of those regions will be
          * empty and thus would not contribute to any latency/slowdown.
          */
-        if (MBB.isEntryBlock() && !IsFence(*MBB.begin()))
+        if (MBB.isEntryBlock() && !IsStartRegion(*MBB.begin()))
         {
             StartRegionInBB(MBB, START_REGION, true);
             SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
@@ -108,7 +110,7 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
 
         for (auto &MI : MBB) 
         {
-            if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI) && !IsFence(MI))
+            if (hasRegionBoundaryBefore(MI) && PrevMI != nullptr && !IsStartRegion(*PrevMI) && !IsStartRegion(MI))
             {
                 InsertRegionBoundaryBefore(MBB, MI, (ReplayCacheInstruction) MI.StartRegionInstr, true);
                 SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());

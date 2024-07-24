@@ -229,40 +229,10 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
     /* Find the slot intervals in the first MBB. */
     auto *MBB = MI.getParent();
     bool foundFence = false;
-    // for (auto Instr = CurrentRegion_->begin(); Instr != CurrentRegion_->end(); Instr++)
-    // {
-    //   auto *InstrMBB = Instr->getParent();
-    
-    //   // for (auto I = MBB->begin(); I != MBB->end(); I++)
-    //   // {
-    //       if (&*Instr == &MI)
-    //       {
-    //           auto GSI = Instr.getSlotIntervalInCurrentMBB(*Indexes, &MI);
-    //           auto SlotInterval = GSI.first;
-    //           foundFence = GSI.second;
-    //           if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
-    //           {
-    //               SlotIntervals.push_back(SlotInterval);
-    //           }
-
-    //           break;
-    //       }
-    //   // }
-    // }
-
-    /* Early return if next region boundary was already found. */
-    // if (foundFence || MBB->succ_size() != 1)
-    // {
-    //   return SlotIntervals;
-    // }
-
-
     std::vector<MachineBasicBlock*> Visited;
     bool FirstIter = true;
     MachineInstr *PrevInstr = nullptr;
-    // Visited.push_back(MBB);
     
-    // MBB = *MBB->succ_begin();
     do {
         if (std::find(Visited.begin(), Visited.end(), MBB) != Visited.end())
         {
@@ -285,7 +255,7 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
               FirstIter = false;
             }
           }
-          else if (IsFence(I) || hasRegionBoundaryBefore(I))
+          else if (IsStartRegion(I) || hasRegionBoundaryBefore(I))
           {
             if (PrevInstr != nullptr && !PrevInstr->isDebugInstr() && &I == &*MBB->begin())
               SI.last = Indexes->getInstructionIndex(*PrevInstr, true).getRegSlot();
@@ -321,42 +291,6 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
         FirstIter = false;
     }
     while (MBB != nullptr && !foundFence);
-
-    // output_li << "\n\n\n";
-    // output_li.flush();
-
-    // for (auto Instr = CurrentRegion_->begin(); Instr != CurrentRegion_->end(); Instr++)
-    // {
-    //     auto MBB = Instr.getMBB();
-
-    //     if (!MIFound)
-    //     {
-            // if (&*Instr == &MI)
-            // {
-            //     auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes, &MI);
-            //     if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
-            //     {
-            //         SlotIntervals.push_back(SlotInterval);
-            //     }   
-
-    //             MIFound = true;
-    //         }
-    //     }
-    //     else
-    //     {
-    //         if (MBB != PrevMBB)
-    //         {
-    //             /* Entered a new basic block, add the slot intervals. */
-    //             auto SlotInterval = Instr.getSlotIntervalInCurrentMBB(*Indexes);
-    //             if (SlotInterval.first.isValid() && SlotInterval.last.isValid())
-    //             {
-    //                 SlotIntervals.push_back(SlotInterval);
-    //             }   
-    //         }
-    //     }
-
-    //     PrevMBB = MBB;
-    // }
 
     return SlotIntervals;
 }

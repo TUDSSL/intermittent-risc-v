@@ -1,5 +1,8 @@
 build:
 	@echo "Building all benchmarks"
+	OPT_LEVEL="-Os" $(MAKE) -f make-build.mk all
+	OPT_LEVEL="-O1" $(MAKE) -f make-build.mk all
+	OPT_LEVEL="-O2" $(MAKE) -f make-build.mk all
 	OPT_LEVEL="-O3" $(MAKE) -f make-build.mk all
 
 run: build

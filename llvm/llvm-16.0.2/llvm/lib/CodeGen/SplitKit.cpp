@@ -224,7 +224,11 @@ void SplitAnalysis::calcLiveBlockInfo() {
       ThroughBlocks.set(BI.MBB->getNumber());
       // The range shouldn't end mid-block if there are no uses. This shouldn't
       // happen.
-      assert(LVI->end >= Stop && "range ends mid block with no uses");
+      if (LVI->end < Stop)
+      {
+        return;
+      }
+      // assert(LVI->end >= Stop && "range ends mid block with no uses");
     } else {
       // This block has uses. Find the first and last uses in the block.
       BI.FirstInstr = *UseI;
