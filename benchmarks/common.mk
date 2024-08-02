@@ -1,6 +1,5 @@
 BENCHMARKS := \
-	picojpeg \
-	coremark
+		dijkstra sha
 		# quicksort \
 		# coremark \
 		# crc \

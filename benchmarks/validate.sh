@@ -188,28 +188,28 @@ while IFS= read -r line; do
         fi
     done
 
-    #### BRANCH CHECK ####
-    # Check for a START_REGION instruction in front of a branch.
-    # Can be START_REGION_BRANCH or START_REGION_BRANCH_DEST (in case the branch instr is also a destination).
-    for branch_instr in "${conditional_branch_instrs[@]}"
-    do
-        if [[ $line =~ $branch_instr ]]; then
-            if [[ ! $prev_line =~ $start_region_branch_instr && ! $prev_line =~ $start_region_branch_dest_instr ]]; then
-                echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-                echo "Missing region for branch instruction: $read_file:$lineno"
-                echo "$line"
-                echo ""
-                num_checks_failed=$((num_checks_failed + 1))
-            fi
+    # #### BRANCH CHECK ####
+    # # Check for a START_REGION instruction in front of a branch.
+    # # Can be START_REGION_BRANCH or START_REGION_BRANCH_DEST (in case the branch instr is also a destination).
+    # for branch_instr in "${conditional_branch_instrs[@]}"
+    # do
+    #     if [[ $line =~ $branch_instr ]]; then
+    #         if [[ ! $prev_line =~ $start_region_branch_instr && ! $prev_line =~ $start_region_branch_dest_instr ]]; then
+    #             echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
+    #             echo "Missing region for branch instruction: $read_file:$lineno"
+    #             echo "$line"
+    #             echo ""
+    #             num_checks_failed=$((num_checks_failed + 1))
+    #         fi
 
-            # Add branch target address to array for later checking.
-            branch_target=${line#*x}
-            branch_target=${branch_target%" "*}
-            branch_targets+=($branch_target)
+    #         # Add branch target address to array for later checking.
+    #         branch_target=${line#*x}
+    #         branch_target=${branch_target%" "*}
+    #         branch_targets+=($branch_target)
 
-            break
-        fi
-    done
+    #         break
+    #     fi
+    # done
 
     #### ELSE BRANCH CHECK ####
     # If the previous instruction was a conditional branch, check if this instruction is either a fence or an unconditional jump.
@@ -285,26 +285,26 @@ while IFS= read -r line; do
         fi
     fi
 
-    # Check if every BRANCH region has a corresponding branch instruction.
-    if [[ $prev_line =~ $start_region_branch_instr ]]; then
-        found=false
+    # # Check if every BRANCH region has a corresponding branch instruction.
+    # if [[ $prev_line =~ $start_region_branch_instr ]]; then
+    #     found=false
 
-        for branch_instr in "${conditional_branch_instrs[@]}"
-        do
-            if [[ $line =~ $branch_instr ]]; then
-                found=true
-                break
-            fi
-        done
+    #     for branch_instr in "${conditional_branch_instrs[@]}"
+    #     do
+    #         if [[ $line =~ $branch_instr ]]; then
+    #             found=true
+    #             break
+    #         fi
+    #     done
 
-        if [[ $found == false ]]; then
-            echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
-            echo "Branch region without branch instruction: $read_file:$((lineno - 1))"
-            echo "$prev_line"
-            echo ""
-            num_checks_failed=$((num_checks_failed + 1))
-        fi
-    fi
+    #     if [[ $found == false ]]; then
+    #         echo -e "\033[91m--- CHECK FAILED ($num_checks_failed) ---\033[0m"
+    #         echo "Branch region without branch instruction: $read_file:$((lineno - 1))"
+    #         echo "$prev_line"
+    #         echo ""
+    #         num_checks_failed=$((num_checks_failed + 1))
+    #     fi
+    # fi
 
     prevprev_line=$prev_line
     prev_line=$line

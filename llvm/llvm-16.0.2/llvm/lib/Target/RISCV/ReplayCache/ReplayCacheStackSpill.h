@@ -2,6 +2,7 @@
 #define LLVM_LIB_TARGET_RISCV_REPLAYCACHE_REPLAYCACHESTACKSPILL_H
 
 #include "RISCV.h"
+#include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/ReplayCache/ReplayCacheRegionAnalysis.h"
 
@@ -13,7 +14,7 @@ public:
   ReplayCacheStackSpill() : MachineFunctionPass(ID) {}
 
 private:
-  ReplayCacheRegionAnalysis *RRA = nullptr;
+  SlotIndexes *SLIS = nullptr;
 
   bool runOnMachineFunction(MachineFunction &MF) override;
 

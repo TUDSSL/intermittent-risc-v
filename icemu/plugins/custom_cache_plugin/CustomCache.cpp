@@ -239,9 +239,15 @@ class MemoryAccess : public HookMemory {
     if (arg_checkpoint_period.size())
       checkpoint_period = std::stoul(arg_checkpoint_period[0]);
 
+    // Get the optimization level
+    std::string opt_level = "-O3";
+    auto arg_opt_level = PluginArgumentParsing::GetArguments(getEmulator(), "opt-level=");
+    if (arg_opt_level.size())
+      opt_level = arg_opt_level[0];
+
     filename += "-" + std::to_string(size) + "-" + std::to_string(lines) + "-" +
                 std::to_string(checkpoint_period) + "-" +
-                std::to_string(on_duration);
+                std::to_string(on_duration) + opt_level;
 
     cout << "Lines from outside " << lines << endl;
     CacheObj.init(size, lines, LRU, getEmulator().getMemory(), filename,

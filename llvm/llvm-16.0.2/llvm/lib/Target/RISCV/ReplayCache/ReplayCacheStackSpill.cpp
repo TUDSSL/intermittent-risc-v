@@ -11,7 +11,6 @@
  */
 #include "RISCVSubtarget.h"
 #include "RISCVTargetMachine.h"
-#include "llvm/CodeGen/ReplayCache/ReplayCacheShared.h"
 #include "ReplayCacheStackSpill.h"
 #include <iostream>
 #include <vector>
@@ -26,22 +25,18 @@ raw_ostream &output_ss = llvm::outs();
 
 char ReplayCacheStackSpill::ID = 7;
 
-INITIALIZE_PASS_BEGIN(ReplayCacheStackSpill, DEBUG_TYPE, PASS_NAME,
-                      false, false)
-INITIALIZE_PASS_DEPENDENCY(ReplayCacheRegionAnalysis)
-INITIALIZE_PASS_END(ReplayCacheStackSpill, DEBUG_TYPE,
-                    PASS_NAME, false, false)
-
 void ReplayCacheStackSpill::getAnalysisUsage(AnalysisUsage &AU) const
 {
-    AU.addRequired<ReplayCacheRegionAnalysis>();
-    AU.addPreserved<ReplayCacheRegionAnalysis>();
+    AU.addRequired<SlotIndexes>();
+    AU.addPreserved<SlotIndexes>();
     AU.setPreservesAll();
 
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
 bool ReplayCacheStackSpill::runOnMachineFunction(MachineFunction &MF) {
+    SLIS = &getAnalysis<SlotIndexes>();
+
     for (auto &MBB : MF){
         for (auto &MI : MBB) {
             if (isStoreInstruction(MI))
@@ -59,6 +54,10 @@ void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, Machin
     auto storereg0 = MI.getOperand(0).getReg();
     auto storereg1 = MI.getOperand(1).getReg();
 
+    std::vector<Register> storeRegs;
+    storeRegs.push_back(storereg0);
+    storeRegs.push_back(storereg1);
+
     auto *MBB = MI.getParent();
     bool foundFence = false;
     std::vector<MachineBasicBlock*> Visited;
@@ -74,6 +73,12 @@ void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, Machin
 
         for (auto &I : *MBB)
         {
+          if (isStoreInstruction(I))
+          {
+            storeRegs.push_back(I.getOperand(0).getReg());
+            storeRegs.push_back(I.getOperand(1).getReg());
+          }
+
           /* Start iteration from MI. */
           if (FirstIter)
           {
@@ -98,9 +103,10 @@ void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, Machin
                     /* Check if the defining register is redefined. If it is, we need to
                      * insert a region boundary.
                      */
-                    if (Reg == storereg0 || Reg == storereg1)
+                    if (std::find(storeRegs.begin(), storeRegs.end(), Reg) != storeRegs.end())
                     {
                         InsertRegionBoundaryBefore(*MBB, I, START_REGION_STACK_SPILL, true);
+                        SLIS->repairIndexesInRange(MBB, MBB->begin(), MBB->end());
                         foundFence = true;
                         break;
                     }
@@ -131,3 +137,6 @@ void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, Machin
 FunctionPass *llvm::createReplayCacheStackSpillPass() {
     return new ReplayCacheStackSpill();
 }
+
+
+INITIALIZE_PASS(ReplayCacheStackSpill, DEBUG_TYPE, PASS_NAME, false, false)

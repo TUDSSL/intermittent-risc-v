@@ -83,8 +83,8 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
         // because the caller is expected to do that already
       } else if (MI.isConditionalBranch()) {
         // Create boundaries BEFORE branches
-        InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
-        SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
+        // InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
+        // SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
 
         // Create boundaries at the start of branch basic blocks
         auto TrueDest = TII.getBranchDestBlock(MI);

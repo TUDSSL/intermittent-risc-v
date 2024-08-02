@@ -299,13 +299,17 @@ class MemoryAccess : public HookMemory {
     clank = &hook_instr_cnt->clank;
 
     string filename;
+    string opt_level = "-O3";
 
     auto arg1_val = PluginArgumentParsing::GetArguments(getEmulator(), "clank-log-file=");
+    auto arg2_val = PluginArgumentParsing::GetArguments(getEmulator(), "opt-level=");
     if (arg1_val.size())
       filename = arg1_val[0];
+    if (arg2_val.size())
+      opt_level = arg2_val[0];
 
     filename += "-" + std::to_string(hook_instr_cnt->checkpoint_period) + "-" +
-                std::to_string(hook_instr_cnt->on_duration);
+                std::to_string(hook_instr_cnt->on_duration) + opt_level;
     clank->log.init(filename);
     clank->nvm.initMem(&getEmulator().getMemory());
   }

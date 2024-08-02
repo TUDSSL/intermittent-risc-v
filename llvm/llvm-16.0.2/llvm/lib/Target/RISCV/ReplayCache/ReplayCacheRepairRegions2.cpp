@@ -49,7 +49,7 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
             
             if (MI.isConditionalBranch())
             {
-                InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
+                // InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
 
                 auto TrueDest = TII.getBranchDestBlock(MI);
                 MachineBasicBlock *FalseDest = nullptr;

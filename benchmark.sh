@@ -19,6 +19,6 @@ exec run-elf \
     -a writeback-queue-size=8 \
     -a writeback-parallelism=1 \
     -a log-file=/tmp/replay-cache-$bench-log \
-    -a on-duration=250000 \
+    -a on-duration=0 \
     ./benchmarks/$bench/build-replay-cache-$opt_lvl/$bench.elf
 

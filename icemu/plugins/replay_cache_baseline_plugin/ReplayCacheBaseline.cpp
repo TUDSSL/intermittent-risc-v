@@ -81,14 +81,19 @@ class ReplayCacheBaselineIntrinsics : public HookCode {
     cache->setPipeline(&pipeline);
     cache->setStats(&stats);
 
-    std::string filename_base = "replay_cache_baseline_log";
+    std::string filename_base = "replay_cache_log";
+    std::string opt_level = "-O3";
     const auto args = PluginArgumentParsing::GetArguments(emu, "log-file=");
+    const auto args2 = PluginArgumentParsing::GetArguments(emu, "opt-level=");
     if (args.size())
       filename_base = args[0];
+    if (args2.size())
+      opt_level = args2[0];
     filename_base += "-" + std::to_string(cache->getCapacity());
     filename_base += "-" + std::to_string(cache->getNoOfLines());
     filename_base += "-0"; // checkpoint period unused, for compatibility
     filename_base += "-" + std::to_string(power_failure_generator.getOnDuration());
+    filename_base += opt_level;
     std::cout << printLeader() << " Log file: " << filename_base << std::endl;
 
     logger_cont.open(filename_base + "-cont", std::ios::out | std::ios::trunc);

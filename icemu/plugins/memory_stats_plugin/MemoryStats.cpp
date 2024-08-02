@@ -75,8 +75,11 @@ class MemoryStats : public HookMemory {
 
     // Get the log_file argument
     auto arg_log_file = PluginArgumentParsing::GetArguments(getEmulator(), "memory-stats-log-file=");
+    auto arg_opt_level = PluginArgumentParsing::GetArguments(getEmulator(), "opt-level=");
     if (arg_log_file.size())
       log_file = arg_log_file[0];
+    if (arg_opt_level.size())
+      log_file += arg_opt_level[0];
 
     log_file += "-final"; // Finish the log file
     cout << printLeader() << " using log file: " << log_file << endl;

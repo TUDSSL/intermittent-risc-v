@@ -46,6 +46,7 @@ class ReplayCacheIntrinsics : public HookCode {
   unsigned int region_instruction_count = 0;
   unsigned int store_count_after_fence = 0;
   std::vector<insn_t> replay_instructions;
+  int instructions_from_last_store_to_boundary = 0;
   std::set<_Arch::Register> region_store_operand_registers;
   arch_addr_t last_region_register_value = 0;
   arch_addr_t last_store_address = 0;
@@ -82,13 +83,18 @@ class ReplayCacheIntrinsics : public HookCode {
     cache->setStats(&stats);
 
     std::string filename_base = "replay_cache_log";
+    std::string opt_level = "-O3";
     const auto args = PluginArgumentParsing::GetArguments(emu, "log-file=");
+    const auto args2 = PluginArgumentParsing::GetArguments(emu, "opt-level=");
     if (args.size())
       filename_base = args[0];
+    if (args2.size())
+      opt_level = args2[0];
     filename_base += "-" + std::to_string(cache->getCapacity());
     filename_base += "-" + std::to_string(cache->getNoOfLines());
     filename_base += "-0"; // checkpoint period unused, for compatibility
     filename_base += "-" + std::to_string(power_failure_generator.getOnDuration());
+    filename_base += opt_level;
     std::cout << printLeader() << " Log file: " << filename_base << std::endl;
 
     logger_cont.open(filename_base + "-cont", std::ios::out | std::ios::trunc);
@@ -197,6 +203,7 @@ class ReplayCacheIntrinsics : public HookCode {
       }
     }
 
+    bool was_store_instr = false;
     const auto rvinsn = (riscv_insn)insn->id;
     switch (rvinsn) {
       case RISCV_INS_C_LI: {
@@ -218,25 +225,35 @@ class ReplayCacheIntrinsics : public HookCode {
               /* This case happens at the start, where all values are set to 0. */
               break;
             case 1: 
-            case 2: 
-            case 3: 
-            case 4: 
-            case 5: 
-            case 6: p_debug << "start region" << std::endl;
-              executeFence();
+              stats.incStartRegionCount();
+              exectueRegionBoundary();
               was_cache_instr = true;
-              // Store the PC for verification
-              last_region_register_value = getRegisterValue(_Arch::Register::REG_PC);
-              p_debug << printLeader() << " stored PC: 0x" << std::hex << std::setw(8) << std::setfill('0') << last_region_register_value << std::dec << std::endl;
-              // End the region if it is active, and start a new one
-              if (is_region_active)
-                endRegion();
-              startRegion();
               break;
-            // case 7: p_debug << "FENCE" << std::endl;
-            //   executeFence();
-            //   was_cache_instr = true;
-            //   break;
+            case 2: 
+              stats.incStartRegionReturnCount();
+              exectueRegionBoundary();
+              was_cache_instr = true;
+              break;
+            case 3: 
+              stats.incStartRegionExtensionCount();
+              exectueRegionBoundary();
+              was_cache_instr = true;
+              break;
+            case 4: 
+              stats.incStartRegionBranchCount();
+              exectueRegionBoundary();
+              was_cache_instr = true;
+              break;
+            case 5: 
+              stats.incStartRegionBranchDestCount();
+              exectueRegionBoundary();
+              was_cache_instr = true;
+              break;
+            case 6:
+              stats.incStartRegionStackSpillCount();
+              exectueRegionBoundary();
+              was_cache_instr = true;
+              break;
             case 8: p_debug << "CLWB" << std::endl;
               executeCLWB();
               was_cache_instr = true;
@@ -276,14 +293,34 @@ class ReplayCacheIntrinsics : public HookCode {
           // Store the instruction for replay
           replay_instructions.emplace_back(std::move(insn));
           p_debug << printLeader() << " stored instruction for replay" << std::endl;
+          instructions_from_last_store_to_boundary = 0;
         }
+        was_store_instr = true;
         break;
       }
       default:
         break;
     }
 
+    if (!was_store_instr)
+    {
+      instructions_from_last_store_to_boundary++;
+    }
+
     return false;
+  }
+
+  void exectueRegionBoundary()
+  {
+      p_debug << "start region" << std::endl;
+      executeFence();
+      // Store the PC for verification
+      last_region_register_value = getRegisterValue(_Arch::Register::REG_PC);
+      p_debug << printLeader() << " stored PC: 0x" << std::hex << std::setw(8) << std::setfill('0') << last_region_register_value << std::dec << std::endl;
+      // End the region if it is active, and start a new one
+      if (is_region_active)
+        endRegion();
+      startRegion();
   }
 
   void recordLastStore(const StoreParsed &store) {
@@ -307,9 +344,11 @@ class ReplayCacheIntrinsics : public HookCode {
     stats.incRegionEnds();
     stats.addRegionSize(region_instruction_count);
     stats.addStoresPerRegion(replay_instructions.size());
+    stats.addDistanceBeforeBoundary(instructions_from_last_store_to_boundary);
 
     is_region_active = false;
     region_instruction_count = 0;
+    instructions_from_last_store_to_boundary = 0;
     replay_instructions.clear();
     region_store_operand_registers.clear();
   }

@@ -398,32 +398,10 @@ void RISCVPassConfig::addPostRegAlloc() {
     addPass(createRISCVRedundantCopyEliminationPass());
 
   /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
-  disablePass(&BranchFolderPassID);
+  // disablePass(&BranchFolderPassID);
   /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
   addPass(createReplayCacheRepairRegionsPass());
-
-  // addPass(createMBBPrinterPass());
 }
-
-// void RISCVPassConfig::addMachineLateOptimization()
-// {
-//   // Cleanup of redundant immediate/address loads.
-//   addPass(&MachineLateInstrsCleanupID);
-
-//   // Branch folding must be run after regalloc and prolog/epilog insertion.
-//   addPass(&BranchFolderPassID);
-//   addPass(createMBBPrinterPass());
-
-//   // Tail duplication.
-//   // Note that duplicating tail just increases code size and degrades
-//   // performance for targets that require Structured Control Flow.
-//   // In addition it can also make CFG irreducible. Thus we disable it.
-//   if (!TM->requiresStructuredCFG())
-//     addPass(&TailDuplicateID);
-
-//   // Copy propagation.
-//   addPass(&MachineCopyPropagationID);
-// }
 
 void RISCVPassConfig::addOptimizedRegAlloc()
 {

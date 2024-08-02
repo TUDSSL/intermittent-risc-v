@@ -109,7 +109,7 @@ ALL_CONFIGURATIONS += \
 define generate_run_target_configurations
 $(1)-$(2)-run-$(3):
 		@echo "$(HLB)Running benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' $(HLE)"
-		cd $(1)/build-$(2)$(DEFAULT_OPT_LEVEL) && benchmark-run $(3)+0+0 $(1).elf $(2)
+		cd $(1)/build-$(2)$(DEFAULT_OPT_LEVEL) && benchmark-run $(3)+0+0+$(DEFAULT_OPT_LEVEL) $(1).elf $(2)
 TARGETS += $(1)-$(2)-run-$(3)
 TARGETS-$(1) += $(1)-$(2)-run-$(3)
 TARGETS-$(2) += $(1)-$(2)-run-$(3)
@@ -175,7 +175,7 @@ $(foreach bench,$(BENCHMARKS), $(foreach run-config, $(REPLAY_CACHE_CONFIGURATIO
 define generate_pf_run_target_configurations
 $(1)-$(2)-pf-run-$(3)+$(4):
 		@echo "$(HLB)Running power failure benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' on duration '$(4)' $(HLE)"
-		cd $(1)/build-$(2)$(DEFAULT_OPT_LEVEL) && benchmark-run $(3)+$(4)+$(shell echo $$(( $(4) / 2 ))) $(1).elf $(2)
+		cd $(1)/build-$(2)$(DEFAULT_OPT_LEVEL) && benchmark-run $(3)+$(4)+$(shell echo $$(( $(4) / 2 )))+$(DEFAULT_OPT_LEVEL) $(1).elf $(2)
 
 PF_TARGETS += $(1)-$(2)-pf-run-$(3)+$(4)
 PF_TARGETS-$(3) += $(1)-$(2)-pf-run-$(3)+$(4)
@@ -217,12 +217,14 @@ run-pf-targets-clank: $(PF_TARGETS-clank)
 # 3 = run target
 # 4 = optimization level
 define generate_opt_run_target_configurations
+ifneq ($(DEFAULT_OPT_LEVEL), $(4))
 $(1)-$(2)-opt-run-$(3)+$(4):
 		@echo "$(HLB)Running optimization benchmark '$(1)' build configuration '$(2)' run configuration '$(3)' opt level '$(4)' $(HLE)"
-		cd $(1)/build-$(2)$(4) && benchmark-run $(3)+0+0 $(1).elf $(2)
+		cd $(1)/build-$(2)$(4) && benchmark-run $(3)+0+0+$(4) $(1).elf $(2)
 
 OPT_TARGETS += $(1)-$(2)-opt-run-$(3)+$(4)
 OPT_TARGETS-$(3) += $(1)-$(2)-opt-run-$(3)+$(4)
+endif
 endef
 
 #
@@ -240,6 +242,10 @@ $(foreach bench,$(BENCHMARKS), $(foreach opt-level,$(OPT_LEVELS), \
 # Clank
 $(foreach bench,$(BENCHMARKS), $(foreach opt-level,$(OPT_LEVELS), \
 	$(eval $(call generate_opt_run_target_configurations,$(bench),uninstrumented,clank,$(opt-level)))))
+
+# Plain C
+$(foreach bench,$(BENCHMARKS), $(foreach opt-level,$(OPT_LEVELS), \
+	$(eval $(call generate_opt_run_target_configurations,$(bench),uninstrumented,plain-c,$(opt-level)))))
 
 # ReplayCache
 $(foreach bench,$(BENCHMARKS), $(foreach opt-level,$(OPT_LEVELS), \

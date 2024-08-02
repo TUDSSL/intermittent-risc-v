@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 #include <numeric>
+#include <cmath>
 
 #include "../includes/Utils.hpp"
 
@@ -50,7 +51,14 @@ struct ReplayCacheStats {
   int region_ends;
   std::vector<int> region_sizes;
   std::vector<int> stores_per_region;
+  std::vector<int> distance_to_boundary;
   int replays;
+  int start_region_count;
+  int start_region_return_count;
+  int start_region_extension_count;
+  int start_region_branch_count;
+  int start_region_branch_dest_count;
+  int start_region_stack_spill_count;
 };
 
 struct MiscStats {
@@ -113,7 +121,14 @@ class Stats {
   void incRegionEnds() { replay_cache.region_ends++; }
   void addRegionSize(int size) { replay_cache.region_sizes.push_back(size); }
   void addStoresPerRegion(int stores) { replay_cache.stores_per_region.push_back(stores); }
+  void addDistanceBeforeBoundary(int stores) { replay_cache.distance_to_boundary.push_back(stores); }
   void incReplays() { replay_cache.replays++; }
+  void incStartRegionCount() { replay_cache.start_region_count++; }
+  void incStartRegionReturnCount() { replay_cache.start_region_return_count++; }
+  void incStartRegionExtensionCount() { replay_cache.start_region_extension_count++; }
+  void incStartRegionBranchCount() { replay_cache.start_region_branch_count++; }
+  void incStartRegionBranchDestCount() { replay_cache.start_region_branch_dest_count++; }
+  void incStartRegionStackSpillCount() { replay_cache.start_region_stack_spill_count++; }
 
   /* Misc statistics updates */
 
@@ -148,10 +163,6 @@ class Stats {
     out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << " [" << ((double)cache.writebacks_completed_before_fence / (double)cache.writebacks_completed) * 100.0 << "%]" << std::endl;
     out << " FENCE: " << cache.fence << std::endl;
     out << " Total FENCE wait cycles: " << std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) << " [" << ((double)std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    // out << " FENCE wait cycles: ";
-    // for (auto cycles : cache.fence_wait_cycles)
-    //   out << cycles << " ";
-    // out << std::endl;
 
     out << "NVM STATS" << std::endl;
     out << " Reads: " << nvm.reads << std::endl;
@@ -178,6 +189,42 @@ class Stats {
     //   out << stores << " ";
     // out << std::endl;
     out << " Replays: " << replay_cache.replays << std::endl;
+    out << " Region boundary instructions: " << std::endl;
+    out << "    START_REGION:             " << replay_cache.start_region_count << std::endl;
+    out << "    START_REGION_RETURN:      " << replay_cache.start_region_return_count << std::endl;
+    out << "    START_REGION_EXTENSION:   " << replay_cache.start_region_extension_count << std::endl;
+    out << "    START_REGION_BRANCH:      " << replay_cache.start_region_branch_count << std::endl;
+    out << "    START_REGION_BRANCH_DEST: " << replay_cache.start_region_branch_dest_count << std::endl;
+    out << "    START_REGION_STACK_SPILL: " << replay_cache.start_region_stack_spill_count << std::endl;
+        
+    auto total_stores = cache.writebacks_completed;
+    auto total_not_stalled = cache.writebacks_completed_before_fence;
+    double total_stalled = 0.0;
+    for (auto &cycles : cache.fence_wait_cycles)
+    {
+      if (cycles > 0 && cycles % NVM_WRITE_COST > 0)
+      {
+        total_stalled += 1.0 - (double)(cycles % NVM_WRITE_COST) / (double)NVM_WRITE_COST;
+      }
+    }
+    double ilp_eff = (((double)total_not_stalled + total_stalled) / (double)total_stores) * 100.0;
+    
+    out << " ILP efficiency: " << ilp_eff << "%" << std::endl;
+    out << " Average instructions per region: " << (double)std::accumulate(replay_cache.region_sizes.begin(), replay_cache.region_sizes.end(), 0) / (double)replay_cache.region_sizes.size() << std::endl;
+    out << " Average stores per region:       " << (double)std::accumulate(replay_cache.stores_per_region.begin(), replay_cache.stores_per_region.end(), 0) / (double)replay_cache.stores_per_region.size() << std::endl;
+    int dist = 0;
+    int count = 0;
+    for (size_t i = 0; i < replay_cache.distance_to_boundary.size(); i++)
+    {
+      if (replay_cache.stores_per_region[i] > 0)
+      {
+        dist += replay_cache.distance_to_boundary[i];
+        count++;
+      }
+    }
+    double avg_dist = (double)dist / (double)count;
+    
+    out << " Average distance between last store and boundary: " << avg_dist << std::endl;
 
     out << "MISC STATS" << std::endl;
     out << " Max dirty ratio: " << misc.max_dirty_ratio << std::endl;
