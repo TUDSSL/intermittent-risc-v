@@ -1,12 +1,13 @@
 BENCHMARKS := \
-		dijkstra sha
-		# quicksort \
+		# adpcm \
+		# aes \
 		# coremark \
 		# crc \
-		# sha \
 		# dijkstra \
-		# aes \
-		# picojpeg
+		# picojpeg \
+		# quicksort \
+		# sha \
+		# towers
 
 BUILD_CONFIGURATIONS := \
 		uninstrumented \

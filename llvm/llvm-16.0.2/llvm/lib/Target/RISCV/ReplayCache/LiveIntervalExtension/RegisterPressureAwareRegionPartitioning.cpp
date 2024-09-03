@@ -43,6 +43,14 @@ void RegisterPressureAwareRegionPartitioning::getAnalysisUsage(AnalysisUsage &AU
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
+/**
+ * Inserts region boundaries when the number of available registers isn't enough to
+ * satisfy current register pressure.
+ * If an instruction contains a definition, the live interval for this definition is
+ * added to the vector.
+ * Then the number of live intervals is checked; if it exceeds the register threshold,
+ * a region boundary is added and the live interval extensions are recomputed.
+ */
 bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFunction &MF)
 {
     static constexpr unsigned NUM_INTERVAL_THRESHOLD = 26;
@@ -57,8 +65,8 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
     /* Compute initial live interval extensions. */
     LIS_->computeExtensions(MF, RRA_);
 
-
-    // TODO: use domtree here?
+    // We can use regions here because ALL live intervals in the current MachineFunction
+    // are added to the vector and aren't remove until done.
     for (auto &Region : *RRA_)
     {
         for (auto Instr = Region.begin(); Instr != Region.end(); Instr++)
@@ -113,7 +121,7 @@ bool RegisterPressureAwareRegionPartitioning::runOnMachineFunction(MachineFuncti
              */
             if (ExtensionPressure > 0 && NumLiveIntervals > NUM_INTERVAL_THRESHOLD)
             {
-                /* Insert new region. */
+                /* Flag instruction to insert new region boundary instruction later. */
                 RRA_->createRegionBefore(&Region, Instr.getMBBIt(), Instr.getInstrIt(), SIS_);
                 /* Trim active extensions to terminate at new region boundary. */
                 LIS_->recomputeActiveExtensions(LIS_->getInstructionIndex(*Instr));

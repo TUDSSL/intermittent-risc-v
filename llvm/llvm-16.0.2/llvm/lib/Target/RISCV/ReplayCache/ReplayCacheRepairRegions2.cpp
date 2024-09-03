@@ -32,6 +32,10 @@ void ReplayCacheRepairRegions2::getAnalysisUsage(AnalysisUsage &AU) const
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
+/**
+ * Repairs region boundaries by recomputing the initial regions.
+ * Inserts region boundary instructions for initial regions that are not in the code yet.
+ */
 bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF) 
 {
     SLIS = &getAnalysis<SlotIndexes>();
@@ -49,8 +53,6 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
             
             if (MI.isConditionalBranch())
             {
-                // InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
-
                 auto TrueDest = TII.getBranchDestBlock(MI);
                 MachineBasicBlock *FalseDest = nullptr;
 
@@ -115,16 +117,6 @@ bool ReplayCacheRepairRegions2::runOnMachineFunction(MachineFunction &MF)
                 InsertRegionBoundaryBefore(MBB, MI, (ReplayCacheInstruction) MI.StartRegionInstr, true);
                 SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
             }
-            // if (MI.isUnconditionalBranch())
-            // {
-            //     int NumOp = MI.getNumExplicitOperands();
-            //     auto TargetIndex = MI.getOperand(NumOp - 1).getIndex();
-
-            //     if (TargetIndex == SLIS->getInstructionIndex(MI).getRegSlot())
-            //     {
-            //         output_repair2 << "Jump to self: " << MI << "\n";
-            //     }
-            // }
 
             PrevMI = &MI;
         }

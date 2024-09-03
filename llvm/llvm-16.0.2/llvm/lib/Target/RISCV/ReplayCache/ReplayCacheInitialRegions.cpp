@@ -35,6 +35,11 @@ void ReplayCacheInitialRegions::getAnalysisUsage(AnalysisUsage &AU) const
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
+/**
+ * Add initial regions according to the paper and correspondence with ReplayCach authors.
+ * Does not add region boundary instructions yet, it only marks instructions that should
+ * have a region boundary before it.
+ */
 bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
 {
   SLIS = &getAnalysis<SlotIndexes>();
@@ -82,10 +87,6 @@ bool ReplayCacheInitialRegions::runOnMachineFunction(MachineFunction &MF)
         // No need to 'explicitly' end a region when returning,
         // because the caller is expected to do that already
       } else if (MI.isConditionalBranch()) {
-        // Create boundaries BEFORE branches
-        // InsertRegionBoundaryBefore(MBB, MI, START_REGION_BRANCH, false);
-        // SLIS->repairIndexesInRange(&MBB, MBB.begin(), MBB.end());
-
         // Create boundaries at the start of branch basic blocks
         auto TrueDest = TII.getBranchDestBlock(MI);
         MachineBasicBlock *FalseDest = nullptr;

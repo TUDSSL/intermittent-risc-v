@@ -52,7 +52,7 @@ bool ReplayCacheRegionAnalysis::runOnMachineFunction(MachineFunction &MF)
 /* Create a region before the given instruction. */
 void ReplayCacheRegionAnalysis::createRegionBefore(ReplayCacheRegion* Region, ReplayCacheRegion::RegionBlock MBB, ReplayCacheRegion::RegionInstr MI, SlotIndexes *SLIS)
 {
-    /* Insert instructions. */
+    /* Flag instruction for region insertion. */
     InsertRegionBoundaryBefore(*MBB, *MI, START_REGION_EXTENSION, false);
     SLIS->repairIndexesInRange(&(*MBB), MBB->begin(), MBB->end());
     // createRegionAtBoundary(MBB, MI, Region);

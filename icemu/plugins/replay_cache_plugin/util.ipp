@@ -95,7 +95,7 @@ struct StoreParsed {
     assert(o_src.type == RISCV_OP_REG);
     store.r_src = fromCapstone(o_src.reg);
 
-    if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_SH || insn->id == RISCV_INS_SB) {
+    if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_SH || insn->id == RISCV_INS_SB || insn->id == RISCV_INS_FSW) {
       assert(insn->detail->riscv.op_count == 2);
 
       const auto o_mem = insn->detail->riscv.operands[1];
@@ -103,7 +103,7 @@ struct StoreParsed {
 
       store.r_base = fromCapstone(o_mem.mem.base);
       store.offset = o_mem.mem.disp;
-      if (insn->id == RISCV_INS_SW) {
+      if (insn->id == RISCV_INS_SW || insn->id == RISCV_INS_FSW) {
         store.size = 4;
       } else if (insn->id == RISCV_INS_SH) {
         store.size = 2;

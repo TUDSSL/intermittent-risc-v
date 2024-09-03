@@ -11,6 +11,11 @@ cmake --build icemu/plugins/build
 # Run a benchmark
 bench=$1
 opt_lvl=$2
+# run-elf \
+#     -p memory_stats_plugin.so \
+#     -a memory-stats-log-file=/tmp/$bench-log \
+#     -a opt-level=$opt_lvl \
+#     ./benchmarks/$bench/build-uninstrumented-$opt_lvl/$bench.elf
 exec run-elf \
     -p replay_cache_plugin.so \
     -a hash-method=0 \

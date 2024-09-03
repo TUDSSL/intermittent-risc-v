@@ -52,6 +52,7 @@ class ReplayCacheIntrinsics : public HookCode {
   arch_addr_t last_store_address = 0;
   address_t last_store_size = 0;
   bool last_cycle_was_pf = false;
+  bool was_cache_instr = false;
 
   std::shared_ptr<_Cache> cache;
 
@@ -129,6 +130,7 @@ class ReplayCacheIntrinsics : public HookCode {
       ASSERT(!last_cycle_was_pf && "Immediate power failure after reset, restoration might take too long");
       last_cycle_was_pf = true;
 
+      /* Power failure triggered, create checkpoint and restore using QuickRecall. */
       cache->setIsInCheckpoint(true);
       createCheckpoint();
       resetProcessorAndCache();
@@ -144,12 +146,24 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto cyclesBefore = pipeline.getTotalCycles();
     pipeline.add(arg->address, arg->size);
     const auto pipelineCycleEst = pipeline.getTotalCycles() - cyclesBefore;
-    stats.incInstrCycles(pipelineCycleEst);
 
     // Only tick the cache if a non-cache related instruction was executed
     if (!processInstructions(arg->address, arg->size))
       cache->tick(pipelineCycleEst);
 
+    /* ReplayCache authors said that a CLWB or region boundary instruction creates no runtime overhead,
+     * so we subtract their pipeline cycles here.
+     */
+    if (was_cache_instr)
+    {
+      pipeline.addToCycles(-pipelineCycleEst);
+    }
+    else
+    {
+      stats.incInstrCycles(pipelineCycleEst);
+    }
+
+    was_cache_instr = false;
     last_cycle_was_pf = false;
   }
 
@@ -190,11 +204,23 @@ class ReplayCacheIntrinsics : public HookCode {
   bool checkInstruction(insn_t insn) {
     // Verify that the registers that this instruction writes to are not used in any of the
     // instructions that were stored for replay
-    // In RISCV, for all instructions other than stores, if the first operand is a register,
+    // In RISCV, for all instructions other than stores & branches, if the first operand is a register,
     // it is the destination register
     if (insn->detail->riscv.op_count > 0 && insn->detail->riscv.operands[0].type == RISCV_OP_REG &&
-        insn->id != RISCV_INS_SW && insn->id != RISCV_INS_SH && insn->id != RISCV_INS_SB &&
-        insn->id != RISCV_INS_C_SW && insn->id != RISCV_INS_C_SWSP) {
+        insn->id != RISCV_INS_SW &&
+        insn->id != RISCV_INS_SH &&
+        insn->id != RISCV_INS_SB &&
+        insn->id != RISCV_INS_C_SW &&
+        insn->id != RISCV_INS_C_SWSP && 
+        insn->id != RISCV_INS_FSW &&
+        insn->id != RISCV_INS_BEQ &&
+        insn->id != RISCV_INS_BGE &&
+        insn->id != RISCV_INS_BGEU &&
+        insn->id != RISCV_INS_BLT &&
+        insn->id != RISCV_INS_BLTU &&
+        insn->id != RISCV_INS_BNE &&
+        insn->id != RISCV_INS_C_BNEZ &&
+        insn->id != RISCV_INS_C_BEQZ) {
       const auto rd = fromCapstone(insn->detail->riscv.operands[0].reg);
       if (region_store_operand_registers.find(rd) != region_store_operand_registers.end()) {
         std::cerr << insnDebugLeader(insn) << ": instruction writes to register '" << registerNameFriendly(rd)
@@ -213,48 +239,47 @@ class ReplayCacheIntrinsics : public HookCode {
         assert(rd.type == RISCV_OP_REG);
         assert(imm.type == RISCV_OP_IMM);
 
-        // Process in case rd is x31 (t6)
+        // Process in case rd is x31 (t6), this is the reserved ReplayCache register
         if (rd.reg == RISCV_REG_X31) {
           // Read the immediate value
           const auto imm_value = imm.imm;
           p_debug << printLeader() << " C.LI x31, " << imm_value << ": ";
 
-          bool was_cache_instr = false;
           switch (imm_value) {
             case 0:
               /* This case happens at the start, where all values are set to 0. */
               break;
-            case 1: 
+            case 1: // START_REGION
               stats.incStartRegionCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 2: 
+            case 2:  // START_REGION_RETURN
               stats.incStartRegionReturnCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 3: 
+            case 3:  // START_REGION_EXTENSION
               stats.incStartRegionExtensionCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 4: 
+            case 4:  // START_REGION_BRANCH (not used)
               stats.incStartRegionBranchCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 5: 
+            case 5:  // START_REGION_BRANCH_DEST
               stats.incStartRegionBranchDestCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 6:
+            case 6: // START_REGION_STACK_SPILL
               stats.incStartRegionStackSpillCount();
-              exectueRegionBoundary();
+              executeRegionBoundary();
               was_cache_instr = true;
               break;
-            case 8: p_debug << "CLWB" << std::endl;
+            case 8: // CLWB
               executeCLWB();
               was_cache_instr = true;
               break;
@@ -302,6 +327,9 @@ class ReplayCacheIntrinsics : public HookCode {
         break;
     }
 
+    /* Keep track of the number of instructions from the last store
+     * in the current region to the next region boundary.
+     */
     if (!was_store_instr)
     {
       instructions_from_last_store_to_boundary++;
@@ -310,7 +338,7 @@ class ReplayCacheIntrinsics : public HookCode {
     return false;
   }
 
-  void exectueRegionBoundary()
+  void executeRegionBoundary()
   {
       p_debug << "start region" << std::endl;
       executeFence();
@@ -363,7 +391,7 @@ class ReplayCacheIntrinsics : public HookCode {
 
     // Sanity check for compiler-generated code.
     // Any ReplayCache region can only safely be started when no stores have been
-    // performed since the last FENCE instruction
+    // performed since the last region boundary
     assert(store_count_after_fence == 0);
   }
 
@@ -387,15 +415,14 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto n_registers_checkpointed = checkpoint.create();
     const auto n_bytes_transferred = n_registers_checkpointed * 4;
 
-    // QuickRecall overhead from the QuickRecall paper is about 65-66 cycles.
-    // This seems to be quite low, but does check out IF each register write is two cycles.
-    // Here, we use the NVM overhead of the emulator to keep everything consistent.
-
+    /* Create QuickRecall checkpoint by backing up all registers. */
     stats.incNVMWrites(n_bytes_transferred);
-    auto cost = NVM_WRITE_COST * (n_bytes_transferred + 1);
-    pipeline.addToCycles(cost); // NVM writes (one extra for QuickRecall checkpoint flag)
+    auto cost = NVM_WRITE_COST * (n_bytes_transferred + 1); // NVM writes (one extra for QuickRecall checkpoint flag)
+    auto instr_cost = n_registers_checkpointed + 1; // Optimistic cost of instructions in pipeline, store instructions + voltage comparison. Assume power off after 1 comparison.
+    pipeline.addToCycles(cost + instr_cost);
     stats.incNVMWriteCycles(cost);
-    stats.incRestoreCycles(cost);
+    stats.incInstrCycles(instr_cost);
+    stats.incRestoreCycles(cost + instr_cost);
 
     /* Push restore to list. */
     restores.push_back({.region_addr = last_region_register_value, .pc_addr = getRegisterValue(_Arch::Register::REG_PC)});
@@ -441,12 +468,13 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void restoreCheckpoint() {
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for reading region register. Also done by QuickRecall.
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for lookup of CM map entry & storing it in register.
-    // TODO: find SC via binary search with Program counter as key
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for lookup of recovery code address in RC map & storing in PC.
-    stats.incRestoreCycles(NVM_READ_COST * 4 * 3);
+    auto cost = NVM_READ_COST * 4 + 1  // Add cycles for reading region register. Also done by QuickRecall.
+              + NVM_READ_COST * 4 + 1  // Add cycles for lookup of CM map entry & storing it in register.
+              + NVM_READ_COST * 4 + 1; // Add cycles for lookup of recovery code address in RC map & storing in PC.
+    pipeline.addToCycles(cost);
+    stats.incRestoreCycles(cost);
     stats.incNVMReads(4 * 3);
+    // Cost for looking up SC in binary search are added later.
 
     // Replay all stores that were issued in this region so far
     std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
@@ -456,7 +484,7 @@ class ReplayCacheIntrinsics : public HookCode {
     }
 
     // After ReplayCache has replayed all instructions, populating the cache,
-    //  all registers can be restored to the values before power failure.
+    // all registers can be restored to the values before power failure.
     // This happens with QuickRecall.
     quickRecallRestore();
 
@@ -484,8 +512,7 @@ class ReplayCacheIntrinsics : public HookCode {
 
     // Tick the cache with the amount of cycles spent on reading the to-be-replayed value
     const auto cost_read_replay_value =
-        NVM_READ_COST * store.size // NVM read of the source register
-      + NVM_READ_COST * 4;         // NVM read of the base register
+        NVM_READ_COST * store.size + 1; // NVM read of the source register
     pipeline.addToCycles(cost_read_replay_value);
     cache->tick(cost_read_replay_value);
     stats.incRestoreCycles(cost_read_replay_value);
@@ -513,18 +540,14 @@ class ReplayCacheIntrinsics : public HookCode {
     const auto n_registers_restored = checkpoint.restore();
     const auto n_bytes_transferred = n_registers_restored * 4;
 
-    // QuickRecall overhead from the QuickRecall paper is about 33-34 cycles.
-    // This seems to be quite low, but does check out IF each register read is only one cycle.
-    // Here, we use the NVM overhead of the emulator to keep everything consistent.
-    // Initialization overhead is not taken into account because it does not depend on the
-    // runtime.
-
+    // Initialization overhead is not taken into account because it is not quickrecall-dependent.
+    /* Restore by transferring saved registers from NVM to register file. */
     stats.incNVMReads(n_bytes_transferred);
     stats.incNVMWrites(1);
     stats.incNVMWriteCycles(1 * NVM_READ_COST);
     const auto cost_quick_recall = 
-      NVM_READ_COST * (n_bytes_transferred + 1) // NVM reads, assuming reads did not go through the cache
-    + NVM_WRITE_COST  // NVM write to reset QuickRecall checkpoint flag
+      (NVM_READ_COST + 1) * (n_bytes_transferred) // NVM reads, assuming reads did not go through the cache
+    + NVM_WRITE_COST + 1  // NVM write to reset QuickRecall checkpoint flag
     + 1; // Compare Vdd > Vtrig, assume true
     pipeline.addToCycles(cost_quick_recall);
     stats.incRestoreCycles(cost_quick_recall);
@@ -533,6 +556,8 @@ class ReplayCacheIntrinsics : public HookCode {
 
   void addPendingRestoreCycles()
   {
+    /* Add pending restore cycles from looking up store counter in the SC table. */
+    /* Assume average-case complexity with 9 cycles per iteration. 9 cycles/iteration is based on https://mhdm.dev/posts/sb_lower_bound/ */
     int cost_restore_pending = 0;
     for (auto &restore : restores)
     {

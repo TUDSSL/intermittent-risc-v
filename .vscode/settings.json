@@ -123,7 +123,10 @@
         "source_location": "cpp",
         "stop_token": "cpp",
         "*.txt": "cpp",
-        "simd": "cpp"
+        "simd": "cpp",
+        "fourier.h": "c",
+        "my_math.h": "c",
+        "data_pcm.h": "c"
     },
     "cmake.sourceDirectory": "${workspaceFolder}/llvm/llvm-16.0.2/llvm",
     "cmake.buildDirectory": "/tmp/llvm-16.0.2-build",

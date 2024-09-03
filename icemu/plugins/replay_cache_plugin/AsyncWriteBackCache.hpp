@@ -2,6 +2,7 @@
 
 #include <list>
 #include <vector>
+#include <map>
 
 #include "icemu/emu/types.h"
 #include "icemu/emu/Emulator.h"
@@ -616,7 +617,16 @@ class AsyncWriteBackCache {
       : completeWritebacksUntilQueueSize(writeback_queue_size - 1);
 
     const auto addr = reconstructAddress(line);
-
+    
+    // Coalesce requests with same line address
+    for (auto it = writeback_queue.begin(); it != writeback_queue.end(); it++)
+    {
+      if (it->addr == addr)
+      {
+        it = writeback_queue.erase(it);
+        // std::cout << "Coalesce stores." << std::endl;
+      }
+    }
     // Enqueue the new writeback request
     writeback_queue.emplace_back(writeback_delay, addr, line.blocks.data, line.blocks.size);
     if (stats) stats->incCacheWritebacksEnqueued();

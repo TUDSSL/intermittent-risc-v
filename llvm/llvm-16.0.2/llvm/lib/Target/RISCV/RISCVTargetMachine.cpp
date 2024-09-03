@@ -397,8 +397,6 @@ void RISCVPassConfig::addPostRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
     addPass(createRISCVRedundantCopyEliminationPass());
 
-  /* REPLAYCACHE: Disable branch folding to avoid moving the region boundaries near branches. */
-  // disablePass(&BranchFolderPassID);
   /* REPLAYCACHE: Repair regions for code that was added by previous passes. */
   addPass(createReplayCacheRepairRegionsPass());
 }

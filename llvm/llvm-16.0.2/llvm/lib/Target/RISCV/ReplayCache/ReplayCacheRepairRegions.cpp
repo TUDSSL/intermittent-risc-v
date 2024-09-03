@@ -32,6 +32,10 @@ void ReplayCacheRepairRegions::getAnalysisUsage(AnalysisUsage &AU) const
     MachineFunctionPass::getAnalysisUsage(AU);
 }
 
+/**
+ * Inserts region boundary instructions before instructions that were flagged by
+ * the ReplayCacheInitialRegions pass.
+ */
 bool ReplayCacheRepairRegions::runOnMachineFunction(MachineFunction &MF) 
 {
     SLIS = &getAnalysis<SlotIndexes>();
@@ -50,9 +54,13 @@ bool ReplayCacheRepairRegions::runOnMachineFunction(MachineFunction &MF)
                 }
                 else
                 {
-                    /* Flags for BRANH_DEST are removed, because these are
-                     * moved around later. If we keep them, the flags will either be
+                    /* Flags for BRANCH_DEST are removed, because these are
+                     * moved around by other passes. If we keep them, the flags will either be
                      * removed regardless, or they will be put somewhere where we don't want them.
+                     * 
+                     * Flags for START_REGION are removed because the compiler adds stack pointer stores
+                     * before the instructions with this flag. So the region is moved up in the second
+                     * region repair pass.
                      */
                     removeRegionBoundaryBefore(MI);
                 }

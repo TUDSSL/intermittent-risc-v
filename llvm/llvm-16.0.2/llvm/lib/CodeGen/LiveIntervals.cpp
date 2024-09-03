@@ -234,6 +234,7 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
     MachineInstr *PrevInstr = nullptr;
     
     do {
+        // Break if we already visited this block
         if (std::find(Visited.begin(), Visited.end(), MBB) != Visited.end())
         {
           break;
@@ -241,6 +242,7 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
 
         Visited.push_back(MBB);
 
+        // Set the first slot at the entry instruction, or at the first instruction in the basic block.
         SlotInterval SI;
         SI.first = FirstIter ? Indexes->getInstructionIndex(MI).getRegSlot() : Indexes->getMBBStartIdx(MBB);
 
@@ -257,10 +259,10 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
           }
           else if (IsStartRegion(I) || hasRegionBoundaryBefore(I))
           {
-            if (PrevInstr != nullptr && !PrevInstr->isDebugInstr() && &I == &*MBB->begin())
-              SI.last = Indexes->getInstructionIndex(*PrevInstr, true).getRegSlot();
-            else
-              SI.last = Indexes->getInstructionIndex(I).getRegSlot();
+            // if (PrevInstr != nullptr && !PrevInstr->isDebugInstr() && &I == &*MBB->begin())
+            //   SI.last = Indexes->getInstructionIndex(*PrevInstr, true).getRegSlot();
+            // else
+            SI.last = Indexes->getInstructionIndex(I).getRegSlot();
 
             foundFence = true;
             PrevInstr = &I;
@@ -278,6 +280,11 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
         {
           SlotIntervals.push_back(SI);
         }
+        else if (SI.first == SI.last && SlotIntervals.size() > 0)
+        {
+          auto &SIBack = SlotIntervals.back();
+          SIBack.last = SI.last;
+        }
 
         if (MBB->succ_size() == 1)
         {
@@ -285,13 +292,27 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
         }
         else
         {
+          // auto FalseDest = MBB->getFallThrough();
+          // if (FalseDest) {
+          //   auto &SIBack = SlotIntervals.back();
+          //   for (auto &I : *FalseDest)
+          //   {
+          //     if (!I.isDebugInstr())
+          //     {
+          //       SIBack.last = Indexes->getInstructionIndex(I).getRegSlot();
+          //       output_li << *MBB << *FalseDest << "\n\n";
+          //       break;
+          //     }
+          //   }
+            
+          // }
           MBB = nullptr;
         }
 
         FirstIter = false;
     }
     while (MBB != nullptr && !foundFence);
-
+    
     return SlotIntervals;
 }
 

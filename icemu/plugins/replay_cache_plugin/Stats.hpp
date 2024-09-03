@@ -197,17 +197,19 @@ class Stats {
     out << "    START_REGION_BRANCH_DEST: " << replay_cache.start_region_branch_dest_count << std::endl;
     out << "    START_REGION_STACK_SPILL: " << replay_cache.start_region_stack_spill_count << std::endl;
         
-    auto total_stores = cache.writebacks_completed;
-    auto total_not_stalled = cache.writebacks_completed_before_fence;
-    double total_stalled = 0.0;
+    double total_stores = (double)cache.writebacks_completed;
+    double total_not_stalled = (double)cache.writebacks_completed_before_fence;
     for (auto &cycles : cache.fence_wait_cycles)
     {
-      if (cycles > 0 && cycles % NVM_WRITE_COST > 0)
+      if (cycles == 0)
       {
-        total_stalled += 1.0 - (double)(cycles % NVM_WRITE_COST) / (double)NVM_WRITE_COST;
+        continue;
       }
+
+      double partially_stalled = (double)(cycles % NVM_WRITE_COST) / (double)NVM_WRITE_COST;
+      total_not_stalled += 1.0 - partially_stalled;
     }
-    double ilp_eff = (((double)total_not_stalled + total_stalled) / (double)total_stores) * 100.0;
+    double ilp_eff = ((total_not_stalled) / total_stores) * 100.0;
     
     out << " ILP efficiency: " << ilp_eff << "%" << std::endl;
     out << " Average instructions per region: " << (double)std::accumulate(replay_cache.region_sizes.begin(), replay_cache.region_sizes.end(), 0) / (double)replay_cache.region_sizes.size() << std::endl;

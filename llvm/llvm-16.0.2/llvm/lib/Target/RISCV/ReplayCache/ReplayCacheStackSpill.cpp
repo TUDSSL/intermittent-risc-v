@@ -73,7 +73,7 @@ void ReplayCacheStackSpill::checkRegionForStackSpill(MachineFunction &MF, Machin
 
         for (auto &I : *MBB)
         {
-          if (isStoreInstruction(I))
+          if (!FirstIter && isStoreInstruction(I))
           {
             storeRegs.push_back(I.getOperand(0).getReg());
             storeRegs.push_back(I.getOperand(1).getReg());
