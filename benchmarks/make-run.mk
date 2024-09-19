@@ -348,7 +348,7 @@ show-benchmarks:
 
 clean:
 	@echo "$(HLB)Removing logs directory$(HLE)"
-	rm -rf ./logs
+	# rm -rf ./logs
 
 .PHONY: all clean \
 	show-targets show-benchmarks \

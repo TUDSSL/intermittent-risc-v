@@ -16,6 +16,7 @@
 #include "Riscv32E21Pipeline.hpp"
 
 #include "../includes/Checkpoint.hpp"
+#include "../includes/CycleCostCalculator.hpp"
 #include "AsyncWriteBackCache.hpp"
 #include "PowerFailureGenerator.hpp"
 #include "Stats.hpp"
@@ -56,6 +57,8 @@ class ReplayCacheIntrinsics : public HookCode {
 
   std::shared_ptr<_Cache> cache;
 
+  CycleCost cost;
+
   struct Restore {
     arch_addr_t region_addr;
     arch_addr_t pc_addr;
@@ -69,6 +72,7 @@ class ReplayCacheIntrinsics : public HookCode {
   _PFG power_failure_generator;
 
   std::ofstream logger_cont, logger_final;
+  bool double_bufferd_checkpoints = true;
 
  public:
   explicit ReplayCacheIntrinsics(Emulator &emu, const std::shared_ptr<_Cache> &cache)
@@ -340,6 +344,10 @@ class ReplayCacheIntrinsics : public HookCode {
 
   void executeRegionBoundary()
   {
+      // Writing to the region boundary register is a NOP according to ReplayCache authors, so add 1 cycle of latency to the pipeline.
+      pipeline.addToCycles(1);
+      stats.incInstrCycles(1);
+
       p_debug << "start region" << std::endl;
       executeFence();
       // Store the PC for verification
@@ -409,23 +417,61 @@ class ReplayCacheIntrinsics : public HookCode {
   }
 
   void createCheckpoint() {
+    // Create a register checkpoint
+    int reg_cp_size = checkpoint.create() * 4; // Checkpoint size in bytes
+
+    // Write the checkpoint to NVM
+    stats.incNVMWrites(reg_cp_size);
+    stats.incCheckpointCycles(cost.modifyCost(&pipeline, NVM_WRITE, reg_cp_size));
+
+    // Double buffer
+    if (double_bufferd_checkpoints) {
+      // Read the checkpoint back
+      stats.incNVMReads(reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(&pipeline, NVM_READ, reg_cp_size));
+
+      // Double buffered final write
+      stats.incNVMWrites(reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(&pipeline, NVM_WRITE, reg_cp_size));
+    }
+
+    // Only place where checkpoints are incremented
     stats.incCheckpoints(pipeline.getTotalCycles());
-    logger_cont << stats.getContinuousLine() << "\n"; // "\n" instead of std::endl to avoid immediate flushing
-
-    const auto n_registers_checkpointed = checkpoint.create();
-    const auto n_bytes_transferred = n_registers_checkpointed * 4;
-
-    /* Create QuickRecall checkpoint by backing up all registers. */
-    stats.incNVMWrites(n_bytes_transferred);
-    auto cost = NVM_WRITE_COST * (n_bytes_transferred + 1); // NVM writes (one extra for QuickRecall checkpoint flag)
-    auto instr_cost = n_registers_checkpointed + 1; // Optimistic cost of instructions in pipeline, store instructions + voltage comparison. Assume power off after 1 comparison.
-    pipeline.addToCycles(cost + instr_cost);
-    stats.incNVMWriteCycles(cost);
-    stats.incInstrCycles(instr_cost);
-    stats.incRestoreCycles(cost + instr_cost);
 
     /* Push restore to list. */
     restores.push_back({.region_addr = last_region_register_value, .pc_addr = getRegisterValue(_Arch::Register::REG_PC)});
+  }
+
+  void restoreCheckpoint() {
+    // Restore the registers
+    int reg_cp_size = checkpoint.restore() * 4; // Checkpoint size in bytes
+
+    // Add latency for restoring checkpoints (reads + instructions)
+    auto reg_read_cost = cost.modifyCost(&pipeline, NVM_READ, reg_cp_size);
+    stats.incNVMReads(reg_cp_size);
+    stats.incRestoreCycles(reg_read_cost);
+
+    // Additional instruction costs for restore (replaycache only)
+    auto instr_cost = 
+        1  // Read region register
+      + 1  // Lookup & store of CM map entry
+      + 1  // Lookup recovery code address
+      + 1; // Jump to recovery code address
+    auto read_cost = cost.modifyCost(&pipeline, NVM_READ, 4 * instr_cost);
+    pipeline.addToCycles(instr_cost);
+    stats.incRestoreCycles(read_cost + instr_cost);
+    stats.incInstrCycles(instr_cost);
+    stats.incNVMReads(4 * instr_cost);
+
+    // Replay all stores that were issued in this region so far
+    std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
+    for (auto &insn : replay_instructions) {
+      const auto store = StoreParsed::parse(insn);
+      replay(store);
+    }
+
+    // Increment counter
+    stats.incRestores();
   }
 
   void resetProcessorAndCache() {
@@ -467,30 +513,6 @@ class ReplayCacheIntrinsics : public HookCode {
     cache->powerFailure();
   }
 
-  void restoreCheckpoint() {
-    auto cost = NVM_READ_COST * 4 + 1  // Add cycles for reading region register. Also done by QuickRecall.
-              + NVM_READ_COST * 4 + 1  // Add cycles for lookup of CM map entry & storing it in register.
-              + NVM_READ_COST * 4 + 1; // Add cycles for lookup of recovery code address in RC map & storing in PC.
-    pipeline.addToCycles(cost);
-    stats.incRestoreCycles(cost);
-    stats.incNVMReads(4 * 3);
-    // Cost for looking up SC in binary search are added later.
-
-    // Replay all stores that were issued in this region so far
-    std::cout << printLeader() << " replaying " << replay_instructions.size() << " instructions" << std::endl;
-    for (auto &insn : replay_instructions) {
-      const auto store = StoreParsed::parse(insn);
-      replay(store);
-    }
-
-    // After ReplayCache has replayed all instructions, populating the cache,
-    // all registers can be restored to the values before power failure.
-    // This happens with QuickRecall.
-    quickRecallRestore();
-
-    stats.incRestores();
-  }
-
   void replay(const StoreParsed &store) {
     p_debug << printLeader() << " replaying " << registerNameFriendly(store.r_src)
                              << " to " << registerNameFriendly(store.r_base) << " + " << store.offset
@@ -511,11 +533,12 @@ class ReplayCacheIntrinsics : public HookCode {
             << " to 0x" << std::hex << std::setw(8) << std::setfill('0') << addr << std::dec << std::endl;
 
     // Tick the cache with the amount of cycles spent on reading the to-be-replayed value
-    const auto cost_read_replay_value =
-        NVM_READ_COST * store.size + 1; // NVM read of the source register
-    pipeline.addToCycles(cost_read_replay_value);
-    cache->tick(cost_read_replay_value);
-    stats.incRestoreCycles(cost_read_replay_value);
+    const auto instr_cost = 1; // NVM read of the source register
+    const auto read_cycles = cost.modifyCost(&pipeline, NVM_READ, store.size);
+    pipeline.addToCycles(instr_cost);
+    cache->tick(instr_cost + read_cycles);
+    stats.incRestoreCycles(instr_cost + read_cycles);
+    stats.incInstrCycles(instr_cost);
 
     // Inform the cache about the replay-store instruction
     cache->handleReplay(addr, src_value, store.size);
@@ -526,6 +549,7 @@ class ReplayCacheIntrinsics : public HookCode {
     auto cache_clwb_cycles = 1 + cache->clwb(addr, store.size);
     pipeline.addToCycles(cache_clwb_cycles);
     stats.incRestoreCycles(cache_clwb_cycles);
+    stats.incInstrCycles(1);
 
     // Account for post-replay instructions
     const auto cost_post_replay =
@@ -534,24 +558,7 @@ class ReplayCacheIntrinsics : public HookCode {
     pipeline.addToCycles(cost_post_replay);
     cache->tick(cost_post_replay);
     stats.incRestoreCycles(cost_post_replay);
-  }
-
-  void quickRecallRestore() {
-    const auto n_registers_restored = checkpoint.restore();
-    const auto n_bytes_transferred = n_registers_restored * 4;
-
-    // Initialization overhead is not taken into account because it is not quickrecall-dependent.
-    /* Restore by transferring saved registers from NVM to register file. */
-    stats.incNVMReads(n_bytes_transferred);
-    stats.incNVMWrites(1);
-    stats.incNVMWriteCycles(1 * NVM_READ_COST);
-    const auto cost_quick_recall = 
-      (NVM_READ_COST + 1) * (n_bytes_transferred) // NVM reads, assuming reads did not go through the cache
-    + NVM_WRITE_COST + 1  // NVM write to reset QuickRecall checkpoint flag
-    + 1; // Compare Vdd > Vtrig, assume true
-    pipeline.addToCycles(cost_quick_recall);
-    stats.incRestoreCycles(cost_quick_recall);
-    cache->tick(cost_quick_recall);
+    stats.incInstrCycles(cost_post_replay);
   }
 
   void addPendingRestoreCycles()
@@ -572,6 +579,7 @@ class ReplayCacheIntrinsics : public HookCode {
 
     pipeline.addToCycles(cost_restore_pending);
     stats.incRestoreCycles(cost_restore_pending);
+    stats.incInstrCycles(cost_restore_pending);
   }
 
   arch_addr_t getCheckpointedRegisterValue(_Arch::Register reg) {

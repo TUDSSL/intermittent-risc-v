@@ -15,10 +15,10 @@
 #include "Stats.hpp"
 
 // Copied from icemu/plugins/includes/CycleCostCalculator.hpp
-constexpr int COST_PER_BYTE_READ_FROM_CACHE = CACHE_READ_COST;
-constexpr int COST_PER_BYTE_WRITTEN_TO_CACHE = CACHE_WRITE_COST;
-constexpr int COST_PER_BYTE_READ_FROM_NVM = NVM_READ_COST;
-constexpr int COST_PER_BYTE_WRITTEN_TO_NVM = NVM_WRITE_COST;
+// constexpr int COST_PER_BYTE_READ_FROM_CACHE = CACHE_READ_COST;
+// constexpr int COST_PER_BYTE_WRITTEN_TO_CACHE = CACHE_WRITE_COST;
+// constexpr int COST_PER_BYTE_READ_FROM_NVM = NVM_READ_COST;
+// constexpr int COST_PER_BYTE_WRITTEN_TO_NVM = NVM_WRITE_COST;
 // Note: a eviction is currently assumed to be free unless WB enqueueing takes time
 constexpr int COST_PER_EVICTION = 0;
 
@@ -60,6 +60,8 @@ class ReplayCacheBaselineCache {
   const unsigned int writeback_delay; // in cycles
   const unsigned int writeback_queue_size; // in slots
   const unsigned int writeback_parallelism;
+
+  CycleCost cost;
 
   /* Processing */
 
@@ -144,7 +146,7 @@ class ReplayCacheBaselineCache {
         ? 2
         : std::stoul(arg_cache_lines_val[0]);
     const auto arg_writeback_delay = arg_writeback_delay_val.empty()
-        ? (COST_PER_BYTE_WRITTEN_TO_NVM * 4)
+        ? (CycleCost::NVM_WRITE_COST * 4)
         : std::stoul(arg_writeback_delay_val[0]);
     const auto arg_writeback_queue_size = arg_writeback_queue_size_val.empty()
         ? 1
@@ -364,7 +366,7 @@ class ReplayCacheBaselineCache {
           else
             stats->incCacheCheckpointAccesses(req.size);
         }
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * req.size);
+        if (pipeline) cost.modifyCost(pipeline, CACHE_READ, req.size);// pipeline->addToCycles(COST_PER_BYTE_READ_FROM_CACHE * req.size);
 
         p_debug << printLeader() << "Cache read req at addr " << hex << reconstructAddress(line) << dec << ", read DATA: " << line.blocks.data << endl;
         break;
@@ -383,7 +385,7 @@ class ReplayCacheBaselineCache {
           else
             stats->incCacheCheckpointAccesses(req.size);
         }
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
+        if (pipeline) cost.modifyCost(pipeline, CACHE_WRITE, req.size);//pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
         p_debug << printLeader() << "Cache write req, written DATA: " << hex << line.blocks.data
                 << dec << endl;
@@ -410,7 +412,7 @@ class ReplayCacheBaselineCache {
         line.blocks.size = 4;
 
         if (stats) stats->incNVMReads(req.size);
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * req.size);
+        if (pipeline) cost.modifyCost(pipeline, NVM_READ, req.size);//pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * req.size);
 
         if (stats) {
           if (!isInCheckpoint)
@@ -431,7 +433,7 @@ class ReplayCacheBaselineCache {
           // Read the missing bytes from NVM.
           // Note: we waste some bytes, but this behavior is most realistic, see CacheMem.hpp
           const auto remaining_bytes = 4;
-          if (pipeline) pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * remaining_bytes);
+          if (pipeline) cost.modifyCost(pipeline, NVM_READ, remaining_bytes);//pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * remaining_bytes);
           if (stats) stats->incNVMReads(remaining_bytes);
         }
 
@@ -441,7 +443,7 @@ class ReplayCacheBaselineCache {
           else
             stats->incCacheCheckpointAccesses(req.size);
         }
-        if (pipeline) pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
+        if (pipeline) cost.modifyCost(pipeline, CACHE_WRITE, req.size);//pipeline->addToCycles(COST_PER_BYTE_WRITTEN_TO_CACHE * req.size);
 
         p_debug << printLeader() << "Cache before write: " << hex << line.blocks.data << dec
                 << endl;

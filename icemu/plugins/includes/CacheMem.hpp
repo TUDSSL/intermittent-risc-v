@@ -810,16 +810,16 @@ class Cache {
 
     // NVM writes
     stats.incNVMWrites(reg_cp_size);
-    cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+    stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size));
 
     if (double_bufferd_checkpoints) {
       // NVM Read
       stats.incNVMReads(reg_cp_size);
-      cost.modifyCost(Pipeline, NVM_READ, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, reg_cp_size));
 
       // NVM Write
       stats.incNVMWrites(reg_cp_size);
-      cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size));
     }
 
     stats.incCheckpoints();
@@ -834,11 +834,11 @@ class Cache {
     if (double_bufferd_checkpoints) {
       // Read from NVM + Pipeline
       stats.incNVMReads(4);
-      cost.modifyCost(Pipeline, NVM_READ, 4);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, 4));
 
       // Write to NVM + Pipeline
       stats.incNVMWrites(4);
-      cost.modifyCost(Pipeline, NVM_READ, 4);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, 4));
     }
 
     clearBit(DIRTY, cuckoo_incoming);
@@ -1068,16 +1068,16 @@ class Cache {
 
     // NVM writes
     stats.incNVMWrites(reg_cp_size);
-    cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+    stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size));
 
     if (double_bufferd_checkpoints) {
       // NVM Read
       stats.incNVMReads(reg_cp_size);
-      cost.modifyCost(Pipeline, NVM_READ, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, reg_cp_size));
 
       // NVM Write
       stats.incNVMWrites(reg_cp_size);
-      cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_WRITE, reg_cp_size));
     }
 
     // Only place where checkpoints are incremented
@@ -1130,7 +1130,7 @@ class Cache {
   void checkpointWriteMem(CacheLine &l) {
     // Read from Cache
     stats.incCacheCheckpoint(l.blocks.size);
-    cost.modifyCost(Pipeline, CACHE_READ, l.blocks.size);
+    stats.incCheckpointCycles(cost.modifyCost(Pipeline, CACHE_READ, l.blocks.size));
 
     // Write to NVM stat + Pipeline + Perform the actual write to the memory
     cacheNVMwrite(reconstructAddress(l), l.blocks.data, l.blocks.size, true);
@@ -1138,11 +1138,11 @@ class Cache {
     if (double_bufferd_checkpoints) {
       // Read from NVM + Pipeline
       stats.incNVMReads(l.blocks.size);
-      cost.modifyCost(Pipeline, NVM_READ, l.blocks.size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, l.blocks.size));
 
       // Write to NVM + Pipeline
       stats.incNVMWrites(l.blocks.size);
-      cost.modifyCost(Pipeline, NVM_READ, l.blocks.size);
+      stats.incCheckpointCycles(cost.modifyCost(Pipeline, NVM_READ, l.blocks.size));
     }
   }
 
@@ -1207,8 +1207,9 @@ class Cache {
       }
     }
 
-    // Increment NVM writes
+    // Increment NVM reads
     stats.incNVMReads(reg_cp_size);
+    stats.incRestoreCycles(cost.modifyCost(Pipeline, NVM_READ, reg_cp_size));
 
     // Increment counter
     stats.incRestores();

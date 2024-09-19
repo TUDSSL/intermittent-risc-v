@@ -21,5 +21,8 @@ BenchmarkNameMap = {
     'crc': r'CRC',
     'aes': r'Tiny AES',
     'dijkstra': r'Dijkstra',
-    'picojpeg': r'picojpeg'
+    'picojpeg': r'picojpeg',
+    'adpcm': r'adpcm',
+    'quicksort': r'quicksort',
+    'towers': r'towers'
 }

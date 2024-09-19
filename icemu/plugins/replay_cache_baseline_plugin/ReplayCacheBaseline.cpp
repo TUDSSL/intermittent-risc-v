@@ -16,6 +16,7 @@
 #include "Riscv32E21Pipeline.hpp"
 
 #include "../includes/Checkpoint.hpp"
+#include "../includes/CycleCostCalculator.hpp"
 #include "ReplayCacheBaselineCache.hpp"
 #include "PowerFailureGenerator.hpp"
 #include "Stats.hpp"
@@ -61,12 +62,16 @@ class ReplayCacheBaselineIntrinsics : public HookCode {
   std::vector<Restore> restores;
   std::unordered_map<arch_addr_t, std::set<arch_addr_t>> stores_map;
 
+  CycleCost cost;
+
   _Pipeline pipeline;
   _Stats stats;
   Checkpoint checkpoint;
   _PFG power_failure_generator;
 
   std::ofstream logger_cont, logger_final;
+
+  bool double_bufferd_checkpoints = true;
 
  public:
   explicit ReplayCacheBaselineIntrinsics(Emulator &emu, const std::shared_ptr<_Cache> &cache)
@@ -182,57 +187,40 @@ void resetProcessorAndCache() {
     getEmulator().getArchitecture().getRiscv32Architecture().registerSet(reg, value);
   }
 
-void createCheckpoint() {
+  void createCheckpoint() {
+    // cout << "Creating checkpoint" << endl;
+    // Create a register checkpoint
+    int reg_cp_size = checkpoint.create() * 4; // Checkpoint size in bytes
+
+    // Write the checkpoint to NVM
+    stats.incNVMWrites(reg_cp_size);
+    cost.modifyCost(&pipeline, NVM_WRITE, reg_cp_size);
+
+    // Double buffer
+    if (double_bufferd_checkpoints) {
+      // Read the checkpoint back
+      stats.incNVMReads(reg_cp_size);
+      cost.modifyCost(&pipeline, NVM_READ, reg_cp_size);
+
+      // Double buffered final write
+      stats.incNVMWrites(reg_cp_size);
+      cost.modifyCost(&pipeline, NVM_WRITE, reg_cp_size);
+    }
+
+    // Only place where checkpoints are incremented
     stats.incCheckpoints(pipeline.getTotalCycles());
-    logger_cont << stats.getContinuousLine() << "\n"; // "\n" instead of std::endl to avoid immediate flushing
-
-    const auto n_registers_checkpointed = checkpoint.create();
-    const auto n_bytes_transferred = n_registers_checkpointed * 4;
-
-    // QuickRecall overhead from the QuickRecall paper is about 65-66 cycles.
-    // This seems to be quite low, but does check out IF each register write is two cycles.
-    // Here, we use the NVM overhead of the emulator to keep everything consistent.
-
-    stats.incNVMWrites(n_bytes_transferred);
-    auto cost = NVM_WRITE_COST * (n_bytes_transferred + 1);
-    pipeline.addToCycles(cost); // NVM writes (one extra for QuickRecall checkpoint flag)
-    stats.incRestoreCycles(cost);
   }
 
   void restoreCheckpoint() {
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for reading region register. Also done by QuickRecall.
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for lookup of CM map entry & storing it in register.
-    // TODO: find SC via binary search with Program counter as key
-    pipeline.addToCycles(NVM_READ_COST * 4); // Add cycles for lookup of recovery code address in RC map & storing in PC.
-    stats.incRestoreCycles(NVM_READ_COST * 4 * 3);
-    stats.incNVMReads(4 * 3);
+    // Restore the registers
+    int reg_cp_size = checkpoint.restore() * 4; // Checkpoint size in bytes
 
-    // After ReplayCache has replayed all instructions, populating the cache,
-    //  all registers can be restored to the values before power failure.
-    // This happens with QuickRecall.
-    quickRecallRestore();
+    // Increment NVM writes
+    stats.incNVMReads(reg_cp_size);
+    cost.modifyCost(&pipeline, NVM_READ, reg_cp_size);
 
+    // Increment counter
     stats.incRestores();
-  }
-
-  void quickRecallRestore() {
-    const auto n_registers_restored = checkpoint.restore();
-    const auto n_bytes_transferred = n_registers_restored * 4;
-
-    // QuickRecall overhead from the QuickRecall paper is about 33-34 cycles.
-    // This seems to be quite low, but does check out IF each register read is only one cycle.
-    // Here, we use the NVM overhead of the emulator to keep everything consistent.
-    // Initialization overhead is not taken into account because it does not depend on the
-    // runtime.
-
-    stats.incNVMReads(n_bytes_transferred);
-    stats.incNVMWrites(1);
-    const auto cost_quick_recall = 
-      NVM_READ_COST * (n_bytes_transferred + 1) // NVM reads, assuming reads did not go through the cache
-    + NVM_WRITE_COST  // NVM write to reset QuickRecall checkpoint flag
-    + 1; // Compare Vdd > Vtrig, assume true
-    pipeline.addToCycles(cost_quick_recall);
-    stats.incRestoreCycles(cost_quick_recall);
   }
 };
 

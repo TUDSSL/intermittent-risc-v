@@ -1,4 +1,5 @@
 BENCHMARKS := \
+	picojpeg
 		# adpcm \
 		# aes \
 		# coremark \

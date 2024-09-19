@@ -137,8 +137,11 @@ class Stats {
     out << " Evictions: " << cache.evictions << std::endl;
     out << " Reads: " << cache.reads << std::endl;
     out << " Writes: " << cache.writes << std::endl;
-    out << " Read cycles: " << cache.reads * CACHE_READ_COST << " [" << ((double)cache.reads * CACHE_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " Write cycles: " << cache.writes * CACHE_WRITE_COST << " [" << ((double)cache.writes * CACHE_WRITE_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Read cycles: " << cache.reads * CACHE_READ_COST << " [" << ((double)cache.reads * CACHE_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Write cycles: " << cache.writes * CACHE_WRITE_COST << " [" << ((double)cache.writes * CACHE_WRITE_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Read cycles: " << CycleCost::cache_read_cycles << " [" << ((double)CycleCost::cache_read_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Write cycles: " << CycleCost::cache_write_cycles << " [" << ((double)CycleCost::cache_write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;;
+    
     out << " Clean evictions: " << cache.clean_evictions << std::endl;
     out << " Dirty evictions: " << cache.dirty_evictions << std::endl;
     out << " CLWB: " << cache.clwb << std::endl;
@@ -156,8 +159,10 @@ class Stats {
     out << "NVM STATS" << std::endl;
     out << " Reads: " << nvm.reads << std::endl;
     out << " Writes: " << nvm.writes << std::endl;
-    out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)(nvm.reads * NVM_READ_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " Write cycles: " << nvm.writes * NVM_WRITE_COST << " [" << ((double)(nvm.writes * NVM_WRITE_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)(nvm.reads * NVM_READ_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Write cycles: " << nvm.writes * NVM_WRITE_COST << " [" << ((double)(nvm.writes * NVM_WRITE_COST) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Read cycles: " << CycleCost::nvm_read_cycles << " [" << ((double)CycleCost::nvm_read_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Write cycles: " << CycleCost::nvm_write_cycles << " [" << ((double)CycleCost::nvm_write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
 
     out << "CHECKPOINT STATS" << std::endl;
     out << " Checkpoints: " << checkpoint.checkpoints.size() << std::endl;

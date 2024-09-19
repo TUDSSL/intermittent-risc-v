@@ -375,7 +375,6 @@ void RISCVPassConfig::addPreEmitPass2() {
 }
 
 void RISCVPassConfig::addMachineSSAOptimization() {
-  // addPass(createMBBPrinterPass());
   TargetPassConfig::addMachineSSAOptimization();
   if (EnableMachineCombiner)
     addPass(&MachineCombinerID);

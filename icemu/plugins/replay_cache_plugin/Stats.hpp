@@ -44,6 +44,7 @@ struct CheckpointStats {
   int due_to_explicit;
   int restores;
   int restore_cycles;
+  int checkpoint_cycles;
 };
 
 struct ReplayCacheStats {
@@ -105,7 +106,8 @@ class Stats {
 
   void incNVMReads(int n = 1) { nvm.reads += n; }
   void incNVMWrites(int n = 1) { nvm.writes += n; }
-  void incNVMWriteCycles(int n) { nvm.write_cycles += n; }
+  // void incNVMReadCycles(int n) { nvm.read_cycles += n; }
+  // void incNVMWriteCycles(int n) { nvm.write_cycles += n; }
 
   /* Checkpoint statistics updates */
 
@@ -114,6 +116,7 @@ class Stats {
   void incCheckpointsDueToExplicit() { checkpoint.due_to_explicit++; }
   void incRestores() { checkpoint.restores++; }
   void incRestoreCycles(int cycles) { checkpoint.restore_cycles += cycles; }
+  void incCheckpointCycles(int cycles) { checkpoint.checkpoint_cycles += cycles; }
 
   /* ReplayCache updates */
 
@@ -147,28 +150,32 @@ class Stats {
 
   void printAll(std::ostream &out) const {
     out << "CACHE STATS" << std::endl;
-    out << " Misses: " << cache.misses << std::endl;
-    out << " Hits: " << cache.hits << std::endl;
+    out << " Misses:    " << cache.misses << std::endl;
+    out << " Hits:      " << cache.hits << std::endl;
     out << " Evictions: " << cache.evictions << std::endl;
-    out << " Reads: " << cache.reads << std::endl;
-    out << " Writes: " << cache.writes << std::endl;
-    out << " Read cycles: " << cache.reads * CACHE_READ_COST << " [" << ((double)cache.reads * CACHE_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " Write cycles: " << cache.writes * CACHE_WRITE_COST << " [" << ((double)cache.writes * CACHE_WRITE_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Reads:     " << cache.reads << std::endl;
+    out << " Writes:    " << cache.writes << std::endl;
+    // out << " Read cycles: " << cache.reads * CACHE_READ_COST << " [" << ((double)cache.reads * CACHE_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Write cycles: " << cache.writes * CACHE_WRITE_COST << " [" << ((double)cache.writes * CACHE_WRITE_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Read cycles:  " << CycleCost::cache_read_cycles << " [" << ((double)CycleCost::cache_read_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Write cycles: " << CycleCost::cache_write_cycles << " [" << ((double)CycleCost::cache_write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;;
     out << " Clean evictions: " << cache.clean_evictions << std::endl;
     out << " Dirty evictions: " << cache.dirty_evictions << std::endl;
     out << " CLWB: " << cache.clwb << std::endl;
-    out << " Writebacks enqueued: " << cache.writebacks_enqueued << std::endl;
+    out << " Writebacks enqueued:      " << cache.writebacks_enqueued << std::endl;
     out << " Writeback enqueue cycles: " << cache.writeback_enqueue_cycles << std::endl;
-    out << " Writebacks completed: " << cache.writebacks_completed << std::endl;
+    out << " Writebacks completed:              " << cache.writebacks_completed << std::endl;
     out << " Writebacks completed before FENCE: " << cache.writebacks_completed_before_fence << " [" << ((double)cache.writebacks_completed_before_fence / (double)cache.writebacks_completed) * 100.0 << "%]" << std::endl;
     out << " FENCE: " << cache.fence << std::endl;
     out << " Total FENCE wait cycles: " << std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) << " [" << ((double)std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
 
     out << "NVM STATS" << std::endl;
-    out << " Reads: " << nvm.reads << std::endl;
+    out << " Reads:  " << nvm.reads << std::endl;
     out << " Writes: " << nvm.writes << std::endl;
-    out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)nvm.reads * NVM_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
-    out << " Write cycles: " << nvm.write_cycles << " [" << ((double)nvm.write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Read cycles: " << nvm.reads * NVM_READ_COST << " [" << ((double)nvm.reads * NVM_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    // out << " Write cycles: " << nvm.write_cycles << " [" << ((double)nvm.write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Read cycles:  " << CycleCost::nvm_read_cycles << " [" << ((double)CycleCost::nvm_read_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
+    out << " Write cycles: " << CycleCost::nvm_write_cycles << " [" << ((double)CycleCost::nvm_write_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
 
     out << "CHECKPOINT STATS" << std::endl;
     out << " Checkpoints: " << checkpoint.checkpoints.size() << std::endl;
@@ -179,7 +186,7 @@ class Stats {
 
     out << "REPLAYCACHE STATS" << std::endl;
     out << " Region starts: " << replay_cache.region_starts << std::endl;
-    out << " Region ends: " << replay_cache.region_ends << std::endl;
+    out << " Region ends:   " << replay_cache.region_ends << std::endl;
     // out << " Region sizes: ";
     // for (auto size : replay_cache.region_sizes)
     //   out << size << " ";
@@ -206,7 +213,7 @@ class Stats {
         continue;
       }
 
-      double partially_stalled = (double)(cycles % NVM_WRITE_COST) / (double)NVM_WRITE_COST;
+      double partially_stalled = (double)(cycles % CycleCost::NVM_WRITE_COST) / (double)CycleCost::NVM_WRITE_COST;
       total_not_stalled += 1.0 - partially_stalled;
     }
     double ilp_eff = ((total_not_stalled) / total_stores) * 100.0;
@@ -250,6 +257,7 @@ class Stats {
     out << "cache_writeback_completed:" << cache.writebacks_completed << std::endl;
     out << "cache_writeback_completed_before_fence:" << cache.writebacks_completed_before_fence << std::endl;
     out << "cache_fence:" << cache.fence << std::endl;
+    out << "cache_fence_wait_cycles:" << std::accumulate(cache.fence_wait_cycles.begin(), cache.fence_wait_cycles.end(), 0) << std::endl;
     // out << "cache_fence_wait_cycles:";
     // for (auto cycles : cache.fence_wait_cycles)
     //   out << cycles << " ";
@@ -262,6 +270,8 @@ class Stats {
     out << "checkpoint_period:" << checkpoint.due_to_period << std::endl;
     out << "checkpoint_explicit:" << checkpoint.due_to_explicit << std::endl;
     out << "restore:" << checkpoint.restores << std::endl;
+    out << "checkpoint_cycles:" << checkpoint.checkpoint_cycles << std::endl;
+    out << "restore_cycles:" << checkpoint.restore_cycles << std::endl;
 
     out << "region_start:" << replay_cache.region_starts << std::endl;
     out << "region_end:" << replay_cache.region_ends << std::endl;

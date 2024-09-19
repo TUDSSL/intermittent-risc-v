@@ -182,7 +182,7 @@ void LiveIntervals::computeExtensions(MachineFunction &MF, ReplayCacheRegionAnal
                   LiveInterval &LI = this->getInterval(Reg2);
                   computeExtensionFromLI(MF, MI, LI);
                 }
-              } 
+              }
           }
       }
   }
@@ -259,9 +259,6 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
           }
           else if (IsStartRegion(I) || hasRegionBoundaryBefore(I))
           {
-            // if (PrevInstr != nullptr && !PrevInstr->isDebugInstr() && &I == &*MBB->begin())
-            //   SI.last = Indexes->getInstructionIndex(*PrevInstr, true).getRegSlot();
-            // else
             SI.last = Indexes->getInstructionIndex(I).getRegSlot();
 
             foundFence = true;
@@ -292,20 +289,6 @@ std::vector<SlotInterval> LiveIntervals::getSlotIntervalsInRegionFrom(MachineFun
         }
         else
         {
-          // auto FalseDest = MBB->getFallThrough();
-          // if (FalseDest) {
-          //   auto &SIBack = SlotIntervals.back();
-          //   for (auto &I : *FalseDest)
-          //   {
-          //     if (!I.isDebugInstr())
-          //     {
-          //       SIBack.last = Indexes->getInstructionIndex(I).getRegSlot();
-          //       output_li << *MBB << *FalseDest << "\n\n";
-          //       break;
-          //     }
-          //   }
-            
-          // }
           MBB = nullptr;
         }
 

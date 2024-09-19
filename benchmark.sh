@@ -19,7 +19,7 @@ opt_lvl=$2
 exec run-elf \
     -p replay_cache_plugin.so \
     -a hash-method=0 \
-    -a cache-size=8192 \
+    -a cache-size=256 \
     -a cache-lines=2 \
     -a writeback-queue-size=8 \
     -a writeback-parallelism=1 \

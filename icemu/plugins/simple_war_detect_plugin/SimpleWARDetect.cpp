@@ -148,17 +148,17 @@ class Clank {
 
     // Write the checkpoint to NVM
     stats.incNVMWrites(reg_cp_size);
-    cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size);
+    stats.incCheckpointCycles(cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size));
 
     // Double buffer
     if (double_bufferd_checkpoints) {
       // Read the checkpoint back
       stats.incNVMReads(reg_cp_size);
-      cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size));
 
       // Double buffered final write
       stats.incNVMWrites(reg_cp_size);
-      cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size);
+      stats.incCheckpointCycles(cost.modifyCost(&Pipeline, NVM_WRITE, reg_cp_size));
     }
 
     // Only place where checkpoints are incremented
@@ -196,7 +196,7 @@ class Clank {
 
     // Increment NVM writes
     stats.incNVMReads(reg_cp_size);
-    cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size);
+    stats.incRestoreCycles(cost.modifyCost(&Pipeline, NVM_READ, reg_cp_size));
 
     // Increment counter
     stats.incRestores();

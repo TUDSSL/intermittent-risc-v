@@ -23,6 +23,7 @@ bool MBBPrinter::runOnMachineFunction(MachineFunction &MF)
 }
 
 FunctionPass *llvm::createMBBPrinterPass() {
+    output_mbbp << "=========== MBB PRINTER ===========\n";
     return new MBBPrinter();
 }
 
