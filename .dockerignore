@@ -1,0 +1,18 @@
+# Ignore version control directories
+.gitignore
+
+# Ignore temporary files
+*.log
+*.tmp
+*.swp
+*.bak
+*~
+
+# Ignore editor-specific files
+.vscode/
+.devcontainer/
+
+
+# Ignore Docker-related files (if not needed in the build)
+.dockerignore
+
