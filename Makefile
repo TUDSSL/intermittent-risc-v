@@ -5,8 +5,11 @@
 # Phony targets
 PNONIES=""
 
-all: llvm icemu
+all: toolchains llvm icemu
 	echo "Done building all"
+
+toolchains:
+	cd toolchains && ./setup.sh
 
 # All downloads
 download: download-llvm download-icemu
