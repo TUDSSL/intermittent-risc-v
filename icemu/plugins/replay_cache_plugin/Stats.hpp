@@ -17,6 +17,7 @@ struct CacheStats {
   int evictions;
   int reads;
   int writes;
+  int clwb_accesses;
   int checkpoint_accesses;
   int clean_evictions;
   int dirty_evictions;
@@ -92,6 +93,7 @@ class Stats {
   void incCacheReads(int n) { cache.reads += n; }
   void incCacheWrites(int n) { cache.writes += n; }
   void incCacheCheckpointAccesses(int n) { cache.checkpoint_accesses += n; }
+  void incCacheCLWBAccesses(int n) { cache.clwb_accesses += n; }
   void incCacheCleanEvictions() { cache.clean_evictions++; }
   void incCacheDirtyEvictions() { cache.dirty_evictions++; }
   void incCacheClwb() { cache.clwb++; }
@@ -150,11 +152,12 @@ class Stats {
 
   void printAll(std::ostream &out) const {
     out << "CACHE STATS" << std::endl;
-    out << " Misses:    " << cache.misses << std::endl;
-    out << " Hits:      " << cache.hits << std::endl;
-    out << " Evictions: " << cache.evictions << std::endl;
-    out << " Reads:     " << cache.reads << std::endl;
-    out << " Writes:    " << cache.writes << std::endl;
+    out << " Misses:        " << cache.misses << std::endl;
+    out << " Hits:          " << cache.hits << std::endl;
+    out << " Evictions:     " << cache.evictions << std::endl;
+    out << " Reads:         " << cache.reads << std::endl;
+    out << " Writes:        " << cache.writes << std::endl;
+    out << " CLWB accesses: " << cache.clwb_accesses << std::endl;
     // out << " Read cycles: " << cache.reads * CACHE_READ_COST << " [" << ((double)cache.reads * CACHE_READ_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
     // out << " Write cycles: " << cache.writes * CACHE_WRITE_COST << " [" << ((double)cache.writes * CACHE_WRITE_COST / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
     out << " Read cycles:  " << CycleCost::cache_read_cycles << " [" << ((double)CycleCost::cache_read_cycles / (double)pipeline.getTotalCycles()) * 100.0 << "% of total]" << std::endl;
@@ -248,8 +251,8 @@ class Stats {
     out << "cache_eviction:" << cache.evictions << std::endl;
     out << "cache_read:" << cache.reads << std::endl;
     out << "cache_write:" << cache.writes << std::endl;
-    out << "cache_cuckoo:0" << std::endl;
     out << "cache_checkpoint:" << cache.checkpoint_accesses << std::endl;
+    out << "cache_cuckoo:" << cache.clwb_accesses << std::endl;
     out << "cache_clean_eviction:" << cache.clean_evictions << std::endl;
     out << "cache_dirty_eviction:" << cache.dirty_evictions << std::endl;
     out << "cache_clwb:" << cache.clwb << std::endl;
