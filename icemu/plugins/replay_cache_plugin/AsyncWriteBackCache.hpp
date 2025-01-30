@@ -259,6 +259,7 @@ class AsyncWriteBackCache {
    */
   unsigned int clwb(const arch_addr_t address, const address_t size, bool ignore_dirty_bit = false) {
     if (stats) stats->incCacheClwb();
+    if (stats) stats->incCacheCLWBAccesses(1);
 
     // Simulate a read request so we can find the correct cache line
     configureRequest(address, 0, icemu::HookMemory::MEM_READ, size);
@@ -494,16 +495,23 @@ class AsyncWriteBackCache {
         // We read the whole line
         line.blocks.size = 4;
 
-        if (stats) stats->incNVMReads(req.size);
-        if (pipeline) cost.modifyCost(pipeline, NVM_READ, req.size);//pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * req.size);
+        // Read the entry from NVM
+        if (stats) stats->incNVMReads(line.blocks.size);
+        if (pipeline) cost.modifyCost(pipeline, NVM_READ, line.blocks.size);//pipeline->addToCycles(COST_PER_BYTE_READ_FROM_NVM * req.size);
+
+        // Write the entry to the cache
+        cost.modifyCost(pipeline, CACHE_WRITE, line.blocks.size);
+        stats->incCacheWrites(line.blocks.size);
+
+        // Read the entry from the cache
+        cost.modifyCost(pipeline, CACHE_READ, line.blocks.size);
 
         if (stats) {
           if (!isInCheckpoint)
-            stats->incCacheReads(req.size);
+            stats->incCacheReads(line.blocks.size);
           else
-            stats->incCacheCheckpointAccesses(req.size);
+            stats->incCacheCheckpointAccesses(line.blocks.size);
         }
-        // NOTE: reading from cache is NOT counted (TODO: is it true that on a READ MISS it's 'free'?)
 
         p_debug << printLeader() << "Cache read req, read DATA: " << line.blocks.data << endl;
         break;

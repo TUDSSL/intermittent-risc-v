@@ -1,14 +1,13 @@
 BENCHMARKS := \
-	picojpeg
-		# adpcm \
-		# aes \
-		# coremark \
-		# crc \
-		# dijkstra \
-		# picojpeg \
-		# quicksort \
-		# sha \
-		# towers
+		adpcm \
+		aes \
+		coremark \
+		crc \
+		dijkstra \
+		picojpeg \
+		quicksort \
+		sha \
+		towers
 
 BUILD_CONFIGURATIONS := \
 		uninstrumented \
@@ -27,7 +26,7 @@ ON_DURATIONS := \
     	5000000 \
     	25000000
 
-DEFAULT_OPT_LEVEL := -O3
+DEFAULT_OPT_LEVEL := -Os
 OPT_LEVELS := \
 		-Os \
 		-O1 \
