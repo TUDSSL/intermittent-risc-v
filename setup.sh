@@ -13,8 +13,3 @@ export LLVM_RC_ROOT="$ROOT_DIR/llvm/llvm-$LLVM_VERSION/install"
 export NOELLE="$ROOT_DIR/noelle/noelle/install"
 export ICLANG_ROOT="$ROOT_DIR"
 export ICEMU_PLUGIN_PATH="$ROOT_DIR/icemu/plugins/build/plugins"
-
-# For now libgcc is used when compiling the ARM elf files
-libgcc_loc=$(arm-none-eabi-gcc -print-libgcc-file-name)
-libgcc_loc=$(dirname "$libgcc_loc")
-export CMAKE_LIBGCC_ARM_BASE_DIR="$libgcc_loc"
