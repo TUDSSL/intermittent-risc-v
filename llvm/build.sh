@@ -12,27 +12,25 @@ echo "Building LLVM"
 echo "Build dir: $BUILD_DIR"
 echo "Install dir: $INSTALL_DIR"
 
-# Configure step (only runs the first time)
+# Configure step (runs quickly on follow-up runs)
 echo "Configuring LLVM"
-if [ ! -d "$BUILD_DIR" ]; then
-    CXX=clang++-12 CC=clang-12 cmake  \
-        -Wno-dev \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DLLVM_TARGETS_TO_BUILD="ARM;X86;RISCV" \
-        -DLLVM_INCLUDE_TESTS=OFF \
-        -DLLVM_BUILD_TESTS=OFF \
-        -DLLVM_INCLUDE_BENCHMARKS=OFF \
-        -DLLVM_BUILD_BENCHMARKS=OFF \
-        -DLLVM_BUILD_DOCS=OFF \
-        -DLLVM_PARALLEL_LINK_JOBS=4 \
-        -DLLVM_ENABLE_ASSERTIONS=ON \
-        -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
-        -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
-        -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
-    	-DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
-        -S "$LLVM_SRC_DIR"/llvm \
-        -B "$BUILD_DIR"
-fi
+CXX=clang++-12 CC=clang-12 cmake  \
+    -Wno-dev \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DLLVM_TARGETS_TO_BUILD="ARM;X86;RISCV" \
+    -DLLVM_INCLUDE_TESTS=OFF \
+    -DLLVM_BUILD_TESTS=OFF \
+    -DLLVM_INCLUDE_BENCHMARKS=OFF \
+    -DLLVM_BUILD_BENCHMARKS=OFF \
+    -DLLVM_BUILD_DOCS=OFF \
+    -DLLVM_PARALLEL_LINK_JOBS=4 \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
+    -DCOMPILER_RT_BUILD_LIBFUZZER=OFF \
+    -DOPENMP_ENABLE_LIBOMPTARGET=OFF \
+    -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR \
+    -S "$LLVM_SRC_DIR"/llvm \
+    -B "$BUILD_DIR"
 
 # Address https://github.com/llvmenv/llvmenv/issues/115
 ln -sf "$LLVM_SRC_DIR/llvm/projects/libunwind/include/mach-o" \
@@ -40,6 +38,6 @@ ln -sf "$LLVM_SRC_DIR/llvm/projects/libunwind/include/mach-o" \
 
 # build step
 echo "Building LLVM"
-cmake . "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_ASSERTIONS=ON -DLLVM_ENABLE_UNWIND_TABLES=ON
+cmake --build "$BUILD_DIR" --target RISCVCommonTableGen
 cmake --build "$BUILD_DIR"
 cmake --install "$BUILD_DIR"
